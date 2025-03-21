@@ -1,0 +1,46 @@
+# 服务配置
+server:
+  port: 8080
+  mode: "debug"
+  jwt_secret: your-jwt-secret-key
+
+# 数据库配置
+database:
+  driver: "mysql"
+  host: "localhost"
+  port: 3306
+  username: "root"
+  password: "kbsonlong"
+  dbname: "alert_agent"
+  charset: "utf8mb4"
+  max_idle_conns: 10
+  max_open_conns: 100
+  parse_time: true
+  loc: Local
+  
+# Redis配置
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 100
+  min_idle_conns: 10
+  max_retries: 3
+  dial_timeout: 5  # 连接超时时间（秒）
+
+# OpenAI配置
+openai:
+  endpoint: "http://10.98.65.131:11434"  # Ollama本地服务地址
+  model: "deepseek-r1:32b"  # 或其他已安装的模型
+  timeout: 30  # 请求超时时间（秒）
+  max_retries: 3  # 最大重试次数
+
+# 日志配置
+log:
+  level: "debug"
+  filename: "logs/alert_agent.log"
+  max_size: 100    # MB
+  max_age: 7       # 天
+  max_backups: 10  # 最大备份数
+  compress: true   # 是否压缩 
