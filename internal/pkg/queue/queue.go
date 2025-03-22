@@ -6,140 +6,125 @@ import (
 	"fmt"
 	"time"
 
-	"alert_agent/internal/pkg/redis"
+	"alert_agent/internal/pkg/types"
 
-	redisClient "github.com/go-redis/redis/v8"
-	"go.uber.org/zap"
+	"github.com/redis/go-redis/v9"
 )
 
-var (
-	logger = zap.L()
-)
-
-// 队列名称常量
-const (
-	AlertAnalysisQueue      = "alert:analysis:queue"
-	AlertAnalysisProcessing = "alert:analysis:processing"
-	AlertAnalysisResult     = "alert:analysis:result:"
-	AlertAnalysisTimeout    = 10 * time.Minute
-)
-
-// AnalysisTask 分析任务
-type AnalysisTask struct {
-	AlertID   uint      `json:"alert_id"`
-	CreatedAt time.Time `json:"created_at"`
+// Queue 队列接口
+type Queue interface {
+	// Push 推送任务到队列
+	Push(ctx context.Context, task *types.AlertTask) error
+	// PushBatch 批量推送任务到队列
+	PushBatch(ctx context.Context, tasks []*types.AlertTask) error
+	// Pop 从队列中获取任务
+	Pop(ctx context.Context) (*types.AlertTask, error)
+	// Complete 标记任务完成
+	Complete(ctx context.Context, result *types.AlertResult) error
+	// GetResult 获取任务结果
+	GetResult(ctx context.Context, taskID uint) (*types.AlertResult, error)
+	// Close 关闭队列
+	Close() error
 }
 
-// AnalysisResult 分析结果
-type AnalysisResult struct {
-	AlertID   uint      `json:"alert_id"`
-	Analysis  string    `json:"analysis"`
-	CreatedAt time.Time `json:"created_at"`
-	Error     string    `json:"error,omitempty"`
+// RedisQueue Redis队列实现
+type RedisQueue struct {
+	client *redis.Client
+	key    string
 }
 
-// EnqueueAnalysisTask 将分析任务加入队列
-func EnqueueAnalysisTask(ctx context.Context, alertID uint) error {
-	task := AnalysisTask{
-		AlertID:   alertID,
-		CreatedAt: time.Now(),
+// NewRedisQueue 创建Redis队列
+func NewRedisQueue(client *redis.Client, key string) *RedisQueue {
+	return &RedisQueue{
+		client: client,
+		key:    key,
 	}
+}
 
+// Push 推送任务到队列
+func (q *RedisQueue) Push(ctx context.Context, task *types.AlertTask) error {
 	data, err := json.Marshal(task)
 	if err != nil {
-		return fmt.Errorf("failed to marshal analysis task: %w", err)
+		return fmt.Errorf("failed to marshal task: %w", err)
 	}
 
-	// 使用Redis List作为队列
-	err = redis.Client.LPush(ctx, AlertAnalysisQueue, string(data)).Err()
-	if err != nil {
-		return fmt.Errorf("failed to enqueue analysis task: %w", err)
+	if err := q.client.RPush(ctx, q.key, string(data)).Err(); err != nil {
+		return fmt.Errorf("failed to push task: %w", err)
 	}
-
-	logger.Info("Analysis task enqueued",
-		zap.Uint("alert_id", alertID),
-	)
 
 	return nil
 }
 
-// DequeueAnalysisTask 从队列获取分析任务
-func DequeueAnalysisTask(ctx context.Context) (*AnalysisTask, error) {
-	// 使用BRPOPLPUSH原子操作，将任务从队列移动到处理中列表
-	result, err := redis.Client.BRPopLPush(ctx, AlertAnalysisQueue, AlertAnalysisProcessing, 0).Result()
-	if err != nil {
-		if err == redisClient.Nil {
-			return nil, nil // 队列为空
+// PushBatch 批量推送任务到队列
+func (q *RedisQueue) PushBatch(ctx context.Context, tasks []*types.AlertTask) error {
+	pipe := q.client.Pipeline()
+	for _, task := range tasks {
+		data, err := json.Marshal(task)
+		if err != nil {
+			return fmt.Errorf("failed to marshal task: %w", err)
 		}
-		return nil, fmt.Errorf("failed to dequeue analysis task: %w", err)
+		fmt.Println("data", string(q.key))
+		pipe.RPush(ctx, q.key, string(data))
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("failed to push tasks: %w", err)
+	}
+	return nil
+}
+
+// Pop 从队列中获取任务
+func (q *RedisQueue) Pop(ctx context.Context) (*types.AlertTask, error) {
+	data, err := q.client.LPop(ctx, q.key).Bytes()
+	if err != nil {
+		if err == redis.Nil {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to pop task: %w", err)
 	}
 
-	var task AnalysisTask
-	if err := json.Unmarshal([]byte(result), &task); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal analysis task: %w", err)
+	var task types.AlertTask
+	if err := json.Unmarshal(data, &task); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal task: %w", err)
 	}
-
-	logger.Info("Analysis task dequeued",
-		zap.Uint("alert_id", task.AlertID),
-	)
 
 	return &task, nil
 }
 
-// CompleteAnalysisTask 完成分析任务
-func CompleteAnalysisTask(ctx context.Context, result *AnalysisResult) error {
-	// 将结果存储到Redis
+// Complete 标记任务完成
+func (q *RedisQueue) Complete(ctx context.Context, result *types.AlertResult) error {
 	data, err := json.Marshal(result)
 	if err != nil {
-		return fmt.Errorf("failed to marshal analysis result: %w", err)
+		return fmt.Errorf("failed to marshal result: %w", err)
 	}
 
-	key := fmt.Sprintf("%s%d", AlertAnalysisResult, result.AlertID)
-	err = redis.Client.Set(ctx, key, string(data), AlertAnalysisTimeout).Err()
-	if err != nil {
-		return fmt.Errorf("failed to store analysis result: %w", err)
+	key := fmt.Sprintf("alert:result:%d", result.TaskID)
+	if err := q.client.Set(ctx, key, string(data), 24*time.Hour).Err(); err != nil {
+		return fmt.Errorf("failed to save result: %w", err)
 	}
-
-	// 从处理中列表移除任务
-	task := AnalysisTask{
-		AlertID: result.AlertID,
-	}
-	taskData, err := json.Marshal(task)
-	if err != nil {
-		return fmt.Errorf("failed to marshal analysis task: %w", err)
-	}
-
-	err = redis.Client.LRem(ctx, AlertAnalysisProcessing, 1, string(taskData)).Err()
-	if err != nil {
-		logger.Warn("Failed to remove task from processing list",
-			zap.Error(err),
-			zap.Uint("alert_id", result.AlertID),
-		)
-		// 继续执行，不返回错误
-	}
-
-	logger.Info("Analysis task completed",
-		zap.Uint("alert_id", result.AlertID),
-	)
 
 	return nil
 }
 
-// GetAnalysisResult 获取分析结果
-func GetAnalysisResult(ctx context.Context, alertID uint) (*AnalysisResult, error) {
-	key := fmt.Sprintf("%s%d", AlertAnalysisResult, alertID)
-	data, err := redis.Get(ctx, key)
+// GetResult 获取任务结果
+func (q *RedisQueue) GetResult(ctx context.Context, taskID uint) (*types.AlertResult, error) {
+	key := fmt.Sprintf("alert:result:%d", taskID)
+	data, err := q.client.Get(ctx, key).Bytes()
 	if err != nil {
-		if err == redisClient.Nil {
-			return nil, nil // 结果不存在
+		if err == redis.Nil {
+			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to get analysis result: %w", err)
+		return nil, fmt.Errorf("failed to get result: %w", err)
 	}
 
-	var result AnalysisResult
-	if err := json.Unmarshal([]byte(data), &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal analysis result: %w", err)
+	var result types.AlertResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal result: %w", err)
 	}
 
 	return &result, nil
+}
+
+// Close 关闭队列
+func (q *RedisQueue) Close() error {
+	return q.client.Close()
 }

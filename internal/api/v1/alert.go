@@ -2,27 +2,20 @@ package v1
 
 import (
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"alert_agent/internal/config"
 	"alert_agent/internal/model"
 	"alert_agent/internal/pkg/database"
+	"alert_agent/internal/pkg/logger"
 	"alert_agent/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 var (
-	logger        = zap.L()
-	openAIService = service.NewOpenAIService(&service.OpenAIConfig{
-		Endpoint:   config.GlobalConfig.OpenAI.Endpoint,
-		Model:      config.GlobalConfig.OpenAI.Model,
-		Timeout:    config.GlobalConfig.OpenAI.Timeout,
-		MaxRetries: config.GlobalConfig.OpenAI.MaxRetries,
-	})
+	log           = logger.L
+	ollamaService = service.NewOllamaService(&config.GlobalConfig.Ollama)
 )
 
 // ListAlerts 获取告警列表
@@ -63,7 +56,7 @@ func CreateAlert(c *gin.Context) {
 	}
 
 	// 暂时跳过 Ollama 分析
-	alert.Analysis = "暂无分析"
+	alert.Analysis = ""
 	alert.Status = "active"
 
 	result := database.DB.Create(&alert)
@@ -193,146 +186,40 @@ func HandleAlert(c *gin.Context) {
 	})
 }
 
-// AnalyzeAlert godoc
-// @Summary Analyze alert using AI
-// @Description Analyze alert content using AI service
-// @Tags alerts
-// @Accept json
-// @Produce json
-// @Param id path int true "Alert ID"
-// @Success 200 {object} response.Response{data=map[string]string}
-// @Router /api/v1/alerts/{id}/analyze [post]
+// AnalyzeAlert 分析告警
 func AnalyzeAlert(c *gin.Context) {
-	id := c.Param("id")
-	alertID, err := strconv.Atoi(id)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 400,
-			"msg":  "无效的告警ID",
-			"data": nil,
-		})
-		return
-	}
-
-	// 获取告警信息
 	var alert model.Alert
-	if err := database.DB.First(&alert, alertID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code": 404,
-			"msg":  "告警不存在",
-			"data": nil,
-		})
+	if err := c.ShouldBindJSON(&alert); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 调用OpenAI服务进行分析
-	analysis, err := openAIService.AnalyzeAlert(c.Request.Context(), &alert)
+	analysis, err := ollamaService.AnalyzeAlert(c.Request.Context(), &alert)
 	if err != nil {
-		logger.Error("analyze alert failed",
-			zap.Error(err),
-			zap.Uint("alert_id", alert.ID),
-			zap.String("alert_name", alert.Name),
-		)
-
-		// 根据错误类型提供不同的错误提示
-		errorMsg := "分析服务暂时不可用，请稍后重试"
-		if strings.Contains(err.Error(), "Ollama service is not available") {
-			errorMsg = "AI分析服务当前不可用，系统正在尝试恢复连接，请稍后再试"
-		} else if strings.Contains(err.Error(), "timed out") || strings.Contains(err.Error(), "deadline exceeded") {
-			errorMsg = "AI分析服务响应超时，请稍后再试"
-		} else if strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "no route to host") {
-			errorMsg = "无法连接到AI分析服务，请检查服务是否正常运行"
-		}
-
-		// 如果分析失败，返回空分析结果但不影响服务
-		c.JSON(http.StatusOK, gin.H{
-			"code": 200,
-			"msg":  errorMsg,
-			"data": gin.H{
-				"analysis": "",
-			},
-		})
-		return
-	}
-
-	// 更新告警的分析结果
-	alert.Analysis = analysis
-	if err := database.DB.Save(&alert).Error; err != nil {
-		logger.Error("update alert analysis failed",
-			zap.Error(err),
-			zap.Uint("alert_id", alert.ID),
-		)
-		// 即使保存失败，也返回分析结果
-		c.JSON(http.StatusOK, gin.H{
-			"code": 200,
-			"msg":  "分析结果获取成功，但更新数据库失败",
-			"data": gin.H{
-				"analysis": analysis,
-			},
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 200,
-		"msg":  "success",
-		"data": gin.H{
-			"analysis": analysis,
-		},
+		"analysis": analysis,
 	})
 }
 
 // FindSimilarAlerts 查找相似告警
 func FindSimilarAlerts(c *gin.Context) {
-	id := c.Param("id")
 	var alert model.Alert
-	result := database.DB.First(&alert, id)
-	if result.Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code": 404,
-			"msg":  "告警不存在",
-			"data": nil,
-		})
+	if err := c.ShouldBindJSON(&alert); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 获取历史告警
-	var history []model.Alert
-	result = database.DB.Where("id != ?", id).Find(&history)
-	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 500,
-			"msg":  "获取历史告警失败",
-			"data": nil,
-		})
-		return
-	}
-
-	// 转换历史告警为指针切片
-	historicalAlerts := make([]*model.Alert, len(history))
-	for i := range history {
-		historicalAlerts[i] = &history[i]
-	}
-
-	// 查找相似告警
-	similarAlerts, err := openAIService.FindSimilarAlerts(c.Request.Context(), &alert, historicalAlerts)
+	similarAlerts, err := ollamaService.FindSimilarAlerts(c.Request.Context(), &alert)
 	if err != nil {
-		logger.Error("find similar alerts failed",
-			zap.Error(err),
-			zap.Uint("alert_id", alert.ID),
-		)
-		// 如果查找失败，返回空数组但不影响服务
-		c.JSON(http.StatusOK, gin.H{
-			"code": 200,
-			"msg":  "success",
-			"data": []*model.SimilarAlert{},
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 200,
-		"msg":  "success",
-		"data": similarAlerts,
+		"similar_alerts": similarAlerts,
 	})
 }

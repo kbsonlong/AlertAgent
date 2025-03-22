@@ -1,56 +1,143 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"fmt"
-	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"alert_agent/internal/config"
+	"alert_agent/internal/model"
 	"alert_agent/internal/pkg/database"
+	"alert_agent/internal/pkg/logger"
+	"alert_agent/internal/pkg/queue"
 	"alert_agent/internal/pkg/redis"
+	"alert_agent/internal/pkg/types"
 	"alert_agent/internal/router"
+	"alert_agent/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
-var (
-	configPath string
-)
+// processUnanalyzedAlerts 处理未分析的告警
+func processUnanalyzedAlerts(ctx context.Context, redisQueue *queue.RedisQueue) error {
+	var alerts []model.Alert
+	if err := database.DB.Where("analysis = ?", "").Find(&alerts).Error; err != nil {
+		return fmt.Errorf("failed to get unanalyzed alerts: %w", err)
+	}
 
-func init() {
-	flag.StringVar(&configPath, "config", "config/config.yaml", "path to config file")
+	if len(alerts) == 0 {
+		logger.L.Info("No unanalyzed alerts found")
+		return nil
+	}
+
+	logger.L.Info("Found unanalyzed alerts",
+		zap.Int("count", len(alerts)),
+	)
+
+	// 创建任务列表
+	tasks := make([]*types.AlertTask, len(alerts))
+	for i, alert := range alerts {
+		tasks[i] = &types.AlertTask{
+			ID:        alert.ID,
+			CreatedAt: time.Now(),
+		}
+	}
+
+	// 批量推送任务到队列
+	if err := redisQueue.PushBatch(ctx, tasks); err != nil {
+		return fmt.Errorf("failed to push tasks to queue: %w", err)
+	}
+
+	logger.L.Info("Successfully pushed tasks to queue",
+		zap.Int("count", len(tasks)),
+	)
+
+	return nil
 }
 
 func main() {
-	flag.Parse()
-
 	// 加载配置
-	if err := config.Init(configPath); err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+	if err := config.Load(); err != nil {
+		fmt.Printf("Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 初始化日志
+	if err := logger.Init("info"); err != nil {
+		fmt.Printf("Failed to initialize logger: %v\n", err)
+		os.Exit(1)
 	}
 
 	// 初始化数据库连接
 	if err := database.Init(); err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		logger.L.Fatal("Failed to initialize database", zap.Error(err))
 	}
 
 	// 初始化Redis连接
 	if err := redis.Init(); err != nil {
-		log.Fatalf("Failed to initialize redis: %v", err)
+		logger.L.Fatal("Failed to initialize redis", zap.Error(err))
 	}
 
-	// 设置gin模式
-	gin.SetMode(config.GlobalConfig.Server.Mode)
+	// 创建Redis队列
+	redisQueue := queue.NewRedisQueue(redis.Client, "alert:queue")
 
-	// 创建gin引擎
-	r := gin.Default()
+	// 处理未分析的告警
+	ctx := context.Background()
+	if err := processUnanalyzedAlerts(ctx, redisQueue); err != nil {
+		logger.L.Error("Failed to process unanalyzed alerts", zap.Error(err))
+	}
+
+	// 创建Ollama服务
+	ollamaService := service.NewOllamaService(&config.GlobalConfig.Ollama)
+
+	// 创建工作器
+	worker := queue.NewWorker(redisQueue, ollamaService)
+
+	// 创建Gin引擎
+	engine := gin.Default()
 
 	// 注册路由
-	router.RegisterRoutes(r)
+	router.RegisterRoutes(engine)
 
-	// 启动服务器
-	addr := fmt.Sprintf(":%d", config.GlobalConfig.Server.Port)
-	if err := r.Run(addr); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	// 创建HTTP服务器
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", config.GlobalConfig.Server.Port),
+		Handler: engine,
+	}
+
+	// 启动工作器
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	go func() {
+		if err := worker.Start(workerCtx); err != nil {
+			logger.L.Error("Worker failed", zap.Error(err))
+		}
+	}()
+
+	// 启动HTTP服务器
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.L.Fatal("Failed to start server", zap.Error(err))
+		}
+	}()
+
+	// 等待中断信号
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	// 优雅关闭
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// 停止工作器
+	workerCancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.L.Fatal("Failed to shutdown server", zap.Error(err))
 	}
 }

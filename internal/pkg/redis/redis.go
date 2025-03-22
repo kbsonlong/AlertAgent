@@ -6,21 +6,20 @@ import (
 	"time"
 
 	"alert_agent/internal/config"
+	"alert_agent/internal/pkg/logger"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
-var (
-	Client *redis.Client
-	logger = zap.L()
-)
+var Client *redis.Client
 
-// Init 初始化Redis客户端
+// Init 初始化Redis连接
 func Init() error {
 	cfg := config.GlobalConfig.Redis
 
-	options := &redis.Options{
+	// 创建Redis客户端
+	Client = redis.NewClient(&redis.Options{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
 		Password:     cfg.Password,
 		DB:           cfg.DB,
@@ -28,129 +27,23 @@ func Init() error {
 		MinIdleConns: cfg.MinIdleConns,
 		MaxRetries:   cfg.MaxRetries,
 		DialTimeout:  time.Duration(cfg.DialTimeout) * time.Second,
+	})
+
+	// 测试连接
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := Client.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("failed to connect to redis: %w", err)
 	}
 
-	Client = redis.NewClient(options)
-
-	// 测试连接并重试
-	ctx := context.Background()
-	var err error
-	for i := 0; i <= cfg.MaxRetries; i++ {
-		if err = Client.Ping(ctx).Err(); err == nil {
-			logger.Info("Successfully connected to Redis",
-				zap.String("host", cfg.Host),
-				zap.Int("port", cfg.Port),
-			)
-			return nil
-		}
-
-		if i < cfg.MaxRetries {
-			retryDelay := time.Duration(i+1) * time.Second
-			logger.Warn("Failed to connect to Redis, retrying...",
-				zap.Error(err),
-				zap.Int("attempt", i+1),
-				zap.Int("maxRetries", cfg.MaxRetries),
-				zap.Duration("retryDelay", retryDelay),
-			)
-			time.Sleep(retryDelay)
-		}
-	}
-
-	return fmt.Errorf("failed to connect to Redis after %d retries: %w", cfg.MaxRetries, err)
-}
-
-// Set 设置缓存，带重试机制
-func Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
-	var err error
-	for i := 0; i <= config.GlobalConfig.Redis.MaxRetries; i++ {
-		if err = Client.Set(ctx, key, value, ttl).Err(); err == nil {
-			return nil
-		}
-
-		if i < config.GlobalConfig.Redis.MaxRetries {
-			retryDelay := time.Duration(i+1) * time.Second
-			logger.Warn("Failed to set Redis key, retrying...",
-				zap.String("key", key),
-				zap.Error(err),
-				zap.Int("attempt", i+1),
-			)
-			time.Sleep(retryDelay)
-		}
-	}
-	return fmt.Errorf("failed to set Redis key after %d retries: %w", config.GlobalConfig.Redis.MaxRetries, err)
-}
-
-// Get 获取缓存，带重试机制
-func Get(ctx context.Context, key string) (string, error) {
-	var (
-		value string
-		err   error
+	logger.L.Info("Redis connected successfully",
+		zap.String("host", cfg.Host),
+		zap.Int("port", cfg.Port),
+		zap.Int("db", cfg.DB),
 	)
 
-	for i := 0; i <= config.GlobalConfig.Redis.MaxRetries; i++ {
-		value, err = Client.Get(ctx, key).Result()
-		if err == nil || err == redis.Nil {
-			return value, err
-		}
-
-		if i < config.GlobalConfig.Redis.MaxRetries {
-			retryDelay := time.Duration(i+1) * time.Second
-			logger.Warn("Failed to get Redis key, retrying...",
-				zap.String("key", key),
-				zap.Error(err),
-				zap.Int("attempt", i+1),
-			)
-			time.Sleep(retryDelay)
-		}
-	}
-	return "", fmt.Errorf("failed to get Redis key after %d retries: %w", config.GlobalConfig.Redis.MaxRetries, err)
-}
-
-// Del 删除缓存，带重试机制
-func Del(ctx context.Context, key string) error {
-	var err error
-	for i := 0; i <= config.GlobalConfig.Redis.MaxRetries; i++ {
-		if err = Client.Del(ctx, key).Err(); err == nil {
-			return nil
-		}
-
-		if i < config.GlobalConfig.Redis.MaxRetries {
-			retryDelay := time.Duration(i+1) * time.Second
-			logger.Warn("Failed to delete Redis key, retrying...",
-				zap.String("key", key),
-				zap.Error(err),
-				zap.Int("attempt", i+1),
-			)
-			time.Sleep(retryDelay)
-		}
-	}
-	return fmt.Errorf("failed to delete Redis key after %d retries: %w", config.GlobalConfig.Redis.MaxRetries, err)
-}
-
-// Exists 检查key是否存在，带重试机制
-func Exists(ctx context.Context, key string) (bool, error) {
-	var (
-		n   int64
-		err error
-	)
-
-	for i := 0; i <= config.GlobalConfig.Redis.MaxRetries; i++ {
-		n, err = Client.Exists(ctx, key).Result()
-		if err == nil {
-			return n > 0, nil
-		}
-
-		if i < config.GlobalConfig.Redis.MaxRetries {
-			retryDelay := time.Duration(i+1) * time.Second
-			logger.Warn("Failed to check Redis key existence, retrying...",
-				zap.String("key", key),
-				zap.Error(err),
-				zap.Int("attempt", i+1),
-			)
-			time.Sleep(retryDelay)
-		}
-	}
-	return false, fmt.Errorf("failed to check Redis key existence after %d retries: %w", config.GlobalConfig.Redis.MaxRetries, err)
+	return nil
 }
 
 // Close 关闭Redis连接
@@ -159,4 +52,45 @@ func Close() error {
 		return Client.Close()
 	}
 	return nil
+}
+
+// Get 获取键值
+func Get(ctx context.Context, key string) (string, error) {
+	val, err := Client.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return "", nil
+		}
+		return "", err
+	}
+	return val, nil
+}
+
+// Set 设置键值
+func Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+	return Client.Set(ctx, key, value, expiration).Err()
+}
+
+// Del 删除键
+func Del(ctx context.Context, key string) error {
+	return Client.Del(ctx, key).Err()
+}
+
+// Exists 检查键是否存在
+func Exists(ctx context.Context, key string) (bool, error) {
+	n, err := Client.Exists(ctx, key).Result()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// Expire 设置过期时间
+func Expire(ctx context.Context, key string, expiration time.Duration) error {
+	return Client.Expire(ctx, key, expiration).Err()
+}
+
+// TTL 获取剩余过期时间
+func TTL(ctx context.Context, key string) (time.Duration, error) {
+	return Client.TTL(ctx, key).Result()
 }

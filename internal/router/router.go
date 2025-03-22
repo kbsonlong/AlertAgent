@@ -3,6 +3,8 @@ package router
 import (
 	v1 "alert_agent/internal/api/v1"
 	"alert_agent/internal/middleware"
+	"alert_agent/internal/pkg/queue"
+	"alert_agent/internal/pkg/redis"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,6 +15,12 @@ func RegisterRoutes(r *gin.Engine) {
 	r.Use(middleware.Logger())
 	r.Use(middleware.Recovery())
 	r.Use(middleware.Cors())
+
+	// 创建Redis队列
+	redisQueue := queue.NewRedisQueue(redis.Client, "alert:queue")
+
+	// 创建异步告警处理器
+	asyncAlertHandler := v1.NewAsyncAlertHandler(redisQueue)
 
 	// API v1
 	apiV1 := r.Group("/api/v1")
@@ -38,9 +46,6 @@ func RegisterRoutes(r *gin.Engine) {
 			alerts.GET("/:id", v1.GetAlert)
 			alerts.PUT("/:id", v1.UpdateAlert)
 			alerts.POST("/:id/handle", v1.HandleAlert)
-			// alerts.POST("/:id/analyze", v1.AnalyzeAlert)
-			alerts.POST("/:id/async-analyze", v1.AsyncAnalyzeAlert)
-			alerts.GET("/:id/analysis-status", v1.GetAnalysisStatus)
 			alerts.GET("/:id/similar", v1.FindSimilarAlerts)
 
 			// 通知模板管理
@@ -69,6 +74,9 @@ func RegisterRoutes(r *gin.Engine) {
 				settings.GET("", v1.GetSettings)
 				settings.PUT("", v1.UpdateSettings)
 			}
+
+			// 异步分析告警
+			asyncAlertHandler.RegisterRoutes(alerts)
 		}
 	}
 }

@@ -8,10 +8,32 @@ import (
 	"alert_agent/internal/model"
 	"alert_agent/internal/pkg/database"
 	"alert_agent/internal/pkg/queue"
+	"alert_agent/internal/pkg/types"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
+
+// AsyncAlertHandler 异步告警处理器
+type AsyncAlertHandler struct {
+	queue queue.Queue
+}
+
+// NewAsyncAlertHandler 创建异步告警处理器
+func NewAsyncAlertHandler(queue queue.Queue) *AsyncAlertHandler {
+	return &AsyncAlertHandler{
+		queue: queue,
+	}
+}
+
+// RegisterRoutes 注册路由
+func (h *AsyncAlertHandler) RegisterRoutes(r *gin.RouterGroup) {
+	alerts := r.Group("/alerts")
+	{
+		alerts.POST("/async/analyze", h.AsyncAnalyzeAlert)
+		alerts.GET("/async/result/:task_id", h.GetAnalysisResult)
+	}
+}
 
 // AsyncAnalyzeAlert 异步分析告警
 // @Summary Asynchronously analyze alert using AI
@@ -22,7 +44,7 @@ import (
 // @Param id path int true "Alert ID"
 // @Success 200 {object} response.Response{data=map[string]string}
 // @Router /api/v1/alerts/{id}/async-analyze [post]
-func AsyncAnalyzeAlert(c *gin.Context) {
+func (h *AsyncAlertHandler) AsyncAnalyzeAlert(c *gin.Context) {
 	id := c.Param("id")
 	alertID, err := strconv.Atoi(id)
 	if err != nil {
@@ -45,9 +67,22 @@ func AsyncAnalyzeAlert(c *gin.Context) {
 		return
 	}
 
+	// 创建任务
+	task := &types.AlertTask{
+		ID:        uint(alertID),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Name:      alert.Name,
+		Level:     alert.Level,
+		Source:    alert.Source,
+		Content:   alert.Content,
+		RuleID:    alert.RuleID,
+		GroupID:   alert.GroupID,
+	}
+
 	// 将分析任务加入队列
-	if err := queue.EnqueueAnalysisTask(c.Request.Context(), alert.ID); err != nil {
-		logger.Error("enqueue analysis task failed",
+	if err := h.queue.Push(c.Request.Context(), task); err != nil {
+		zap.L().Error("enqueue analysis task failed",
 			zap.Error(err),
 			zap.Uint("alert_id", alert.ID),
 		)
@@ -70,7 +105,7 @@ func AsyncAnalyzeAlert(c *gin.Context) {
 	})
 }
 
-// GetAnalysisStatus 获取分析状态
+// GetAnalysisResult 获取分析结果
 // @Summary Get alert analysis status
 // @Description Get the status of an asynchronous alert analysis task
 // @Tags alerts
@@ -79,59 +114,33 @@ func AsyncAnalyzeAlert(c *gin.Context) {
 // @Param id path int true "Alert ID"
 // @Success 200 {object} response.Response{data=map[string]interface{}}
 // @Router /api/v1/alerts/{id}/analysis-status [get]
-func GetAnalysisStatus(c *gin.Context) {
-	id := c.Param("id")
-	alertID, err := strconv.Atoi(id)
+func (h *AsyncAlertHandler) GetAnalysisResult(c *gin.Context) {
+	taskID, err := strconv.ParseUint(c.Param("task_id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
-			"msg":  "无效的告警ID",
+			"msg":  "无效的任务ID",
 			"data": nil,
 		})
 		return
 	}
 
-	// 获取告警信息
-	var alert model.Alert
-	if err := database.DB.First(&alert, alertID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code": 404,
-			"msg":  "告警不存在",
-			"data": nil,
-		})
-		return
-	}
-
-	// 检查数据库中是否已有分析结果
-	if alert.Analysis != "" && alert.Analysis != "暂无分析" {
-		c.JSON(http.StatusOK, gin.H{
-			"code": 200,
-			"msg":  "分析已完成",
-			"data": gin.H{
-				"status":   "completed",
-				"analysis": alert.Analysis,
-			},
-		})
-		return
-	}
-
-	// 从Redis获取分析结果
-	result, err := queue.GetAnalysisResult(c.Request.Context(), alert.ID)
+	// 从队列获取结果
+	result, err := h.queue.GetResult(c.Request.Context(), uint(taskID))
 	if err != nil {
-		logger.Error("get analysis result failed",
+		zap.L().Error("get analysis result failed",
 			zap.Error(err),
-			zap.Uint("alert_id", alert.ID),
+			zap.Uint("task_id", uint(taskID)),
 		)
 
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
-			"msg":  "获取分析状态失败",
+			"msg":  "获取分析结果失败",
 			"data": nil,
 		})
 		return
 	}
 
-	// 如果结果不存在，说明任务还在队列中或处理中
 	if result == nil {
 		c.JSON(http.StatusOK, gin.H{
 			"code": 200,
@@ -143,26 +152,9 @@ func GetAnalysisStatus(c *gin.Context) {
 		return
 	}
 
-	// 如果有错误信息，说明分析失败
-	if result.Error != "" {
-		c.JSON(http.StatusOK, gin.H{
-			"code": 200,
-			"msg":  "分析失败",
-			"data": gin.H{
-				"status": "failed",
-				"error":  result.Error,
-			},
-		})
-		return
-	}
-
-	// 分析成功，返回结果
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
-		"msg":  "分析已完成",
-		"data": gin.H{
-			"status":   "completed",
-			"analysis": result.Analysis,
-		},
+		"msg":  "success",
+		"data": result,
 	})
 }
