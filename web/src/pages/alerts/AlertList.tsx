@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Table, Card, Button, Tag, Space, message, Modal, Progress } from 'antd';
+import { Table, Card, Button, Tag, Space, message, Modal, Progress, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { AlertOutlined, RobotOutlined } from '@ant-design/icons';
+import { AlertOutlined, RobotOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
+import ReactMarkdown from 'react-markdown';
 // 导入告警相关的API接口
 import { getAlerts, updateAlertStatus, asyncAnalyzeAlert, getAnalysisStatus } from '../../services/alert';
 
@@ -20,6 +21,7 @@ interface Alert {
 const AlertList: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [showThinkContent, setShowThinkContent] = useState(false);
   const [analysisModalVisible, setAnalysisModalVisible] = useState(false);
   const [currentAlert, setCurrentAlert] = useState<Alert | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -302,8 +304,34 @@ const AlertList: React.FC = () => {
             分析失败，请稍后重试
           </div>
         ) : currentAlert?.analysis ? (
-          <div style={{ whiteSpace: 'pre-wrap' }}>
-            {currentAlert.analysis}
+          <div style={{ padding: '16px' }}>
+            {(() => {
+              const thinkMatch = currentAlert.analysis.match(/<think>([\s\S]*?)<\/think>/);
+              const mainContent = currentAlert.analysis.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+              
+              return (
+                <>
+                  <ReactMarkdown>{mainContent}</ReactMarkdown>
+                  {thinkMatch && (
+                    <div style={{ marginTop: '16px', borderTop: '1px solid #f0f0f0', paddingTop: '16px' }}>
+                      <Button 
+                        type="link" 
+                        icon={showThinkContent ? <UpOutlined /> : <DownOutlined />}
+                        onClick={() => setShowThinkContent(!showThinkContent)}
+                        style={{ padding: 0, height: 'auto' }}
+                      >
+                        {showThinkContent ? '收起深度思考' : '查看深度思考'}
+                      </Button>
+                      {showThinkContent && (
+                        <div style={{ marginTop: '8px' }}>
+                          <ReactMarkdown>{thinkMatch[1]}</ReactMarkdown>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         ) : (
           <div style={{ textAlign: 'center', color: '#999' }}>

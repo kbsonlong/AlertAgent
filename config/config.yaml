@@ -10,7 +10,7 @@ database:
   host: "localhost"
   port: 3306
   username: "root"
-  password: "kbsonlong"
+  password: "along123"
   dbname: "alert_agent"
   charset: "utf8mb4"
   max_idle_conns: 10
