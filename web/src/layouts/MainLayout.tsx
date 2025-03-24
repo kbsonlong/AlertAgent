@@ -4,8 +4,8 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import {
   AlertOutlined,
   BellOutlined,
-  TeamOutlined,
   SettingOutlined,
+  BookOutlined,
 } from '@ant-design/icons';
 
 const { Header, Content, Sider } = Layout;
@@ -30,6 +30,14 @@ const MainLayout: React.FC = () => {
       children: [
         { key: '/templates', label: '通知模板' },
         { key: '/groups', label: '通知组' },
+      ],
+    },
+    {
+      key: 'knowledges',
+      icon: <BookOutlined />,
+      label: '知识库管理',
+      children: [
+        { key: '/knowledge', label: '知识库列表' },
       ],
     },
     {
@@ -66,4 +74,4 @@ const MainLayout: React.FC = () => {
   );
 };
 
-export default MainLayout; 
+export default MainLayout;

@@ -1,11 +1,36 @@
+import { request } from '../utils/requests';
+
+// 类型定义
+export interface Alert {
+  id: number;
+  title: string;
+  content: string;
+  status: 'new' | 'acknowledged' | 'resolved';
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AlertAnalysis {
+  id: number;
+  alertId: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  result?: string;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // 告警相关API服务
 
 /**
  * 获取告警列表
  */
 export const getAlerts = async () => {
-  const response = await fetch('/api/v1/alerts');
-  return await response.json();
+  return request<Alert[]>('/api/v1/alerts', {
+    method: 'GET'
+  });
 };
 
 /**
@@ -13,15 +38,11 @@ export const getAlerts = async () => {
  * @param id 告警ID
  * @param status 状态：acknowledged(已确认) 或 resolved(已解决)
  */
-export const updateAlertStatus = async (id: number, status: string) => {
-  const response = await fetch(`/api/v1/alerts/${id}`, {
+export const updateAlertStatus = async (id: number, status: 'acknowledged' | 'resolved') => {
+  return request<Alert>(`/api/v1/alerts/${id}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ status }),
+    data: { status }
   });
-  return await response.json();
 };
 
 /**
@@ -29,13 +50,9 @@ export const updateAlertStatus = async (id: number, status: string) => {
  * @param id 告警ID
  */
 export const analyzeAlert = async (id: number) => {
-  const response = await fetch(`/api/v1/alerts/${id}/analyze`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+  return request<AlertAnalysis>(`/api/v1/alerts/${id}/analyze`, {
+    method: 'POST'
   });
-  return await response.json();
 };
 
 /**
@@ -43,13 +60,9 @@ export const analyzeAlert = async (id: number) => {
  * @param id 告警ID
  */
 export const asyncAnalyzeAlert = async (id: number) => {
-  const response = await fetch(`/api/v1/alerts/${id}/async-analyze`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+  return request<{ taskId: string }>(`/api/v1/alerts/${id}/async-analyze`, {
+    method: 'POST'
   });
-  return await response.json();
 };
 
 /**
@@ -57,11 +70,7 @@ export const asyncAnalyzeAlert = async (id: number) => {
  * @param id 告警ID
  */
 export const getAnalysisStatus = async (id: number) => {
-  const response = await fetch(`/api/v1/alerts/${id}/analysis-status`, {
-    method: 'GET',
-    headers: {
-      'Accept': 'application/json',
-    },
+  return request<AlertAnalysis>(`/api/v1/alerts/${id}/analysis-status`, {
+    method: 'GET'
   });
-  return await response.json();
 };

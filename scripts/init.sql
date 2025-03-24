@@ -46,6 +46,23 @@ CREATE TABLE IF NOT EXISTS alerts (
     INDEX idx_alerts_deleted_at (deleted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='告警记录表';
 
+-- 知识库表
+CREATE TABLE IF NOT EXISTS knowledge (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    created_at DATETIME(3) NULL,
+    updated_at DATETIME(3) NULL,
+    deleted_at DATETIME(3) NULL,
+    title VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    content TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    category VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    tags TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    source VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    source_id BIGINT UNSIGNED NOT NULL,
+    vector JSON,
+    summary TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    INDEX idx_knowledge_deleted_at (deleted_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识库表';
+
 -- 通知模板表
 CREATE TABLE IF NOT EXISTS notify_templates (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -97,4 +114,4 @@ INSERT INTO rules (name, description, condition_expr, level, notify_type, notify
 
 -- 插入默认设置
 INSERT INTO settings (ollama_endpoint, ollama_model, created_at, updated_at)
-VALUES ('http://localhost:11434', 'llama2', NOW(), NOW()); 
+VALUES ('http://localhost:11434', 'llama2', NOW(), NOW());

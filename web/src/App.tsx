@@ -7,6 +7,8 @@ import React from 'react';
 // 懒加载页面组件
 const AlertList = React.lazy(() => import('./pages/alerts/AlertList'));
 const RuleList = React.lazy(() => import('./pages/alerts/RuleList'));
+const KnowledgeList = React.lazy(() => import('./pages/knowledge/KnowledgeList'));
+const KnowledgeDetail = React.lazy(() => import('./pages/knowledge/KnowledgeDetail'));
 const TemplateList = React.lazy(() => import('./pages/notifications/TemplateList'));
 const GroupList = React.lazy(() => import('./pages/notifications/GroupList'));
 const Settings = React.lazy(() => import('./pages/settings/Settings'));
@@ -31,6 +33,22 @@ function App() {
               element={
                 <React.Suspense fallback={<div>Loading...</div>}>
                   <RuleList />
+                </React.Suspense>
+              }
+            />
+            <Route
+              path="knowledge"
+              element={
+                <React.Suspense fallback={<div>Loading...</div>}>
+                  <KnowledgeList />
+                </React.Suspense>
+              }
+            />
+            <Route
+              path="knowledge/:id"
+              element={
+                <React.Suspense fallback={<div>Loading...</div>}>
+                  <KnowledgeDetail />
                 </React.Suspense>
               }
             />
