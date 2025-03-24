@@ -13,23 +13,55 @@ import (
 	"alert_agent/internal/model"
 	"alert_agent/internal/pkg/database"
 	"alert_agent/internal/pkg/logger"
-)
 
-var log = logger.L
+	"go.uber.org/zap"
+)
 
 // OllamaService Ollama服务
 type OllamaService struct {
 	config *config.OllamaConfig
 	client *http.Client
+	logger *zap.Logger
 }
 
 // NewOllamaService 创建Ollama服务
-func NewOllamaService(config *config.OllamaConfig) *OllamaService {
+func NewOllamaService() *OllamaService {
+	// 创建默认配置
+	config := &config.OllamaConfig{
+		APIEndpoint: "http://localhost:11434", // 默认地址
+		Model:       "llama2",                 // 默认模型
+		Timeout:     300,                      // 默认30秒超时
+		MaxRetries:  3,                        // 默认最大重试3次
+	}
+
+	// 获取全局logger实例
+	logger := logger.L
+	if logger == nil {
+		logger = zap.L()
+	}
+
+	// 尝试从数据库获取配置
+	if database.DB != nil {
+		var settings model.Settings
+		if err := database.DB.Order("updated_at desc").First(&settings).Error; err == nil {
+			config.APIEndpoint = settings.OllamaEndpoint
+			config.Model = settings.OllamaModel
+			logger.Info("loaded settings from database",
+				zap.String("endpoint", config.APIEndpoint),
+				zap.String("model", config.Model))
+		} else {
+			logger.Warn("failed to get settings from database, using default config", zap.Error(err))
+		}
+	} else {
+		logger.Warn("database connection not initialized, using default config")
+	}
+
 	return &OllamaService{
 		config: config,
 		client: &http.Client{
 			Timeout: time.Duration(config.Timeout) * time.Second,
 		},
+		logger: logger,
 	}
 }
 
@@ -42,8 +74,6 @@ func (s *OllamaService) AnalyzeAlert(ctx context.Context, alert *model.Alert) (s
 告警级别：%s
 告警来源：%s
 告警内容：%s
-告警规则ID：%d
-告警组ID：%d
 
 请从以下几个方面进行分析：
 1. 告警的严重程度和影响范围
@@ -51,7 +81,7 @@ func (s *OllamaService) AnalyzeAlert(ctx context.Context, alert *model.Alert) (s
 3. 建议的处理方案
 4. 预防措施建议
 
-请用中文回答，并保持专业和客观。`, alert.Name, alert.Level, alert.Source, alert.Content, alert.RuleID, alert.GroupID)
+请用中文回答，并保持专业和客观。`, alert.Name, alert.Level, alert.Source, alert.Content)
 
 	// 调用Ollama API
 	analysis, err := s.callOllamaAPI(ctx, prompt)
@@ -71,10 +101,8 @@ func (s *OllamaService) FindSimilarAlerts(ctx context.Context, alert *model.Aler
 告警级别：%s
 告警来源：%s
 告警内容：%s
-告警规则ID：%d
-告警组ID：%d
 
-请从数据库中查找相似的告警，并返回告警ID列表。`, alert.Name, alert.Level, alert.Source, alert.Content, alert.RuleID, alert.GroupID)
+请从数据库中查找相似的告警，并返回告警ID列表。`, alert.Name, alert.Level, alert.Source, alert.Content)
 
 	// 调用Ollama API
 	similarIDs, err := s.callOllamaAPI(ctx, prompt)
@@ -95,7 +123,7 @@ func (s *OllamaService) FindSimilarAlerts(ctx context.Context, alert *model.Aler
 func (s *OllamaService) callOllamaAPI(ctx context.Context, prompt string) (string, error) {
 	// 构建请求体
 	reqBody := map[string]interface{}{
-		"model":  "deepseek-r1:32b",
+		"model":  s.config.Model,
 		"prompt": prompt,
 		"stream": false,
 	}
@@ -108,7 +136,7 @@ func (s *OllamaService) callOllamaAPI(ctx context.Context, prompt string) (strin
 	// 创建请求
 	fmt.Println("jsonData", string(jsonData))
 	fmt.Println("s.config.APIEndpoint", s.config.APIEndpoint)
-	req, err := http.NewRequestWithContext(ctx, "POST", "http://10.98.65.131:11434/api/generate", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", s.config.APIEndpoint+"/api/generate", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}

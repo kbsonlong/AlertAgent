@@ -12,7 +12,7 @@ import (
 // GetSettings 获取系统设置
 func GetSettings(c *gin.Context) {
 	var settings model.Settings
-	result := database.DB.First(&settings)
+	result := database.DB.Order("updated_at desc").First(&settings)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,

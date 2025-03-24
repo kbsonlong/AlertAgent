@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"time"
 
-	"alert_agent/internal/config"
 	"alert_agent/internal/model"
 	"alert_agent/internal/pkg/database"
 	"alert_agent/internal/pkg/logger"
@@ -15,7 +14,7 @@ import (
 
 var (
 	log           = logger.L
-	ollamaService = service.NewOllamaService(&config.GlobalConfig.Ollama)
+	ollamaService = service.NewOllamaService()
 )
 
 // ListAlerts 获取告警列表

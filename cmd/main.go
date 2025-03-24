@@ -26,6 +26,8 @@ import (
 // processUnanalyzedAlerts 处理未分析的告警
 func processUnanalyzedAlerts(ctx context.Context, redisQueue *queue.RedisQueue) error {
 	var alerts []model.Alert
+	fmt.Println("Processing unanalyzed alerts...")
+	// 获取未分析的告警
 	if err := database.DB.Where("analysis = ?", "").Find(&alerts).Error; err != nil {
 		return fmt.Errorf("failed to get unanalyzed alerts: %w", err)
 	}
@@ -42,6 +44,7 @@ func processUnanalyzedAlerts(ctx context.Context, redisQueue *queue.RedisQueue) 
 	// 创建任务列表
 	tasks := make([]*types.AlertTask, len(alerts))
 	for i, alert := range alerts {
+		fmt.Println("Processing alert:", alert.ID)
 		tasks[i] = &types.AlertTask{
 			ID:        alert.ID,
 			CreatedAt: time.Now(),
@@ -93,7 +96,7 @@ func main() {
 	}
 
 	// 创建Ollama服务
-	ollamaService := service.NewOllamaService(&config.GlobalConfig.Ollama)
+	ollamaService := service.NewOllamaService()
 
 	// 创建工作器
 	worker := queue.NewWorker(redisQueue, ollamaService)

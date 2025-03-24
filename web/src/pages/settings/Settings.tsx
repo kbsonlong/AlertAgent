@@ -1,9 +1,27 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Card, Form, Input, Button, message } from 'antd';
 import { SettingOutlined } from '@ant-design/icons';
 
 const Settings: React.FC = () => {
   const [form] = Form.useForm();
+
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch('/api/v1/settings');
+      const data = await response.json();
+      if (data.code === 200) {
+        form.setFieldsValue(data.data);
+      } else {
+        message.error(data.msg || '获取设置失败');
+      }
+    } catch (error) {
+      message.error('获取设置失败');
+    }
+  };
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
 
   const handleSubmit = async (values: any) => {
     try {
@@ -65,4 +83,4 @@ const Settings: React.FC = () => {
   );
 };
 
-export default Settings; 
+export default Settings;
