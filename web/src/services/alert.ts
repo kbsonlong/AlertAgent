@@ -10,6 +10,7 @@ export interface Alert {
   source: string;
   createdAt: string;
   updatedAt: string;
+  analysis?: string;
 }
 
 export interface AlertAnalysis {
@@ -22,15 +23,20 @@ export interface AlertAnalysis {
   updatedAt: string;
 }
 
+export interface AnalysisTask {
+  taskId: string;
+}
+
 // 告警相关API服务
 
 /**
  * 获取告警列表
  */
 export const getAlerts = async () => {
-  return request<Alert[]>('/api/v1/alerts', {
+  const response = await request<Alert[]>('/api/v1/alerts', {
     method: 'GET'
   });
+  return response.data;
 };
 
 /**
@@ -39,10 +45,11 @@ export const getAlerts = async () => {
  * @param status 状态：acknowledged(已确认) 或 resolved(已解决)
  */
 export const updateAlertStatus = async (id: number, status: 'acknowledged' | 'resolved') => {
-  return request<Alert>(`/api/v1/alerts/${id}`, {
+  const response = await request<Alert>(`/api/v1/alerts/${id}`, {
     method: 'PUT',
     data: { status }
   });
+  return response.data;
 };
 
 /**
@@ -60,9 +67,10 @@ export const analyzeAlert = async (id: number) => {
  * @param id 告警ID
  */
 export const asyncAnalyzeAlert = async (id: number) => {
-  return request<{ taskId: string }>(`/api/v1/alerts/${id}/async-analyze`, {
+  const response = await request<AnalysisTask>(`/api/v1/alerts/${id}/async-analyze`, {
     method: 'POST'
   });
+  return response.data;
 };
 
 /**
@@ -70,7 +78,19 @@ export const asyncAnalyzeAlert = async (id: number) => {
  * @param id 告警ID
  */
 export const getAnalysisStatus = async (id: number) => {
-  return request<AlertAnalysis>(`/api/v1/alerts/${id}/analysis-status`, {
+  const response = await request<AlertAnalysis>(`/api/v1/alerts/${id}/analysis-status`, {
     method: 'GET'
   });
+  return response.data;
+};
+
+/**
+ * 转换为知识库
+ * @param id 告警ID
+ */
+export const convertToKnowledge = async (id: number) => {
+  const response = await request<{ id: number }>(`/api/v1/alerts/${id}/convert-to-knowledge`, {
+    method: 'POST'
+  });
+  return response.data;
 };

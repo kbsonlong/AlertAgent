@@ -1,68 +1,127 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Table, Card, Button, Tag, Space, message, Modal, Progress, Typography } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import { AlertOutlined, RobotOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
+import React, { useEffect, useState } from 'react';
+import { Table, Button, Space, Modal, Tag, message } from 'antd';
+import { Alert, getAlerts, updateAlertStatus, asyncAnalyzeAlert, getAnalysisStatus, convertToKnowledge } from '../../services/alert';
+import { formatDateTime } from '../../utils/datetime';
 import ReactMarkdown from 'react-markdown';
-// 导入告警相关的API接口
-import { getAlerts, updateAlertStatus, asyncAnalyzeAlert, getAnalysisStatus } from '../../services/alert';
-
-interface Alert {
-  id: number;
-  name: string;
-  level: string;
-  status: string;
-  source: string;
-  content: string;
-  analysis: string;
-  created_at: string;
-  updated_at: string;
-}
+import { DownOutlined, UpOutlined } from '@ant-design/icons';
 
 const AlertList: React.FC = () => {
-  const [loading, setLoading] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [showThinkContent, setShowThinkContent] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [analysisModalVisible, setAnalysisModalVisible] = useState(false);
   const [currentAlert, setCurrentAlert] = useState<Alert | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState(0);
-  const [analysisStatus, setAnalysisStatus] = useState<'idle' | 'processing' | 'completed' | 'failed'>('idle');
-  const statusCheckInterval = useRef<number | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showThinkContent, setShowThinkContent] = useState(false);
 
-  const columns: ColumnsType<Alert> = [
+  const fetchAlerts = async () => {
+    setLoading(true);
+    try {
+      const response = await getAlerts();
+      setAlerts(response);
+    } catch {
+      message.error('获取告警列表失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAlerts();
+  }, []);
+
+  const handleAcknowledge = async (record: Alert) => {
+    try {
+      await updateAlertStatus(record.id, 'acknowledged');
+      message.success('已确认告警');
+      fetchAlerts();
+    } catch {
+      message.error('确认告警失败');
+    }
+  };
+
+  const handleResolve = async (record: Alert) => {
+    try {
+      await updateAlertStatus(record.id, 'resolved');
+      message.success('已解决告警');
+      fetchAlerts();
+    } catch {
+      message.error('解决告警失败');
+    }
+  };
+
+  const handleAnalyze = async (record: Alert) => {
+    setCurrentAlert(record);
+    setAnalysisModalVisible(true);
+    setIsAnalyzing(true);
+
+    try {
+      await asyncAnalyzeAlert(record.id);
+      
+      // 轮询分析状态
+      const checkStatus = async () => {
+        const analysis = await getAnalysisStatus(record.id);
+        if (analysis.status === 'completed' && analysis.result) {
+          setCurrentAlert(prev => prev ? { ...prev, analysis: analysis.result } : null);
+          setIsAnalyzing(false);
+        } else if (analysis.status === 'failed') {
+          message.error('分析失败');
+          setIsAnalyzing(false);
+        } else {
+          setTimeout(checkStatus, 2000);
+        }
+      };
+
+      checkStatus();
+    } catch {
+      message.error('启动分析失败');
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleConvertToKnowledge = async (record: Alert) => {
+    try {
+      await convertToKnowledge(record.id);
+      message.success('已成功转换为知识库记录');
+    } catch {
+      message.error('转换知识库失败');
+    }
+  };
+
+  const getSeverityColor = (severity: string | undefined): string => {
+    if (!severity) return 'default';
+    switch (severity.toLowerCase()) {
+      case 'critical':
+        return 'red';
+      case 'high':
+        return 'orange';
+      case 'medium':
+        return 'yellow';
+      case 'low':
+        return 'green';
+      default:
+        return 'default';
+    }
+  };
+
+  const getStatusColor = (status: string | undefined): string => {
+    if (!status) return 'default';
+    switch (status.toLowerCase()) {
+      case 'new':
+        return 'blue';
+      case 'acknowledged':
+        return 'orange';
+      case 'resolved':
+        return 'green';
+      default:
+        return 'default';
+    }
+  };
+
+  const columns = [
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 80,
-    },
-    {
-      title: '告警名称',
-      dataIndex: 'name',
-      key: 'name',
-    },
-    {
-      title: '级别',
-      dataIndex: 'level',
-      key: 'level',
-      render: (level: string) => {
-        const color = level === 'high' ? 'red' : level === 'medium' ? 'orange' : 'green';
-        return <Tag color={color}>{level.toUpperCase()}</Tag>;
-      },
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: string) => {
-        const color = status === 'active' ? 'red' : status === 'acknowledged' ? 'blue' : 'green';
-        return <Tag color={color}>{status.toUpperCase()}</Tag>;
-      },
-    },
-    {
-      title: '来源',
-      dataIndex: 'source',
-      key: 'source',
+      title: '标题',
+      dataIndex: 'title',
+      key: 'title',
     },
     {
       title: '内容',
@@ -71,275 +130,129 @@ const AlertList: React.FC = () => {
       ellipsis: true,
     },
     {
+      title: '严重程度',
+      dataIndex: 'severity',
+      key: 'severity',
+      render: (severity: string | undefined) => {
+        const color = getSeverityColor(severity);
+        return <Tag color={color}>{severity?.toUpperCase() || '未知'}</Tag>;
+      },
+    },
+    {
+      title: '来源',
+      dataIndex: 'source',
+      key: 'source',
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status: string | undefined) => {
+        const color = getStatusColor(status);
+        return <Tag color={color}>{status?.toUpperCase() || '未知'}</Tag>;
+      },
+    },
+    {
       title: '创建时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (text: string | undefined) => formatDateTime(text || ''),
+      sorter: (a: Alert, b: Alert) => {
+        if (!a.createdAt || !b.createdAt) return 0;
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      },
     },
     {
       title: '操作',
       key: 'action',
-      render: (_, record) => (
+      render: (_: unknown, record: Alert) => (
         <Space size="middle">
-          <Button type="link" onClick={() => handleAcknowledge(record.id)}>确认</Button>
-          <Button type="link" onClick={() => handleResolve(record.id)}>解决</Button>
-          <Button 
-            type="link" 
-            icon={<RobotOutlined />}
-            onClick={() => handleAnalyze(record)}
-          >
-            AI分析
+          {record.status === 'new' && (
+            <Button type="link" onClick={() => handleAcknowledge(record)}>
+              确认
+            </Button>
+          )}
+          {record.status !== 'resolved' && (
+            <Button type="link" onClick={() => handleResolve(record)}>
+              解决
+            </Button>
+          )}
+          <Button type="link" onClick={() => handleAnalyze(record)}>
+            分析
+          </Button>
+          <Button type="link" onClick={() => handleConvertToKnowledge(record)}>
+            转为知识库
           </Button>
         </Space>
       ),
     },
   ];
 
-  const fetchAlerts = async () => {
-    try {
-      setLoading(true);
-      const data = await getAlerts();
-      if (data.code === 200) {
-        setAlerts(data.data);
-      } else {
-        message.error(data.msg || '获取告警列表失败');
-      }
-    } catch (error) {
-      message.error('获取告警列表失败');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const renderAnalysisContent = (analysis: string) => {
+    // 提取深度思考内容
+    const thinkMatch = analysis.match(/<think>([\s\S]*?)<\/think>/);
+    // 移除 <think> 标签，获取主要内容
+    const mainContent = analysis.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
-  const handleAcknowledge = async (id: number) => {
-    try {
-      const data = await updateAlertStatus(id, 'acknowledged');
-      if (data.code === 200) {
-        message.success('告警已确认');
-        fetchAlerts();
-      } else {
-        message.error(data.msg || '确认告警失败');
-      }
-    } catch (error) {
-      message.error('确认告警失败');
-    }
-  };
+    return (
+      <div style={{ padding: '16px' }}>
+        {/* 渲染主要内容 */}
+        <div className="markdown-content">
+          <ReactMarkdown>{mainContent}</ReactMarkdown>
+        </div>
 
-  const handleResolve = async (id: number) => {
-    try {
-      const data = await updateAlertStatus(id, 'resolved');
-      if (data.code === 200) {
-        message.success('告警已解决');
-        fetchAlerts();
-      } else {
-        message.error(data.msg || '解决告警失败');
-      }
-    } catch (error) {
-      message.error('解决告警失败');
-    }
+        {/* 如果存在深度思考内容，添加折叠面板 */}
+        {thinkMatch && (
+          <div style={{ 
+            marginTop: '16px', 
+            borderTop: '1px solid #f0f0f0', 
+            paddingTop: '16px' 
+          }}>
+            <Button 
+              type="link" 
+              onClick={() => setShowThinkContent(!showThinkContent)}
+              icon={showThinkContent ? <UpOutlined /> : <DownOutlined />}
+              style={{ padding: 0 }}
+            >
+              {showThinkContent ? '收起深度思考' : '查看深度思考'}
+            </Button>
+            
+            {showThinkContent && (
+              <div style={{ marginTop: '8px' }}>
+                <ReactMarkdown>{thinkMatch[1]}</ReactMarkdown>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
-
-  // 清除状态检查定时器
-  const clearStatusCheckInterval = () => {
-    if (statusCheckInterval.current) {
-      window.clearInterval(statusCheckInterval.current);
-      statusCheckInterval.current = null;
-    }
-  };
-
-  // 检查分析状态
-  const checkAnalysisStatus = async (alertId: number) => {
-    try {
-      const data = await getAnalysisStatus(alertId);
-      if (data.code === 200) {
-        const { status, analysis, error } = data.data;
-        
-        if (status === 'completed' && analysis) {
-          // 分析完成，更新结果
-          setAnalysisStatus('completed');
-          setAnalysisProgress(100);
-          setAnalyzing(false);
-          
-          // 更新告警列表中的分析结果
-          setAlerts(alerts.map(a => 
-            a.id === alertId ? { ...a, analysis } : a
-          ));
-          
-          if (currentAlert && currentAlert.id === alertId) {
-            setCurrentAlert({ ...currentAlert, analysis });
-          }
-          
-          clearStatusCheckInterval();
-          message.success('分析完成');
-        } else if (status === 'failed') {
-          // 分析失败
-          setAnalysisStatus('failed');
-          setAnalyzing(false);
-          clearStatusCheckInterval();
-          message.error(error || 'AI分析失败');
-        } else if (status === 'processing') {
-          // 分析中，更新进度
-          setAnalysisStatus('processing');
-          // 模拟进度，最多到95%
-          setAnalysisProgress(prev => Math.min(prev + 5, 95));
-        }
-      } else {
-        message.error(data.msg || '获取分析状态失败');
-      }
-    } catch (error) {
-      message.error('获取分析状态失败');
-    }
-  };
-
-  const handleAnalyze = async (alert: Alert) => {
-    setCurrentAlert(alert);
-    setAnalysisModalVisible(true);
-    
-    // 如果已有分析结果，直接显示
-    if (alert.analysis) {
-      setAnalysisStatus('completed');
-      setAnalysisProgress(100);
-      return;
-    }
-    
-    // 重置状态
-    setAnalysisStatus('processing');
-    setAnalysisProgress(0);
-    setAnalyzing(true);
-    
-    try {
-      // 调用异步分析接口
-      const data = await asyncAnalyzeAlert(alert.id);
-      if (data.code === 200) {
-        message.success(data.msg || '分析任务已提交');
-        
-        // 设置定时检查分析状态
-        clearStatusCheckInterval();
-        statusCheckInterval.current = window.setInterval(() => {
-          checkAnalysisStatus(alert.id);
-        }, 2000); // 每2秒检查一次
-        
-        // 初始进度设为10%
-        setAnalysisProgress(10);
-      } else {
-        setAnalyzing(false);
-        setAnalysisStatus('failed');
-        message.error(data.msg || '提交分析任务失败');
-      }
-    } catch (error) {
-      setAnalyzing(false);
-      setAnalysisStatus('failed');
-      message.error('提交分析任务失败');
-    }
-  };
-  
-  // 组件卸载时清除定时器
-  useEffect(() => {
-    return () => clearStatusCheckInterval();
-  }, []);
-
-  useEffect(() => {
-    fetchAlerts();
-  }, []);
 
   return (
-    <>
-      <Card
-        title={
-          <Space>
-            <AlertOutlined />
-            告警列表
-          </Space>
-        }
-      >
-        <Table
-          columns={columns}
-          dataSource={alerts}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条`,
-          }}
-        />
-      </Card>
-
+    <div>
+      <Table
+        columns={columns}
+        dataSource={alerts}
+        loading={loading}
+        rowKey="id"
+      />
       <Modal
-        title={
-          <Space>
-            <RobotOutlined />
-            AI分析结果
-          </Space>
-        }
+        title="告警分析结果"
         open={analysisModalVisible}
         onCancel={() => {
           setAnalysisModalVisible(false);
-          // 关闭Modal时清除定时器，避免后台继续更新状态
-          if (analyzing) {
-            clearStatusCheckInterval();
-            setAnalyzing(false);
-          }
+          setShowThinkContent(false); // 关闭时重置折叠状态
         }}
-        footer={[
-          <Button key="close" onClick={() => {
-            setAnalysisModalVisible(false);
-            // 关闭Modal时清除定时器，避免后台继续更新状态
-            if (analyzing) {
-              clearStatusCheckInterval();
-              setAnalyzing(false);
-            }
-          }}>
-            关闭
-          </Button>
-        ]}
+        footer={null}
         width={800}
       >
-        {analyzing ? (
-          <div style={{ textAlign: 'center', padding: '20px' }}>
-            <div style={{ marginBottom: '20px' }}>正在分析中，请稍候...</div>
-            <Progress percent={analysisProgress} status="active" />
-          </div>
-        ) : analysisStatus === 'failed' ? (
-          <div style={{ textAlign: 'center', color: '#ff4d4f', padding: '20px' }}>
-            分析失败，请稍后重试
-          </div>
-        ) : currentAlert?.analysis ? (
-          <div style={{ padding: '16px' }}>
-            {(() => {
-              const thinkMatch = currentAlert.analysis.match(/<think>([\s\S]*?)<\/think>/);
-              const mainContent = currentAlert.analysis.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-              
-              return (
-                <>
-                  <ReactMarkdown>{mainContent}</ReactMarkdown>
-                  {thinkMatch && (
-                    <div style={{ marginTop: '16px', borderTop: '1px solid #f0f0f0', paddingTop: '16px' }}>
-                      <Button 
-                        type="link" 
-                        icon={showThinkContent ? <UpOutlined /> : <DownOutlined />}
-                        onClick={() => setShowThinkContent(!showThinkContent)}
-                        style={{ padding: 0, height: 'auto' }}
-                      >
-                        {showThinkContent ? '收起深度思考' : '查看深度思考'}
-                      </Button>
-                      {showThinkContent && (
-                        <div style={{ marginTop: '8px' }}>
-                          <ReactMarkdown>{thinkMatch[1]}</ReactMarkdown>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-          </div>
+        {currentAlert?.analysis ? (
+          renderAnalysisContent(currentAlert.analysis)
         ) : (
-          <div style={{ textAlign: 'center', color: '#999' }}>
-            暂无分析结果
-          </div>
+          <div>{isAnalyzing ? '正在分析中...' : '暂无分析结果'}</div>
         )}
       </Modal>
-    </>
+    </div>
   );
 };
 

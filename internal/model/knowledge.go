@@ -2,25 +2,17 @@ package model
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
-// Knowledge 知识库条目
+// Knowledge 知识库模型
 type Knowledge struct {
-	ID         uint           `json:"id" gorm:"primarykey"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
-	DeletedAt  gorm.DeletedAt `json:"deleted_at" gorm:"index"`
-	Title      string         `json:"title" gorm:"type:varchar(255);not null"`
-	Content    string         `json:"content" gorm:"type:text;not null"`
-	Category   string         `json:"category" gorm:"type:varchar(100);not null"`
-	Tags       string         `json:"tags" gorm:"type:text"`
-	Source     string         `json:"source" gorm:"type:varchar(255);not null"`
-	SourceID   uint           `json:"source_id" gorm:"not null"`
-	Vector     []float32      `json:"vector" gorm:"type:json"`
-	Summary    string         `json:"summary" gorm:"type:text"`
-	Similarity float32        `json:"similarity" gorm:"-"`
+	ID        uint      `json:"id" gorm:"primaryKey"`
+	Title     string    `json:"title" gorm:"type:varchar(255);not null"`
+	Content   string    `json:"content" gorm:"type:text;not null"`
+	Source    string    `json:"source" gorm:"type:varchar(50);not null"`
+	AlertID   uint      `json:"alert_id" gorm:"not null"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // KnowledgeResponse 知识库条目响应

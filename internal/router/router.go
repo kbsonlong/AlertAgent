@@ -47,6 +47,7 @@ func RegisterRoutes(r *gin.Engine) {
 			alerts.PUT("/:id", v1.UpdateAlert)
 			alerts.POST("/:id/handle", v1.HandleAlert)
 			alerts.GET("/:id/similar", v1.FindSimilarAlerts)
+			alerts.POST("/:id/convert-to-knowledge", v1.ConvertAlertToKnowledge)
 
 			// 通知模板管理
 			templates := apiV1.Group("/templates")
@@ -77,6 +78,16 @@ func RegisterRoutes(r *gin.Engine) {
 
 			// 异步分析告警
 			asyncAlertHandler.RegisterRoutes(alerts)
+		}
+
+		// 知识库管理
+		knowledge := apiV1.Group("/knowledge")
+		{
+			knowledge.GET("", v1.ListKnowledge)
+			knowledge.POST("", v1.CreateKnowledge)
+			knowledge.GET("/:id", v1.GetKnowledge)
+			knowledge.PUT("/:id", v1.UpdateKnowledge)
+			knowledge.DELETE("/:id", v1.DeleteKnowledge)
 		}
 	}
 }

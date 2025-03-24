@@ -72,7 +72,7 @@ func (h *AsyncAlertHandler) AsyncAnalyzeAlert(c *gin.Context) {
 		ID:        uint(alertID),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
-		Name:      alert.Name,
+		Name:      alert.Title,
 		Level:     alert.Level,
 		Source:    alert.Source,
 		Content:   alert.Content,

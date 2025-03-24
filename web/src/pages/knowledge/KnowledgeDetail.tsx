@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Card, Tag, Space, Typography, Spin, message } from 'antd';
 import { useParams } from 'react-router-dom';
 import { Knowledge, getKnowledgeById } from '../../services/knowledge';
+import ReactMarkdown from 'react-markdown';
 
-const { Title, Paragraph, Text } = Typography;
+const { Title, Text } = Typography;
 
 const KnowledgeDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -15,7 +16,8 @@ const KnowledgeDetail: React.FC = () => {
     try {
       setLoading(true);
       const res = await getKnowledgeById(Number(id));
-      setDetail(res);
+      const data = res.data
+      setDetail(data);
     } catch (error) {
       console.error(error);
       message.error('获取知识详情失败');
@@ -44,37 +46,93 @@ const KnowledgeDetail: React.FC = () => {
     <Card>
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <Title level={2}>{detail.title}</Title>
-        <Space>
-          <Text type="secondary">分类：</Text>
-          <Tag color="blue">{detail.category}</Tag>
-        </Space>
-        {detail.tags && detail.tags.length > 0 && (
+        <Space wrap>
           <Space>
-            <Text type="secondary">标签：</Text>
-            {detail.tags.map(tag => (
-              <Tag key={tag}>{tag}</Tag>
-            ))}
+            <Text type="secondary">分类：</Text>
+            <Tag color="blue">{detail.category}</Tag>
           </Space>
-        )}
-        <Space>
-          <Text type="secondary">来源：</Text>
-          <Text>{detail.source}</Text>
-        </Space>
-        <Space>
-          <Text type="secondary">创建时间：</Text>
-          <Text>{detail.createdAt}</Text>
+          {detail.tags && detail.tags.length > 0 && (
+            <Space>
+              <Text type="secondary">标签：</Text>
+              {detail.tags.map(tag => (
+                <Tag key={tag}>{tag}</Tag>
+              ))}
+            </Space>
+          )}
+          <Space>
+            <Text type="secondary">来源：</Text>
+            <Text>{detail.source}</Text>
+          </Space>
+          <Space>
+            <Text type="secondary">创建时间：</Text>
+            <Text>{detail.createdAt}</Text>
+          </Space>
         </Space>
         {detail.summary && (
           <div>
-            <Text type="secondary">摘要：</Text>
-            <Paragraph>{detail.summary}</Paragraph>
+            <Title level={4}>摘要</Title>
+            <div className="markdown-content">
+              <ReactMarkdown>{detail.summary}</ReactMarkdown>
+            </div>
           </div>
         )}
         <div>
-          <Text type="secondary">内容：</Text>
-          <Paragraph style={{ whiteSpace: 'pre-wrap' }}>{detail.content}</Paragraph>
+          <Title level={4}>内容</Title>
+          <div className="markdown-content">
+            <ReactMarkdown>{detail.content}</ReactMarkdown>
+          </div>
         </div>
       </Space>
+      <style>
+        {`
+          .markdown-content {
+            padding: 16px;
+            background: #fafafa;
+            border-radius: 4px;
+          }
+          .markdown-content h1 { font-size: 24px; margin-top: 24px; margin-bottom: 16px; }
+          .markdown-content h2 { font-size: 20px; margin-top: 24px; margin-bottom: 16px; }
+          .markdown-content h3 { font-size: 18px; margin-top: 24px; margin-bottom: 16px; }
+          .markdown-content h4 { font-size: 16px; margin-top: 24px; margin-bottom: 16px; }
+          .markdown-content p { margin-bottom: 16px; line-height: 1.6; }
+          .markdown-content ul, .markdown-content ol { margin-bottom: 16px; padding-left: 24px; }
+          .markdown-content li { margin-bottom: 8px; }
+          .markdown-content code {
+            background: #f0f0f0;
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-family: monospace;
+          }
+          .markdown-content pre {
+            background: #f0f0f0;
+            padding: 16px;
+            border-radius: 4px;
+            overflow-x: auto;
+          }
+          .markdown-content blockquote {
+            margin: 16px 0;
+            padding: 0 16px;
+            color: #666;
+            border-left: 4px solid #ddd;
+          }
+          .markdown-content img {
+            max-width: 100%;
+            height: auto;
+          }
+          .markdown-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+          }
+          .markdown-content th, .markdown-content td {
+            border: 1px solid #ddd;
+            padding: 8px;
+          }
+          .markdown-content th {
+            background: #f5f5f5;
+          }
+        `}
+      </style>
     </Card>
   );
 };

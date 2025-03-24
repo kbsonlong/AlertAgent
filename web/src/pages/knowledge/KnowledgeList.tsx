@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Input, Tag, Space, Table, message } from 'antd';
 import { Knowledge, KnowledgeListParams, getKnowledgeList } from '../../services/knowledge';
+import { useNavigate } from 'react-router-dom';
 
 const { Search } = Input;
 
 const KnowledgeList: React.FC = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [list, setList] = useState<Knowledge[]>([]);
@@ -16,11 +18,11 @@ const KnowledgeList: React.FC = () => {
   const fetchList = async (params: KnowledgeListParams) => {
     try {
       setLoading(true);
-      const res = await getKnowledgeList(params);
-      setList(res.items);
-      setTotal(res.total);
+      const data = await getKnowledgeList(params);
+      setList(data);
+      setTotal(data.length);
     } catch (error) {
-        console.error(error);
+      console.error(error);
       message.error('获取知识列表失败');
     } finally {
       setLoading(false);
@@ -45,6 +47,9 @@ const KnowledgeList: React.FC = () => {
       dataIndex: 'title',
       key: 'title',
       width: '30%',
+      render: (text: string, record: Knowledge) => (
+        <a onClick={() => navigate(`/knowledge/${record.id}`)}>{text}</a>
+      ),
     },
     {
       title: '分类',
@@ -60,9 +65,9 @@ const KnowledgeList: React.FC = () => {
       title: '标签',
       dataIndex: 'tags',
       key: 'tags',
-      render: (tags: string[]) => (
+      render: (tags: string[] | undefined) => (
         <Space>
-          {tags.map(tag => (
+          {tags?.map(tag => (
             <Tag key={tag}>{tag}</Tag>
           ))}
         </Space>

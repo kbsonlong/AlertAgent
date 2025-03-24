@@ -70,7 +70,7 @@ func (s *OllamaService) AnalyzeAlert(ctx context.Context, alert *model.Alert) (s
 	// 构建提示词
 	prompt := fmt.Sprintf(`请分析以下告警信息，并提供详细的分析和建议：
 
-告警名称：%s
+告警标题：%s
 告警级别：%s
 告警来源：%s
 告警内容：%s
@@ -81,7 +81,7 @@ func (s *OllamaService) AnalyzeAlert(ctx context.Context, alert *model.Alert) (s
 3. 建议的处理方案
 4. 预防措施建议
 
-请用中文回答，并保持专业和客观。`, alert.Name, alert.Level, alert.Source, alert.Content)
+请用中文回答，并保持专业和客观。`, alert.Title, alert.Level, alert.Source, alert.Content)
 
 	// 调用Ollama API
 	analysis, err := s.callOllamaAPI(ctx, prompt)
@@ -97,12 +97,12 @@ func (s *OllamaService) FindSimilarAlerts(ctx context.Context, alert *model.Aler
 	// 构建提示词
 	prompt := fmt.Sprintf(`请根据以下告警信息，查找相似的告警：
 
-告警名称：%s
+告警标题：%s
 告警级别：%s
 告警来源：%s
 告警内容：%s
 
-请从数据库中查找相似的告警，并返回告警ID列表。`, alert.Name, alert.Level, alert.Source, alert.Content)
+请从数据库中查找相似的告警，并返回告警ID列表。`, alert.Title, alert.Level, alert.Source, alert.Content)
 
 	// 调用Ollama API
 	similarIDs, err := s.callOllamaAPI(ctx, prompt)
