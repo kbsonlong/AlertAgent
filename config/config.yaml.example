@@ -1,0 +1,67 @@
+# AlertAgent 配置文件示例
+# 复制此文件为 config.yaml 并根据实际环境修改配置
+
+# 服务配置
+server:
+  port: 8080                    # 服务端口
+  mode: "debug"                 # 运行模式: debug, release, test
+  jwt_secret: your-jwt-secret-key # JWT 密钥，生产环境请使用强密码
+
+# 数据库配置
+database:
+  driver: "mysql"               # 数据库驱动
+  host: "localhost"             # 数据库主机
+  port: 3306                    # 数据库端口
+  username: "root"              # 数据库用户名
+  password: "along123"          # 数据库密码
+  dbname: "alert_agent"         # 数据库名称
+  charset: "utf8mb4"            # 字符集
+  max_idle_conns: 10            # 最大空闲连接数
+  max_open_conns: 100           # 最大打开连接数
+  parse_time: true              # 解析时间
+  loc: Local                    # 时区
+  
+# Redis配置
+redis:
+  host: "localhost"             # Redis 主机
+  port: 6379                    # Redis 端口
+  password: ""                  # Redis 密码（如果有）
+  db: 0                         # Redis 数据库编号
+  pool_size: 100                # 连接池大小
+  min_idle_conns: 10            # 最小空闲连接数
+  max_retries: 3                # 最大重试次数
+  dial_timeout: 5               # 连接超时时间（秒）
+
+# OpenAI/Ollama配置
+openai:
+  endpoint: "http://localhost:11434"  # Ollama 服务地址
+  model: "deepseek-r1:32b"            # 使用的模型名称
+  timeout: 30                         # 请求超时时间（秒）
+  max_retries: 3                      # 最大重试次数
+
+# 日志配置
+log:
+  level: "debug"                # 日志级别: debug, info, warn, error
+  filename: "logs/alert_agent.log" # 日志文件路径
+  max_size: 100                 # 单个日志文件最大大小（MB）
+  max_age: 7                    # 日志文件保留天数
+  max_backups: 10               # 最大备份文件数
+  compress: true                # 是否压缩旧日志文件
+
+# 开发环境配置说明
+# =================
+# 
+# 本地开发环境:
+# - 确保 MySQL 和 Redis 服务已启动
+# - 数据库密码根据实际情况修改
+# - Ollama 服务可选，如不使用 AI 功能可以注释相关配置
+# 
+# Docker 开发环境:
+# - 数据库和 Redis 配置保持默认即可
+# - Ollama 服务地址使用容器名称: http://ollama:11434
+# 
+# 生产环境:
+# - 修改 server.mode 为 "release"
+# - 使用强密码和安全的 JWT 密钥
+# - 配置适当的日志级别（建议 "info" 或 "warn"）
+# - 根据实际负载调整数据库连接池参数

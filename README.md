@@ -74,37 +74,147 @@ alert_agent/
 
 ## 快速开始
 
-### 环境要求
+### 🚀 一键启动开发环境
+
+我们提供了两种开发环境启动方式：
+
+#### 方式一：本地环境（推荐用于日常开发）
+```bash
+# 使用 Makefile（推荐）
+make dev
+
+# 或直接运行脚本
+./scripts/dev-setup.sh
+```
+
+#### 方式二：Docker 环境（推荐用于快速体验）
+```bash
+# 使用 Makefile（推荐）
+make docker-dev
+
+# 或直接运行脚本
+./scripts/docker-dev-setup.sh
+```
+
+### 📋 环境要求
+
+#### 本地开发环境
 - Go 1.21+
+- Node.js 18+
 - MySQL 8.0+
 - Redis 6.0+
-- Ollama
+- Ollama（可选，用于AI功能）
 
-### 安装步骤
-1. 克隆项目
+#### Docker 开发环境
+- Docker
+- Docker Compose
+- Go 1.21+（用于运行应用）
+- Node.js 18+（用于前端开发）
+
+### 🛠️ 详细安装步骤
+
+#### 1. 克隆项目
 ```bash
 git clone https://github.com/yourusername/alert_agent.git
 cd alert_agent
 ```
 
-2. 安装依赖
+#### 2. 检查开发环境
 ```bash
-go mod download
+make check
 ```
 
-3. 配置环境
-- 复制 `config/config.yaml.example` 到 `config/config.yaml`
-- 修改配置文件中的数据库、Redis和Ollama配置
-
-4. 初始化数据库
+#### 3. 安装开发工具（可选）
 ```bash
-mysql -u root -p < scripts/init.sql
+make install
 ```
 
-5. 启动服务
+#### 4. 启动开发环境
+
+**本地环境：**
 ```bash
-go run cmd/main.go
+make dev
 ```
+
+**Docker 环境：**
+```bash
+make docker-dev
+```
+
+#### 5. 访问应用
+- 前端：http://localhost:5173
+- 后端：http://localhost:8080
+- API文档：http://localhost:8080/swagger/index.html
+
+### 🔧 开发环境管理
+
+#### 常用命令
+```bash
+# 查看所有可用命令
+make help
+
+# 启动开发环境
+make dev              # 本地环境
+make docker-dev       # Docker 环境
+
+# 停止开发环境
+make dev-stop         # 停止本地环境
+make docker-dev-stop  # 停止 Docker 环境
+
+# 重启开发环境
+make dev-restart      # 重启本地环境
+make docker-dev-restart # 重启 Docker 环境
+
+# 查看服务状态
+make status
+
+# 查看日志
+make logs             # 应用日志
+make docker-logs      # Docker 服务日志
+
+# 项目管理
+make deps             # 安装依赖
+make build            # 构建项目
+make test             # 运行测试
+make lint             # 代码检查
+make clean            # 清理构建文件
+```
+
+#### 脚本说明
+- `scripts/dev-setup.sh` - 本地开发环境启动脚本
+- `scripts/dev-stop.sh` - 本地开发环境停止脚本
+- `scripts/dev-restart.sh` - 本地开发环境重启脚本
+- `scripts/docker-dev-setup.sh` - Docker 开发环境启动脚本
+- `scripts/docker-dev-stop.sh` - Docker 开发环境停止脚本
+- `docker-compose.dev.yml` - Docker 开发环境配置
+
+### 🐳 Docker 环境特性
+
+Docker 环境包含以下服务：
+- **MySQL 8.0** - 数据库服务
+- **Redis 7** - 缓存服务
+- **Ollama** - AI 模型服务
+- **phpMyAdmin** - 数据库管理工具 (http://localhost:8081)
+- **Redis Commander** - Redis 管理工具 (http://localhost:8082)
+
+### 🔍 故障排除
+
+#### 端口冲突
+如果遇到端口冲突，请检查以下端口是否被占用：
+- 3306 (MySQL)
+- 6379 (Redis)
+- 8080 (后端)
+- 5173 (前端)
+- 11434 (Ollama)
+
+#### 权限问题
+如果脚本无法执行，请添加执行权限：
+```bash
+chmod +x scripts/*.sh
+```
+
+#### 数据库连接问题
+检查 `config/config.yaml` 中的数据库配置是否正确。
 
 ## API文档
 访问 `http://localhost:8080/swagger/index.html` 查看API文档
