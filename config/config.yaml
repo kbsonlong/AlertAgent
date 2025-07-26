@@ -31,7 +31,7 @@ redis:
 
 # Ollama配置
 ollama:
-  enabled: false  # 是否启用告警分析功能
+  enabled: true  # 是否启用告警分析功能
   api_endpoint: "http://10.98.65.131:11434"  # Ollama本地服务地址
   model: "deepseek-r1:32b"  # 或其他已安装的模型
   timeout: 30  # 请求超时时间（秒）

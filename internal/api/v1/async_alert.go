@@ -49,7 +49,7 @@ func (h *AsyncAlertHandler) AsyncAnalyzeAlert(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "无效的告警ID",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -60,7 +60,7 @@ func (h *AsyncAlertHandler) AsyncAnalyzeAlert(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code": 404,
 			"msg":  "告警不存在",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -150,7 +150,7 @@ func (h *AsyncAlertHandler) GetAnalysisResult(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "无效的任务ID",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -161,7 +161,7 @@ func (h *AsyncAlertHandler) GetAnalysisResult(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code": 404,
 			"msg":  "告警不存在",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}

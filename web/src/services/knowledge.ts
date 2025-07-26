@@ -18,11 +18,23 @@ export interface KnowledgeListParams {
   pageSize?: number;
 }
 
+// API响应类型
+export interface ApiResponse<T> {
+  code: number;
+  msg?: string;
+  data: T;
+}
+
 export async function getKnowledgeList(params: KnowledgeListParams) {
   return request('/api/v1/knowledge', {
     method: 'GET',
     params,
-  });
+  }) as Promise<ApiResponse<{
+    list: Knowledge[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }>>;
 }
 
 export async function getKnowledgeById(id: number) {

@@ -18,7 +18,7 @@ func ListTemplates(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "Failed to get templates",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -37,7 +37,7 @@ func CreateTemplate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "Invalid request body",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -47,7 +47,7 @@ func CreateTemplate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "Failed to create template",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -67,7 +67,7 @@ func GetTemplate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "Invalid template ID",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -78,7 +78,7 @@ func GetTemplate(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code": 404,
 			"msg":  "Template not found",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -118,7 +118,7 @@ func UpdateTemplate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "Failed to update template",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -157,7 +157,7 @@ func DeleteTemplate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "Failed to delete template",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}

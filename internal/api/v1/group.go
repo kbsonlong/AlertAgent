@@ -17,8 +17,8 @@ func ListGroups(c *gin.Context) {
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
-			"msg":  "Failed to get groups",
-			"data": nil,
+			"msg":  "获取通知组列表失败",
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -37,7 +37,7 @@ func CreateGroup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "Invalid request body",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -47,7 +47,7 @@ func CreateGroup(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "Failed to create group",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -67,7 +67,7 @@ func GetGroup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "Invalid group ID",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -78,7 +78,7 @@ func GetGroup(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code": 404,
 			"msg":  "Group not found",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -108,7 +108,7 @@ func UpdateGroup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "Invalid request body",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -118,7 +118,7 @@ func UpdateGroup(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "Failed to update group",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -157,7 +157,7 @@ func DeleteGroup(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "Failed to delete group",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}

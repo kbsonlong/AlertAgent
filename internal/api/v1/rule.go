@@ -2,6 +2,7 @@ package v1
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,7 +21,7 @@ func ListRules(c *gin.Context) {
 	result := database.DB.Find(&rules)
 	if result.Error != nil {
 		c.Header("Content-Type", "application/json; charset=utf-8")
-		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(`{"code":500,"msg":"获取规则列表失败","data":null}`))
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"获取规则列表失败","data":"%s"}`, result.Error.Error())))
 		return
 	}
 
@@ -31,7 +32,7 @@ func ListRules(c *gin.Context) {
 	})
 	if err != nil {
 		c.Header("Content-Type", "application/json; charset=utf-8")
-		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(`{"code":500,"msg":"序列化数据失败","data":null}`))
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"序列化数据失败","data":"%s"}`, err.Error())))
 		return
 	}
 
@@ -46,7 +47,7 @@ func CreateRule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "Invalid request body",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -56,7 +57,7 @@ func CreateRule(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "Failed to create rule",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -76,7 +77,7 @@ func GetRule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "Invalid rule ID",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -119,7 +120,7 @@ func UpdateRule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "Invalid request body",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -187,7 +188,7 @@ func UpdateRule(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "Failed to update rule",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -226,7 +227,7 @@ func DeleteRule(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "Failed to delete rule",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}

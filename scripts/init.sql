@@ -87,6 +87,27 @@ CREATE TABLE IF NOT EXISTS notify_groups (
     INDEX idx_notify_groups_deleted_at (deleted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通知组表';
 
+-- 数据源表
+CREATE TABLE IF NOT EXISTS providers (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    created_at DATETIME(3) NULL,
+    updated_at DATETIME(3) NULL,
+    deleted_at DATETIME(3) NULL,
+    name VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    type VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    status VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
+    description TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    endpoint VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    auth_type VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'none',
+    auth_config TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    labels TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    last_check DATETIME(3) NULL,
+    last_error TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    INDEX idx_providers_deleted_at (deleted_at),
+    INDEX idx_providers_type (type),
+    INDEX idx_providers_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据源表';
+
 -- 系统设置表
 CREATE TABLE IF NOT EXISTS settings (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

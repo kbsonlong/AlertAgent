@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -56,4 +57,14 @@ func (p *Provider) Validate() error {
 	}
 
 	return nil
+}
+
+// MarshalBinary 实现 encoding.BinaryMarshaler 接口
+func (p *Provider) MarshalBinary() ([]byte, error) {
+	return json.Marshal(p)
+}
+
+// UnmarshalBinary 实现 encoding.BinaryUnmarshaler 接口
+func (p *Provider) UnmarshalBinary(data []byte) error {
+	return json.Unmarshal(data, p)
 }

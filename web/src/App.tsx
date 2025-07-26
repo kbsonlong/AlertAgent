@@ -11,6 +11,7 @@ const KnowledgeList = React.lazy(() => import('./pages/knowledge/KnowledgeList')
 const KnowledgeDetail = React.lazy(() => import('./pages/knowledge/KnowledgeDetail'));
 const TemplateList = React.lazy(() => import('./pages/notifications/TemplateList'));
 const GroupList = React.lazy(() => import('./pages/notifications/GroupList'));
+const ProviderList = React.lazy(() => import('./pages/providers/ProviderList'));
 const Settings = React.lazy(() => import('./pages/settings/Settings'));
 
 function App() {
@@ -65,6 +66,14 @@ function App() {
               element={
                 <React.Suspense fallback={<div>Loading...</div>}>
                   <GroupList />
+                </React.Suspense>
+              }
+            />
+            <Route
+              path="providers"
+              element={
+                <React.Suspense fallback={<div>Loading...</div>}>
+                  <ProviderList />
                 </React.Suspense>
               }
             />

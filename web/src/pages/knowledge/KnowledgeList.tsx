@@ -22,9 +22,10 @@ const KnowledgeList: React.FC = () => {
     try {
       setLoading(true);
       const response = await getKnowledgeList(params);
-      const data = response.data || [];
-      setList(data);
-      setTotal(data.length);
+      if (response && response.code === 200) {
+        setList(response.data.list || []);
+        setTotal(response.data.total || 0);
+      }
     } catch (error) {
       console.error(error);
       message.error('获取知识列表失败');

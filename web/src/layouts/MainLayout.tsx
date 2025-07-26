@@ -6,6 +6,7 @@ import {
   BellOutlined,
   SettingOutlined,
   BookOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 
 const { Header, Content, Sider } = Layout;
@@ -41,7 +42,15 @@ const MainLayout: React.FC = () => {
       ],
     },
     {
-      key: 'settings',
+      key: 'providers',
+      icon: <DatabaseOutlined />,
+      label: '数据源管理',
+      children: [
+        { key: '/providers', label: '数据源列表' },
+      ],
+    },
+    {
+      key: '/settings',
       icon: <SettingOutlined />,
       label: '系统设置',
     },

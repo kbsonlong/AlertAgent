@@ -2,6 +2,7 @@ package v1
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -24,7 +25,7 @@ func ListAlerts(c *gin.Context) {
 	result := database.DB.Find(&alerts)
 	if result.Error != nil {
 		c.Header("Content-Type", "application/json; charset=utf-8")
-		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(`{"code":500,"msg":"获取告警列表失败","data":null}`))
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"获取告警列表失败","data":"%s"}`, result.Error.Error())))
 		return
 	}
 
@@ -40,7 +41,7 @@ func ListAlerts(c *gin.Context) {
 	})
 	if err != nil {
 		c.Header("Content-Type", "application/json; charset=utf-8")
-		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(`{"code":500,"msg":"序列化数据失败","data":null}`))
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"序列化数据失败","data":"%s"}`, err.Error())))
 		return
 	}
 
@@ -90,7 +91,7 @@ func GetAlert(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code": 404,
 			"msg":  "告警不存在",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -110,7 +111,7 @@ func UpdateAlert(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "无效的请求参数",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -120,7 +121,7 @@ func UpdateAlert(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "更新告警失败",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -153,7 +154,7 @@ func HandleAlert(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "无效的请求参数",
-			"data": nil,
+			"data": err.Error(),
 		})
 		return
 	}
@@ -170,7 +171,7 @@ func HandleAlert(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "处理告警失败",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}

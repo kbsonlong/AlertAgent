@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -141,6 +142,16 @@ func (a *Alert) ToResponse() *AlertResponse {
 		resp.NotifyTime = a.NotifyTime.Format(time.RFC3339)
 	}
 	return resp
+}
+
+// MarshalBinary 实现 encoding.BinaryMarshaler 接口
+func (a *Alert) MarshalBinary() ([]byte, error) {
+	return json.Marshal(a)
+}
+
+// UnmarshalBinary 实现 encoding.BinaryUnmarshaler 接口
+func (a *Alert) UnmarshalBinary(data []byte) error {
+	return json.Unmarshal(data, a)
 }
 
 // SimilarAlert 相似告警

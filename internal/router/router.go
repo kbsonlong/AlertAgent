@@ -93,5 +93,16 @@ func RegisterRoutes(r *gin.Engine) {
 			knowledge.PUT("/:id", v1.UpdateKnowledge)
 			knowledge.DELETE("/:id", v1.DeleteKnowledge)
 		}
+
+		// 数据源管理
+		providers := apiV1.Group("/providers")
+		{
+			providers.GET("", v1.ListProviders)
+			providers.POST("", v1.CreateProvider)
+			providers.GET("/:id", v1.GetProvider)
+			providers.PUT("/:id", v1.UpdateProvider)
+			providers.DELETE("/:id", v1.DeleteProvider)
+			providers.POST("/test", v1.TestProvider)
+		}
 	}
 }
