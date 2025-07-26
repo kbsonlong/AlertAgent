@@ -15,8 +15,7 @@ import (
 )
 
 var (
-	log           = logger.L
-	ollamaService = service.NewOllamaService()
+	log = logger.L
 )
 
 // ListAlerts 获取告警列表
@@ -200,6 +199,8 @@ func AnalyzeAlert(c *gin.Context) {
 		return
 	}
 
+	// 动态创建ollama服务实例以获取最新配置
+	ollamaService := service.NewOllamaService()
 	analysis, err := ollamaService.AnalyzeAlert(c.Request.Context(), &alert)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -219,6 +220,8 @@ func FindSimilarAlerts(c *gin.Context) {
 		return
 	}
 
+	// 动态创建ollama服务实例以获取最新配置
+	ollamaService := service.NewOllamaService()
 	similarAlerts, err := ollamaService.FindSimilarAlerts(c.Request.Context(), &alert)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

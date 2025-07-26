@@ -47,6 +47,7 @@ func RegisterRoutes(r *gin.Engine) {
 			alerts.PUT("/:id", v1.UpdateAlert)
 			alerts.POST("/:id/handle", v1.HandleAlert)
 			alerts.GET("/:id/similar", v1.FindSimilarAlerts)
+			alerts.POST("/:id/analyze", v1.AnalyzeAlert)
 			alerts.POST("/:id/convert-to-knowledge", v1.ConvertAlertToKnowledge)
 
 			// 通知模板管理

@@ -1,47 +1,38 @@
-# 服务配置
 server:
-  port: 8080
-  mode: "debug"
-  jwt_secret: your-jwt-secret-key
-
-# 数据库配置
+    port: 8080
+    mode: debug
+    jwt_secret: your-jwt-secret-key
 database:
-  driver: "mysql"
-  host: "localhost"
-  port: 3306
-  username: "root"
-  password: "along123"
-  dbname: "alert_agent"
-  charset: "utf8mb4"
-  max_idle_conns: 10
-  max_open_conns: 100
-  parse_time: true
-  loc: Local
-  
-# Redis配置
-redis:
-  host: "localhost"
-  port: 6379
-  password: ""
-  db: 0
-  pool_size: 100
-  min_idle_conns: 10
-  max_retries: 3
-  dial_timeout: 5  # 连接超时时间（秒）
-
-# Ollama配置
+    driver: mysql
+    host: localhost
+    port: 3306
+    username: root
+    password: along123
+    dbname: alert_agent
+    charset: utf8mb4
+    max_idle_conns: 10
+    max_open_conns: 100
+    parse_time: true
+    loc: Local
 ollama:
-  enabled: true  # 是否启用告警分析功能
-  api_endpoint: "http://10.98.65.131:11434"  # Ollama本地服务地址
-  model: "deepseek-r1:32b"  # 或其他已安装的模型
-  timeout: 30  # 请求超时时间（秒）
-  max_retries: 3  # 最大重试次数
-
-# 日志配置
+    enabled: true
+    api_endpoint: http://10.98.65.131:11434
+    model: llama3:latest
+    timeout: 30
+    max_retries: 3
+redis:
+    host: localhost
+    port: 6379
+    password: ""
+    db: 0
+    pool_size: 100
+    min_idle_conns: 10
+    max_retries: 3
+    dial_timeout: 5
 log:
-  level: "info"
-  filename: "logs/alert_agent.log"
-  max_size: 100    # MB
-  max_age: 7       # 天
-  max_backups: 10  # 最大备份数
-  compress: true   # 是否压缩
+    level: info
+    filename: logs/alert_agent.log
+    max_size: 100
+    max_age: 7
+    max_backups: 10
+    compress: true

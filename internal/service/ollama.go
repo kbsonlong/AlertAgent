@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"alert_agent/internal/config"
@@ -22,6 +23,7 @@ type OllamaService struct {
 	config *config.OllamaConfig
 	client *http.Client
 	logger *zap.Logger
+	mutex  sync.RWMutex
 }
 
 // NewOllamaService 创建Ollama服务
@@ -36,19 +38,59 @@ func NewOllamaService() *OllamaService {
 		logger = zap.L()
 	}
 
-	return &OllamaService{
+	service := &OllamaService{
 		config: ollamaConfig,
 		client: &http.Client{
 			Timeout: time.Duration(ollamaConfig.Timeout) * time.Second,
 		},
 		logger: logger,
 	}
+
+	// 注册配置更新回调
+	config.RegisterReloadCallback(service.onConfigReload)
+
+	return service
+}
+
+// onConfigReload 配置重载回调
+func (s *OllamaService) onConfigReload(newConfig config.Config) {
+	s.updateConfig(&newConfig.Ollama)
+}
+
+// updateConfig 更新配置
+func (s *OllamaService) updateConfig(newConfig *config.OllamaConfig) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	// 更新配置
+	s.config = newConfig
+
+	// 重新创建HTTP客户端以应用新的超时设置
+	s.client = &http.Client{
+		Timeout: time.Duration(newConfig.Timeout) * time.Second,
+	}
+
+	s.logger.Info("Ollama configuration updated",
+		zap.Bool("enabled", newConfig.Enabled),
+		zap.String("endpoint", newConfig.APIEndpoint),
+		zap.String("model", newConfig.Model),
+		zap.Int("timeout", newConfig.Timeout))
+}
+
+// getConfig 安全地获取当前配置
+func (s *OllamaService) getConfig() *config.OllamaConfig {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	return s.config
 }
 
 // AnalyzeAlert 分析告警
 func (s *OllamaService) AnalyzeAlert(ctx context.Context, alert *model.Alert) (string, error) {
+	// 获取当前配置
+	currentConfig := s.getConfig()
+	
 	// 检查是否启用Ollama功能
-	if !s.config.Enabled {
+	if !currentConfig.Enabled {
 		return "", fmt.Errorf("ollama analysis is disabled")
 	}
 
@@ -79,8 +121,11 @@ func (s *OllamaService) AnalyzeAlert(ctx context.Context, alert *model.Alert) (s
 
 // FindSimilarAlerts 查找相似告警
 func (s *OllamaService) FindSimilarAlerts(ctx context.Context, alert *model.Alert) ([]*model.Alert, error) {
+	// 获取当前配置
+	currentConfig := s.getConfig()
+	
 	// 检查是否启用Ollama功能
-	if !s.config.Enabled {
+	if !currentConfig.Enabled {
 		return nil, fmt.Errorf("ollama analysis is disabled")
 	}
 
@@ -111,9 +156,12 @@ func (s *OllamaService) FindSimilarAlerts(ctx context.Context, alert *model.Aler
 
 // callOllamaAPI 调用Ollama API
 func (s *OllamaService) callOllamaAPI(ctx context.Context, prompt string) (string, error) {
+	// 获取当前配置
+	currentConfig := s.getConfig()
+	
 	// 构建请求体
 	reqBody := map[string]interface{}{
-		"model":  s.config.Model,
+		"model":  currentConfig.Model,
 		"prompt": prompt,
 		"stream": false,
 	}
@@ -125,8 +173,8 @@ func (s *OllamaService) callOllamaAPI(ctx context.Context, prompt string) (strin
 
 	// 创建请求
 	fmt.Println("jsonData", string(jsonData))
-	fmt.Println("s.config.APIEndpoint", s.config.APIEndpoint)
-	req, err := http.NewRequestWithContext(ctx, "POST", s.config.APIEndpoint+"/api/generate", bytes.NewBuffer(jsonData))
+	fmt.Println("currentConfig.APIEndpoint", currentConfig.APIEndpoint)
+	req, err := http.NewRequestWithContext(ctx, "POST", currentConfig.APIEndpoint+"/api/generate", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
