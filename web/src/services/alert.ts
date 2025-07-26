@@ -67,21 +67,29 @@ export const analyzeAlert = async (id: number) => {
  * @param id 告警ID
  */
 export const asyncAnalyzeAlert = async (id: number) => {
-  const response = await request<AnalysisTask>(`/api/v1/alerts/${id}/async-analyze`, {
+  const response = await request<{ task_id: number; submit_time: string }>(`/api/v1/alerts/${id}/async/analyze`, {
     method: 'POST'
   });
   return response.data;
 };
 
 /**
- * 获取分析状态
- * @param id 告警ID
+ * 获取分析结果
+ * @param taskId 任务ID
  */
-export const getAnalysisStatus = async (id: number) => {
-  const response = await request<AlertAnalysis>(`/api/v1/alerts/${id}/analysis-status`, {
+export const getAnalysisResult = async (taskId: number) => {
+  const response = await request<{ status: string; result?: string; error?: string; message?: string }>(`/api/v1/alerts/async/result/${taskId}`, {
     method: 'GET'
   });
   return response.data;
+};
+
+/**
+ * 获取分析状态（兼容旧接口）
+ * @param id 告警ID
+ */
+export const getAnalysisStatus = async (id: number) => {
+  return getAnalysisResult(id);
 };
 
 /**

@@ -56,14 +56,18 @@ func CreateKnowledge(alert *model.Alert) (*model.Knowledge, error) {
 1. 加强监控和预警
 2. 制定应急预案
 3. 定期进行系统检查和维护
-`, alert.Title, alert.Source, alert.Severity, alert.Content, alert.Analysis)
+`, alert.Title, alert.Source, alert.Level, alert.Content, alert.Analysis)
 
 	// 创建知识库记录
 	knowledge := &model.Knowledge{
 		Title:     title,
 		Content:   content,
-		Source:    alert.Source,
-		AlertID:   alert.ID,
+		Category:  "告警处理",
+		Tags:      fmt.Sprintf("%s,%s", alert.Level, alert.Source),
+		Source:    "alert",
+		SourceID:  alert.ID,
+		Vector:    "", // 暂时设置为空字符串，避免JSON错误
+		Summary:   fmt.Sprintf("%s级别告警：%s", alert.Level, alert.Title),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}

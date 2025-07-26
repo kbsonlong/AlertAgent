@@ -2,8 +2,10 @@ package v1
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"alert_agent/internal/model"
 	"alert_agent/internal/pkg/database"
@@ -81,10 +83,11 @@ func GetRule(c *gin.Context) {
 	var rule model.Rule
 	result := database.DB.First(&rule, ruleID)
 	if result.Error != nil {
+		fmt.Println("result.Error", result.Error)
 		c.JSON(http.StatusNotFound, gin.H{
 			"code": 404,
 			"msg":  "Rule not found",
-			"data": nil,
+			"data": result.Error.Error(),
 		})
 		return
 	}
@@ -109,8 +112,9 @@ func UpdateRule(c *gin.Context) {
 		return
 	}
 
-	var rule model.Rule
-	if err := c.ShouldBindJSON(&rule); err != nil {
+	// 直接解析请求体到map，避免gorm.Model字段的干扰
+	var requestData map[string]interface{}
+	if err := c.ShouldBindJSON(&requestData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "Invalid request body",
@@ -119,7 +123,65 @@ func UpdateRule(c *gin.Context) {
 		return
 	}
 
-	result := database.DB.Model(&model.Rule{}).Where("id = ?", ruleID).Updates(rule)
+	// 构建更新数据，只包含请求中提供的字段
+	updateData := make(map[string]interface{})
+
+	// 检查并添加各个字段
+	if name, exists := requestData["name"]; exists {
+		updateData["name"] = name
+	}
+	if description, exists := requestData["description"]; exists {
+		updateData["description"] = description
+	}
+	if level, exists := requestData["level"]; exists {
+		updateData["level"] = level
+	}
+	if enabled, exists := requestData["enabled"]; exists {
+		updateData["enabled"] = enabled
+	}
+	if providerID, exists := requestData["provider_id"]; exists {
+		updateData["provider_id"] = providerID
+	}
+	if queryExpr, exists := requestData["query_expr"]; exists {
+		updateData["query_expr"] = queryExpr
+	}
+	if conditionExpr, exists := requestData["condition_expr"]; exists {
+		updateData["condition_expr"] = conditionExpr
+	}
+	if notifyType, exists := requestData["notify_type"]; exists {
+		updateData["notify_type"] = notifyType
+	}
+	if notifyGroup, exists := requestData["notify_group"]; exists {
+		updateData["notify_group"] = notifyGroup
+	}
+	if template, exists := requestData["template"]; exists {
+		updateData["template"] = template
+	}
+
+	// 使用原生SQL更新，避免GORM的自动字段处理
+	if len(updateData) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "No fields to update",
+			"data": nil,
+		})
+		return
+	}
+	fmt.Println("updateData", updateData)
+
+	// 构建SET子句
+	setClauses := make([]string, 0, len(updateData))
+	values := make([]interface{}, 0, len(updateData)+1)
+
+	for field, value := range updateData {
+		setClauses = append(setClauses, field+" = ?")
+		values = append(values, value)
+	}
+	values = append(values, ruleID) // 添加WHERE条件的参数
+
+	sqlQuery := "UPDATE rules SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
+	fmt.Println("sqlQuery", sqlQuery)
+	result := database.DB.Exec(sqlQuery, values...)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,

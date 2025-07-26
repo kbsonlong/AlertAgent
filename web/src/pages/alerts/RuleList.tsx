@@ -9,7 +9,7 @@ interface Rule {
   description: string;
   level: string;
   enabled: boolean;
-  condition: string;
+  condition_expr: string;
   CreatedAt: string;
   UpdatedAt: string;
 }
@@ -59,8 +59,8 @@ const RuleList: React.FC = () => {
     },
     {
       title: '条件',
-      dataIndex: 'condition',
-      key: 'condition',
+      dataIndex: 'condition_expr',
+      key: 'condition_expr',
       ellipsis: true,
     },
     {
@@ -260,7 +260,7 @@ const RuleList: React.FC = () => {
             </Select>
           </Form.Item>
           <Form.Item
-            name="condition"
+            name="condition_expr"
             label="条件"
             rules={[{ required: true, message: '请输入告警条件' }]}
           >

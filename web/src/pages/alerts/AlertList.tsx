@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Space, Modal, Tag, message } from 'antd';
-import { Alert, getAlerts, updateAlertStatus, asyncAnalyzeAlert, getAnalysisStatus, convertToKnowledge } from '../../services/alert';
+import { Alert, getAlerts, updateAlertStatus, analyzeAlert, asyncAnalyzeAlert, getAnalysisResult, convertToKnowledge } from '../../services/alert';
 import { formatDateTime } from '../../utils/datetime';
 import ReactMarkdown from 'react-markdown';
 import { DownOutlined, UpOutlined } from '@ant-design/icons';
@@ -55,24 +55,39 @@ const AlertList: React.FC = () => {
     setIsAnalyzing(true);
 
     try {
-      await asyncAnalyzeAlert(record.id);
+      const task = await asyncAnalyzeAlert(record.id);
+      message.success('分析任务已提交，正在处理中...');
       
-      // 轮询分析状态
-      const checkStatus = async () => {
-        const analysis = await getAnalysisStatus(record.id);
-        if (analysis.status === 'completed' && analysis.result) {
-          setCurrentAlert(prev => prev ? { ...prev, analysis: analysis.result } : null);
-          setIsAnalyzing(false);
-        } else if (analysis.status === 'failed') {
-          message.error('分析失败');
-          setIsAnalyzing(false);
-        } else {
-          setTimeout(checkStatus, 2000);
+      // 轮询分析结果
+      const checkResult = async () => {
+        try {
+          const result = await getAnalysisResult(task.task_id);
+          
+          if (result.status === 'completed') {
+            // 分析完成，停止轮询
+            setCurrentAlert(prev => prev ? { ...prev, analysis: result.result || result.message || '分析已完成' } : null);
+            setIsAnalyzing(false);
+            message.success('分析完成');
+          } else if (result.status === 'failed') {
+            message.error(result.error || '分析失败');
+            setIsAnalyzing(false);
+          } else if (result.status === 'processing') {
+            // 继续轮询
+            setTimeout(checkResult, 3000);
+          } else {
+            // 未知状态，继续轮询
+            setTimeout(checkResult, 3000);
+          }
+        } catch (error) {
+          console.error('获取分析结果失败:', error);
+          setTimeout(checkResult, 3000);
         }
       };
 
-      checkStatus();
-    } catch {
+      // 延迟开始轮询，给后端处理时间
+      setTimeout(checkResult, 2000);
+    } catch (error) {
+      console.error('启动分析失败:', error);
       message.error('启动分析失败');
       setIsAnalyzing(false);
     }
