@@ -4,14 +4,14 @@ import type { ColumnsType } from 'antd/es/table';
 import { AlertOutlined, PlusOutlined } from '@ant-design/icons';
 
 interface Rule {
-  id: number;
+  ID: number;
   name: string;
   description: string;
   level: string;
   enabled: boolean;
   condition: string;
-  created_at: string;
-  updated_at: string;
+  CreatedAt: string;
+  UpdatedAt: string;
 }
 
 const RuleList: React.FC = () => {
@@ -23,8 +23,8 @@ const RuleList: React.FC = () => {
   const columns: ColumnsType<Rule> = [
     {
       title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
+      dataIndex: 'ID',
+      key: 'ID',
       width: 80,
     },
     {
@@ -53,7 +53,7 @@ const RuleList: React.FC = () => {
       render: (_, record) => (
         <Switch
           checked={record.enabled}
-          onChange={(checked) => handleToggleStatus(record.id, checked)}
+          onChange={(checked) => handleToggleStatus(record.ID, checked)}
         />
       ),
     },
@@ -65,8 +65,8 @@ const RuleList: React.FC = () => {
     },
     {
       title: '创建时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
+      dataIndex: 'CreatedAt',
+      key: 'CreatedAt',
     },
     {
       title: '操作',
@@ -74,7 +74,7 @@ const RuleList: React.FC = () => {
       render: (_, record) => (
         <Space size="middle">
           <Button type="link" onClick={() => handleEdit(record)}>编辑</Button>
-          <Button type="link" danger onClick={() => handleDelete(record.id)}>删除</Button>
+          <Button type="link" danger onClick={() => handleDelete(record.ID)}>删除</Button>
         </Space>
       ),
     },
@@ -158,8 +158,8 @@ const RuleList: React.FC = () => {
 
   const handleSubmit = async (values: any) => {
     try {
-      const url = values.id ? `/api/v1/rules/${values.id}` : '/api/v1/rules';
-      const method = values.id ? 'PUT' : 'POST';
+      const url = values.ID ? `/api/v1/rules/${values.ID}` : '/api/v1/rules';
+      const method = values.ID ? 'PUT' : 'POST';
       const response = await fetch(url, {
         method,
         headers: {
@@ -172,15 +172,15 @@ const RuleList: React.FC = () => {
       const text = await response.text();
       const data = JSON.parse(text);
       if (data.code === 200) {
-        message.success(`${values.id ? '更新' : '创建'}成功`);
+        message.success(`${values.ID ? '更新' : '创建'}成功`);
         setIsModalVisible(false);
         form.resetFields();
         fetchRules();
       } else {
-        message.error(data.msg || `${values.id ? '更新' : '创建'}失败`);
+        message.error(data.msg || `${values.ID ? '更新' : '创建'}失败`);
       }
     } catch (error) {
-      message.error(`${values.id ? '更新' : '创建'}失败`);
+      message.error(`${values.ID ? '更新' : '创建'}失败`);
     }
   };
 
@@ -206,7 +206,7 @@ const RuleList: React.FC = () => {
         <Table
           columns={columns}
           dataSource={rules}
-          rowKey="id"
+          rowKey="ID"
           loading={loading}
           pagination={{
             showSizeChanger: true,
@@ -217,7 +217,7 @@ const RuleList: React.FC = () => {
       </Card>
 
       <Modal
-        title={form.getFieldValue('id') ? '编辑规则' : '新建规则'}
+        title={form.getFieldValue('ID') ? '编辑规则' : '新建规则'}
         open={isModalVisible}
         onOk={() => form.submit()}
         onCancel={() => {
@@ -231,7 +231,7 @@ const RuleList: React.FC = () => {
           layout="vertical"
           onFinish={handleSubmit}
         >
-          <Form.Item name="id" hidden>
+          <Form.Item name="ID" hidden>
             <Input />
           </Form.Item>
           <Form.Item
@@ -280,4 +280,4 @@ const RuleList: React.FC = () => {
   );
 };
 
-export default RuleList; 
+export default RuleList;

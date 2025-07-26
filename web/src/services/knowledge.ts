@@ -4,13 +4,10 @@ export interface Knowledge {
   id: number;
   title: string;
   content: string;
-  category: string;
-  tags?: string[];
   source: string;
-  sourceId: number;
-  summary: string;
-  createdAt: string;
-  updatedAt: string;
+  alert_id: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface KnowledgeListParams {
@@ -21,21 +18,21 @@ export interface KnowledgeListParams {
   pageSize?: number;
 }
 
-export async function getKnowledgeList(params: KnowledgeListParams): Promise<Knowledge[]> {
-  return request<Knowledge[]>('/api/v1/knowledge', {
+export async function getKnowledgeList(params: KnowledgeListParams) {
+  return request('/api/v1/knowledge', {
     method: 'GET',
     params,
   });
 }
 
-export async function getKnowledgeById(id: number): Promise<Knowledge> {
-  return request<Knowledge>(`/api/v1/knowledge/${id}`, {
+export async function getKnowledgeById(id: number) {
+  return request(`/api/v1/knowledge/${id}`, {
     method: 'GET',
   });
 }
 
-export async function findSimilarKnowledge(content: string, limit: number = 5): Promise<Knowledge[]> {
-  return request<Knowledge[]>('/api/v1/knowledge/similar', {
+export async function findSimilarKnowledge(content: string, limit: number = 5) {
+  return request('/api/v1/knowledge/similar', {
     method: 'POST',
     data: {
       content,

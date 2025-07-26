@@ -2,16 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Table, Card, Button, Space, message, Modal, Form, Input, Select } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { MailOutlined, PlusOutlined } from '@ant-design/icons';
-import { getTemplates, createTemplate, updateTemplate, deleteTemplate } from '../../services/notification';
+import { getTemplates, createTemplate, updateTemplate, deleteTemplate, NotificationTemplate as Template } from '../../services/notification';
 
-interface Template {
-  id: number;
-  name: string;
-  type: string;
-  content: string;
-  created_at: string;
-  updated_at: string;
-}
+// Template interface is now imported from notification service
 
 const TemplateList: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -22,8 +15,8 @@ const TemplateList: React.FC = () => {
   const columns: ColumnsType<Template> = [
     {
       title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
+      dataIndex: 'ID',
+      key: 'ID',
       width: 80,
     },
     {
@@ -44,8 +37,8 @@ const TemplateList: React.FC = () => {
     },
     {
       title: '创建时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
+      dataIndex: 'CreatedAt',
+      key: 'CreatedAt',
     },
     {
       title: '操作',
@@ -53,7 +46,7 @@ const TemplateList: React.FC = () => {
       render: (_, record) => (
         <Space size="middle">
           <Button type="link" onClick={() => handleEdit(record)}>编辑</Button>
-          <Button type="link" danger onClick={() => handleDelete(record.id)}>删除</Button>
+          <Button type="link" danger onClick={() => handleDelete(record.ID)}>删除</Button>
         </Space>
       ),
     },
@@ -66,10 +59,10 @@ const TemplateList: React.FC = () => {
       if (data.code === 200) {
         setTemplates(data.data);
       } else {
-        message.error(data.msg || '获取模板列表失败');
+        message.error(data.msg || '获取通知模板列表失败');
       }
     } catch (error) {
-      message.error('获取模板列表失败');
+      message.error('获取通知模板列表失败');
     } finally {
       setLoading(false);
     }
@@ -84,7 +77,7 @@ const TemplateList: React.FC = () => {
     try {
       const data = await deleteTemplate(id);
       if (data.code === 200) {
-        message.success('模板已删除');
+        message.success('通知模板已删除');
         fetchTemplates();
       } else {
         message.error(data.msg || '删除失败');
@@ -97,22 +90,22 @@ const TemplateList: React.FC = () => {
   const handleSubmit = async (values: any) => {
     try {
       let data;
-      if (values.id) {
-        data = await updateTemplate(values.id, values);
+      if (values.ID) {
+        data = await updateTemplate(values.ID, values);
       } else {
         data = await createTemplate(values);
       }
       
       if (data.code === 200) {
-        message.success(`${values.id ? '更新' : '创建'}成功`);
+        message.success(`${values.ID ? '更新' : '创建'}成功`);
         setIsModalVisible(false);
         form.resetFields();
         fetchTemplates();
       } else {
-        message.error(data.msg || `${values.id ? '更新' : '创建'}失败`);
+        message.error(data.msg || `${values.ID ? '更新' : '创建'}失败`);
       }
     } catch (error) {
-      message.error(`${values.id ? '更新' : '创建'}失败`);
+      message.error(`${values.ID ? '更新' : '创建'}失败`);
     }
   };
 
@@ -138,7 +131,7 @@ const TemplateList: React.FC = () => {
         <Table
           columns={columns}
           dataSource={templates}
-          rowKey="id"
+          rowKey="ID"
           loading={loading}
           pagination={{
             showSizeChanger: true,
@@ -149,7 +142,7 @@ const TemplateList: React.FC = () => {
       </Card>
 
       <Modal
-        title={form.getFieldValue('id') ? '编辑模板' : '新建模板'}
+        title={form.getFieldValue('ID') ? '编辑模板' : '新建模板'}
         open={isModalVisible}
         onOk={() => form.submit()}
         onCancel={() => {
@@ -163,7 +156,7 @@ const TemplateList: React.FC = () => {
           layout="vertical"
           onFinish={handleSubmit}
         >
-          <Form.Item name="id" hidden>
+          <Form.Item name="ID" hidden>
             <Input />
           </Form.Item>
           <Form.Item

@@ -18,7 +18,7 @@ func Init() error {
 	var err error
 	cfg := config.GlobalConfig.Database
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local&collation=utf8mb4_unicode_ci",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local&collation=utf8mb4_unicode_ci&interpolateParams=true",
 		cfg.Username,
 		cfg.Password,
 		cfg.Host,
@@ -39,6 +39,22 @@ func Init() error {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect database: %w", err)
+	}
+
+	// 设置会话字符集
+	if err := DB.Exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci").Error; err != nil {
+		return fmt.Errorf("failed to set character set: %w", err)
+	}
+	
+	// 强制设置客户端字符集
+	if err := DB.Exec("SET character_set_client = utf8mb4").Error; err != nil {
+		return fmt.Errorf("failed to set character_set_client: %w", err)
+	}
+	if err := DB.Exec("SET character_set_connection = utf8mb4").Error; err != nil {
+		return fmt.Errorf("failed to set character_set_connection: %w", err)
+	}
+	if err := DB.Exec("SET character_set_results = utf8mb4").Error; err != nil {
+		return fmt.Errorf("failed to set character_set_results: %w", err)
 	}
 
 	sqlDB, err := DB.DB()

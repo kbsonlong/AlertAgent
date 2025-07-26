@@ -2,20 +2,33 @@ import { request } from '../utils/requests';
 
 // 类型定义
 export interface NotificationGroup {
-  id?: number;
+  ID?: number;
   name: string;
   description?: string;
-  members: string[];
-  channels: string[];
+  contacts: Array<{
+    type: string;
+    value: string;
+  }>;
+  CreatedAt?: string;
+  UpdatedAt?: string;
 }
 
 export interface NotificationTemplate {
-  id?: number;
+  ID?: number;
   name: string;
   description?: string;
   content: string;
   type: 'email' | 'sms' | 'webhook';
   variables?: string[];
+  CreatedAt?: string;
+  UpdatedAt?: string;
+}
+
+// API响应类型
+export interface ApiResponse<T> {
+  code: number;
+  msg?: string;
+  data: T;
 }
 
 // 通知相关API服务
@@ -24,7 +37,7 @@ export interface NotificationTemplate {
  * 获取通知组列表
  */
 export const getGroups = async () => {
-  return request<NotificationGroup[]>('/api/v1/groups', {
+  return request<ApiResponse<NotificationGroup[]>>('/api/v1/groups', {
     method: 'GET'
   });
 };
@@ -34,7 +47,7 @@ export const getGroups = async () => {
  * @param data 通知组数据
  */
 export const createGroup = async (data: NotificationGroup) => {
-  return request<NotificationGroup>('/api/v1/groups', {
+  return request<ApiResponse<NotificationGroup>>('/api/v1/groups', {
     method: 'POST',
     data
   });
@@ -46,7 +59,7 @@ export const createGroup = async (data: NotificationGroup) => {
  * @param data 通知组数据
  */
 export const updateGroup = async (id: number, data: NotificationGroup) => {
-  return request<NotificationGroup>(`/api/v1/groups/${id}`, {
+  return request<ApiResponse<NotificationGroup>>(`/api/v1/groups/${id}`, {
     method: 'PUT',
     data
   });
@@ -57,7 +70,7 @@ export const updateGroup = async (id: number, data: NotificationGroup) => {
  * @param id 通知组ID
  */
 export const deleteGroup = async (id: number) => {
-  return request<void>(`/api/v1/groups/${id}`, {
+  return request<ApiResponse<void>>(`/api/v1/groups/${id}`, {
     method: 'DELETE'
   });
 };
@@ -66,7 +79,7 @@ export const deleteGroup = async (id: number) => {
  * 获取通知模板列表
  */
 export const getTemplates = async () => {
-  return request<NotificationTemplate[]>('/api/v1/templates', {
+  return request<ApiResponse<NotificationTemplate[]>>('/api/v1/templates', {
     method: 'GET'
   });
 };
@@ -76,7 +89,7 @@ export const getTemplates = async () => {
  * @param data 模板数据
  */
 export const createTemplate = async (data: NotificationTemplate) => {
-  return request<NotificationTemplate>('/api/v1/templates', {
+  return request<ApiResponse<NotificationTemplate>>('/api/v1/templates', {
     method: 'POST',
     data
   });
@@ -88,7 +101,7 @@ export const createTemplate = async (data: NotificationTemplate) => {
  * @param data 模板数据
  */
 export const updateTemplate = async (id: number, data: NotificationTemplate) => {
-  return request<NotificationTemplate>(`/api/v1/templates/${id}`, {
+  return request<ApiResponse<NotificationTemplate>>(`/api/v1/templates/${id}`, {
     method: 'PUT',
     data
   });
@@ -99,7 +112,7 @@ export const updateTemplate = async (id: number, data: NotificationTemplate) => 
  * @param id 模板ID
  */
 export const deleteTemplate = async (id: number) => {
-  return request<void>(`/api/v1/templates/${id}`, {
+  return request<ApiResponse<void>>(`/api/v1/templates/${id}`, {
     method: 'DELETE'
   });
 };

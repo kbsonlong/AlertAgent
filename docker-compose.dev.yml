@@ -40,55 +40,55 @@ services:
       timeout: 3s
       retries: 5
 
-  # Ollama AI 服务
-  ollama:
-    image: ollama/ollama:latest
-    container_name: alertagent-ollama
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - alertagent-network
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+  # # Ollama AI 服务
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: alertagent-ollama
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   networks:
+  #     - alertagent-network
+  #   environment:
+  #     - OLLAMA_HOST=0.0.0.0
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 30s
 
-  # 可选：phpMyAdmin 数据库管理工具
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin:latest
-    container_name: alertagent-phpmyadmin
-    restart: unless-stopped
-    environment:
-      PMA_HOST: mysql
-      PMA_PORT: 3306
-      PMA_USER: root
-      PMA_PASSWORD: along123
-    ports:
-      - "8081:80"
-    depends_on:
-      - mysql
-    networks:
-      - alertagent-network
+  # # 可选：phpMyAdmin 数据库管理工具
+  # phpmyadmin:
+  #   image: phpmyadmin/phpmyadmin:latest
+  #   container_name: alertagent-phpmyadmin
+  #   restart: unless-stopped
+  #   environment:
+  #     PMA_HOST: mysql
+  #     PMA_PORT: 3306
+  #     PMA_USER: root
+  #     PMA_PASSWORD: along123
+  #   ports:
+  #     - "8081:80"
+  #   depends_on:
+  #     - mysql
+  #   networks:
+  #     - alertagent-network
 
-  # 可选：Redis Commander Redis管理工具
-  redis-commander:
-    image: rediscommander/redis-commander:latest
-    container_name: alertagent-redis-commander
-    restart: unless-stopped
-    environment:
-      REDIS_HOSTS: local:redis:6379
-    ports:
-      - "8082:8081"
-    depends_on:
-      - redis
-    networks:
-      - alertagent-network
+  # # 可选：Redis Commander Redis管理工具
+  # redis-commander:
+  #   image: rediscommander/redis-commander:latest
+  #   container_name: alertagent-redis-commander
+  #   restart: unless-stopped
+  #   environment:
+  #     REDIS_HOSTS: local:redis:6379
+  #   ports:
+  #     - "8082:8081"
+  #   depends_on:
+  #     - redis
+  #   networks:
+  #     - alertagent-network
 
 volumes:
   mysql_data:

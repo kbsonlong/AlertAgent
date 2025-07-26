@@ -28,6 +28,7 @@ type Alert struct {
 	CreatedAt   time.Time      `json:"-"`
 	UpdatedAt   time.Time      `json:"-"`
 	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+	Name        string         `json:"name" gorm:"size:255;not null"`
 	Title       string         `json:"title" gorm:"size:255;not null"`
 	Level       string         `json:"level" gorm:"type:varchar(50);not null"`
 	Status      string         `json:"status" gorm:"type:varchar(50);not null;default:'new'"`
@@ -48,6 +49,9 @@ type Alert struct {
 
 // Validate 验证告警数据
 func (a *Alert) Validate() error {
+	if a.Name == "" {
+		return errors.New("name is required")
+	}
 	if a.Title == "" {
 		return errors.New("title is required")
 	}
@@ -89,6 +93,7 @@ type AlertResponse struct {
 	ID          uint   `json:"id"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
+	Name        string `json:"name"`
 	Title       string `json:"title"`
 	Level       string `json:"level"`
 	Status      string `json:"status"`
@@ -113,6 +118,7 @@ func (a *Alert) ToResponse() *AlertResponse {
 		ID:          a.ID,
 		CreatedAt:   a.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:   a.UpdatedAt.Format(time.RFC3339),
+		Name:        a.Name,
 		Title:       a.Title,
 		Level:       a.Level,
 		Status:      a.Status,

@@ -18,7 +18,8 @@ const KnowledgeList: React.FC = () => {
   const fetchList = async (params: KnowledgeListParams) => {
     try {
       setLoading(true);
-      const data = await getKnowledgeList(params);
+      const response = await getKnowledgeList(params);
+      const data = response.data || [];
       setList(data);
       setTotal(data.length);
     } catch (error) {
@@ -46,42 +47,32 @@ const KnowledgeList: React.FC = () => {
       title: '标题',
       dataIndex: 'title',
       key: 'title',
-      width: '30%',
+      width: '40%',
       render: (text: string, record: Knowledge) => (
         <a onClick={() => navigate(`/knowledge/${record.id}`)}>{text}</a>
-      ),
-    },
-    {
-      title: '分类',
-      dataIndex: 'category',
-      key: 'category',
-      render: (category: string) => (
-        <Tag color="blue" onClick={() => handleCategoryFilter(category)}>
-          {category}
-        </Tag>
-      ),
-    },
-    {
-      title: '标签',
-      dataIndex: 'tags',
-      key: 'tags',
-      render: (tags: string[] | undefined) => (
-        <Space>
-          {tags?.map(tag => (
-            <Tag key={tag}>{tag}</Tag>
-          ))}
-        </Space>
       ),
     },
     {
       title: '来源',
       dataIndex: 'source',
       key: 'source',
+      width: '20%',
+    },
+    {
+      title: '关联告警ID',
+      dataIndex: 'alert_id',
+      key: 'alert_id',
+      width: '20%',
     },
     {
       title: '创建时间',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: '20%',
+      render: (text: string) => {
+        if (!text) return '-';
+        return new Date(text).toLocaleString('zh-CN');
+      },
     },
   ];
 

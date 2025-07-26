@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -22,11 +23,8 @@ func ListAlerts(c *gin.Context) {
 	var alerts []model.Alert
 	result := database.DB.Find(&alerts)
 	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 500,
-			"msg":  "获取告警列表失败",
-			"data": nil,
-		})
+		c.Header("Content-Type", "application/json; charset=utf-8")
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(`{"code":500,"msg":"获取告警列表失败","data":null}`))
 		return
 	}
 
@@ -35,11 +33,19 @@ func ListAlerts(c *gin.Context) {
 		resp = append(resp, alerts[i].ToResponse())
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	data, err := json.Marshal(gin.H{
 		"code": 200,
 		"msg":  "success",
 		"data": resp,
 	})
+	if err != nil {
+		c.Header("Content-Type", "application/json; charset=utf-8")
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(`{"code":500,"msg":"序列化数据失败","data":null}`))
+		return
+	}
+
+	c.Header("Content-Type", "application/json; charset=utf-8")
+	c.Data(http.StatusOK, "application/json; charset=utf-8", data)
 }
 
 // CreateAlert 创建告警

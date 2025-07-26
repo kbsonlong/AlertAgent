@@ -2,21 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Table, Card, Button, Space, message, Modal, Form, Input, Select, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { TeamOutlined, PlusOutlined, MailOutlined, PhoneOutlined } from '@ant-design/icons';
-import { getGroups, createGroup, updateGroup, deleteGroup } from '../../services/notification';
+import { getGroups, createGroup, updateGroup, deleteGroup, NotificationGroup as Group } from '../../services/notification';
 
 interface Contact {
   type: 'email' | 'phone';
   value: string;
 }
 
-interface Group {
-  id: number;
-  name: string;
-  description: string;
-  contacts: Contact[];
-  created_at: string;
-  updated_at: string;
-}
+// Group interface is now imported from notification service
 
 const { Option } = Select;
 
@@ -29,8 +22,8 @@ const GroupList: React.FC = () => {
   const columns: ColumnsType<Group> = [
     {
       title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
+      dataIndex: 'ID',
+      key: 'ID',
       width: 80,
     },
     {
@@ -63,8 +56,8 @@ const GroupList: React.FC = () => {
     },
     {
       title: '创建时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
+      dataIndex: 'CreatedAt',
+      key: 'CreatedAt',
     },
     {
       title: '操作',
@@ -72,7 +65,7 @@ const GroupList: React.FC = () => {
       render: (_, record) => (
         <Space size="middle">
           <Button type="link" onClick={() => handleEdit(record)}>编辑</Button>
-          <Button type="link" danger onClick={() => handleDelete(record.id)}>删除</Button>
+          <Button type="link" danger onClick={() => handleDelete(record.ID)}>删除</Button>
         </Space>
       ),
     },
@@ -155,22 +148,22 @@ const GroupList: React.FC = () => {
       };
 
       let data;
-      if (values.id) {
-        data = await updateGroup(values.id, submitData);
+      if (values.ID) {
+        data = await updateGroup(values.ID, submitData);
       } else {
         data = await createGroup(submitData);
       }
       
       if (data.code === 200) {
-        message.success(`${values.id ? '更新' : '创建'}成功`);
+        message.success(`${values.ID ? '更新' : '创建'}成功`);
         setIsModalVisible(false);
         form.resetFields();
         fetchGroups();
       } else {
-        message.error(data.msg || `${values.id ? '更新' : '创建'}失败`);
+        message.error(data.msg || `${values.ID ? '更新' : '创建'}失败`);
       }
     } catch (error) {
-      message.error(`${values.id ? '更新' : '创建'}失败`);
+      message.error(`${values.ID ? '更新' : '创建'}失败`);
     }
   };
 
@@ -196,7 +189,7 @@ const GroupList: React.FC = () => {
         <Table
           columns={columns}
           dataSource={groups}
-          rowKey="id"
+          rowKey="ID"
           loading={loading}
           pagination={{
             showSizeChanger: true,
@@ -207,7 +200,7 @@ const GroupList: React.FC = () => {
       </Card>
 
       <Modal
-        title={form.getFieldValue('id') ? '编辑通知组' : '新建通知组'}
+        title={form.getFieldValue('ID') ? '编辑通知组' : '新建通知组'}
         open={isModalVisible}
         onOk={() => form.submit()}
         onCancel={() => {
@@ -221,7 +214,7 @@ const GroupList: React.FC = () => {
           layout="vertical"
           onFinish={handleSubmit}
         >
-          <Form.Item name="id" hidden>
+          <Form.Item name="ID" hidden>
             <Input />
           </Form.Item>
           <Form.Item

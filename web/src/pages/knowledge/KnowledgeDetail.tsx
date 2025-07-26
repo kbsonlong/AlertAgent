@@ -16,7 +16,7 @@ const KnowledgeDetail: React.FC = () => {
     try {
       setLoading(true);
       const res = await getKnowledgeById(Number(id));
-      const data = res.data
+      const data = res.data;
       setDetail(data);
     } catch (error) {
       console.error(error);
@@ -48,34 +48,18 @@ const KnowledgeDetail: React.FC = () => {
         <Title level={2}>{detail.title}</Title>
         <Space wrap>
           <Space>
-            <Text type="secondary">分类：</Text>
-            <Tag color="blue">{detail.category}</Tag>
-          </Space>
-          {detail.tags && detail.tags.length > 0 && (
-            <Space>
-              <Text type="secondary">标签：</Text>
-              {detail.tags.map(tag => (
-                <Tag key={tag}>{tag}</Tag>
-              ))}
-            </Space>
-          )}
-          <Space>
             <Text type="secondary">来源：</Text>
             <Text>{detail.source}</Text>
           </Space>
           <Space>
+            <Text type="secondary">关联告警ID：</Text>
+            <Text>{detail.alert_id}</Text>
+          </Space>
+          <Space>
             <Text type="secondary">创建时间：</Text>
-            <Text>{detail.createdAt}</Text>
+            <Text>{new Date(detail.created_at).toLocaleString('zh-CN')}</Text>
           </Space>
         </Space>
-        {detail.summary && (
-          <div>
-            <Title level={4}>摘要</Title>
-            <div className="markdown-content">
-              <ReactMarkdown>{detail.summary}</ReactMarkdown>
-            </div>
-          </div>
-        )}
         <div>
           <Title level={4}>内容</Title>
           <div className="markdown-content">
