@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Space, Modal, Tag, message } from 'antd';
-import { Alert, getAlerts, updateAlertStatus, analyzeAlert, asyncAnalyzeAlert, getAnalysisResult, convertToKnowledge } from '../../services/alert';
+import { Table, Button, Space, Modal, Tag, message, Descriptions } from 'antd';
+import { Alert, getAlerts, getAlert, updateAlertStatus, analyzeAlert, asyncAnalyzeAlert, getAnalysisResult, convertToKnowledge } from '../../services/alert';
 import { getSystemConfig, SystemConfig } from '../../services/config';
 import { formatDateTime } from '../../utils/datetime';
 import ReactMarkdown from 'react-markdown';
-import { DownOutlined, UpOutlined } from '@ant-design/icons';
+import { DownOutlined, UpOutlined, EyeOutlined } from '@ant-design/icons';
+import AlertDetailModal from '../../components/AlertDetailModal';
 
 const AlertList: React.FC = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(false);
   const [analysisModalVisible, setAnalysisModalVisible] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [currentAlert, setCurrentAlert] = useState<Alert | null>(null);
+  const [selectedAlertId, setSelectedAlertId] = useState<number | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showThinkContent, setShowThinkContent] = useState(false);
   const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
@@ -107,6 +110,16 @@ const AlertList: React.FC = () => {
     }
   };
 
+  const handleViewDetail = (alertId: number) => {
+    setSelectedAlertId(alertId);
+    setDetailModalVisible(true);
+  };
+
+  const handleCloseDetailModal = () => {
+    setDetailModalVisible(false);
+    setSelectedAlertId(null);
+  };
+
   const handleConvertToKnowledge = async (record: Alert) => {
     try {
       await convertToKnowledge(record.id);
@@ -196,6 +209,13 @@ const AlertList: React.FC = () => {
       key: 'action',
       render: (_: unknown, record: Alert) => (
         <Space size="middle">
+          <Button 
+            type="link" 
+            icon={<EyeOutlined />}
+            onClick={() => handleViewDetail(record.id)}
+          >
+            详情
+          </Button>
           {record.status === 'new' && (
             <Button type="link" onClick={() => handleAcknowledge(record)}>
               确认
@@ -283,6 +303,12 @@ const AlertList: React.FC = () => {
           <div>{isAnalyzing ? '正在分析中...' : '暂无分析结果'}</div>
         )}
       </Modal>
+      
+      <AlertDetailModal
+         visible={detailModalVisible}
+         alertId={selectedAlertId}
+         onClose={handleCloseDetailModal}
+       />
     </div>
   );
 };

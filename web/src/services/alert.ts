@@ -40,6 +40,17 @@ export const getAlerts = async () => {
 };
 
 /**
+ * 获取单个告警详情
+ * @param id 告警ID
+ */
+export const getAlert = async (id: number) => {
+  const response = await request<Alert>(`/api/v1/alerts/${id}`, {
+    method: 'GET'
+  });
+  return response.data;
+};
+
+/**
  * 更新告警状态
  * @param id 告警ID
  * @param status 状态：acknowledged(已确认) 或 resolved(已解决)

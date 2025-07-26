@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Input, Tag, Space, Table, message } from 'antd';
+import { Card, Input, Tag, Space, Table, message, Button } from 'antd';
 import { Knowledge, KnowledgeListParams, getKnowledgeList } from '../../services/knowledge';
 import { useNavigate } from 'react-router-dom';
+import AlertDetailModal from '../../components/AlertDetailModal';
 
 const { Search } = Input;
 
@@ -14,6 +15,8 @@ const KnowledgeList: React.FC = () => {
     page: 1,
     pageSize: 10,
   });
+  const [alertDetailVisible, setAlertDetailVisible] = useState(false);
+  const [selectedAlertId, setSelectedAlertId] = useState<number | null>(null);
 
   const fetchList = async (params: KnowledgeListParams) => {
     try {
@@ -42,6 +45,16 @@ const KnowledgeList: React.FC = () => {
     setSearchParams(prev => ({ ...prev, category, page: 1 }));
   };
 
+  const handleViewAlert = (alertId: number) => {
+    setSelectedAlertId(alertId);
+    setAlertDetailVisible(true);
+  };
+
+  const handleCloseAlertDetail = () => {
+    setAlertDetailVisible(false);
+    setSelectedAlertId(null);
+  };
+
   const columns = [
     {
       title: '标题',
@@ -59,10 +72,22 @@ const KnowledgeList: React.FC = () => {
       width: '20%',
     },
     {
-      title: '关联告警ID',
-      dataIndex: 'alert_id',
-      key: 'alert_id',
+      title: '关联告警',
+      dataIndex: 'source_id',
+      key: 'source_id',
       width: '20%',
+      render: (sourceId: number, record: Knowledge) => {
+        if (!sourceId || record.source !== 'alert') return '-';
+        return (
+          <Button 
+            type="link" 
+            size="small"
+            onClick={() => handleViewAlert(sourceId)}
+          >
+            告警#{sourceId}
+          </Button>
+        );
+      },
     },
     {
       title: '创建时间',
@@ -100,6 +125,12 @@ const KnowledgeList: React.FC = () => {
           }}
         />
       </Space>
+      
+      <AlertDetailModal
+        visible={alertDetailVisible}
+        alertId={selectedAlertId}
+        onClose={handleCloseAlertDetail}
+      />
     </Card>
   );
 };
