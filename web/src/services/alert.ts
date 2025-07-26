@@ -8,8 +8,8 @@ export interface Alert {
   status: 'new' | 'acknowledged' | 'resolved';
   severity: 'critical' | 'high' | 'medium' | 'low';
   source: string;
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
   analysis?: string;
 }
 

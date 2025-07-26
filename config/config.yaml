@@ -29,18 +29,19 @@ redis:
   max_retries: 3
   dial_timeout: 5  # 连接超时时间（秒）
 
-# OpenAI配置
-openai:
-  endpoint: "http://10.98.65.131:11434"  # Ollama本地服务地址
+# Ollama配置
+ollama:
+  enabled: false  # 是否启用告警分析功能
+  api_endpoint: "http://10.98.65.131:11434"  # Ollama本地服务地址
   model: "deepseek-r1:32b"  # 或其他已安装的模型
   timeout: 30  # 请求超时时间（秒）
   max_retries: 3  # 最大重试次数
 
 # 日志配置
 log:
-  level: "debug"
+  level: "info"
   filename: "logs/alert_agent.log"
   max_size: 100    # MB
   max_age: 7       # 天
   max_backups: 10  # 最大备份数
-  compress: true   # 是否压缩 
+  compress: true   # 是否压缩

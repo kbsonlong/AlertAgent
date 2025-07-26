@@ -53,7 +53,7 @@ const KnowledgeDetail: React.FC = () => {
           </Space>
           <Space>
             <Text type="secondary">关联告警ID：</Text>
-            <Text>{detail.alert_id}</Text>
+            <Text>{detail.source_id}</Text>
           </Space>
           <Space>
             <Text type="secondary">创建时间：</Text>
@@ -61,7 +61,6 @@ const KnowledgeDetail: React.FC = () => {
           </Space>
         </Space>
         <div>
-          <Title level={4}>内容</Title>
           <div className="markdown-content">
             <ReactMarkdown>{detail.content}</ReactMarkdown>
           </div>

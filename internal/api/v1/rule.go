@@ -2,15 +2,16 @@ package v1
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"alert_agent/internal/model"
 	"alert_agent/internal/pkg/database"
+	"alert_agent/internal/pkg/logger"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // ListRules 获取告警规则列表
@@ -83,7 +84,7 @@ func GetRule(c *gin.Context) {
 	var rule model.Rule
 	result := database.DB.First(&rule, ruleID)
 	if result.Error != nil {
-		fmt.Println("result.Error", result.Error)
+		logger.L.Error("Failed to get rule", zap.Error(result.Error))
 		c.JSON(http.StatusNotFound, gin.H{
 			"code": 404,
 			"msg":  "Rule not found",
@@ -167,7 +168,7 @@ func UpdateRule(c *gin.Context) {
 		})
 		return
 	}
-	fmt.Println("updateData", updateData)
+	logger.L.Debug("updateData", zap.Any("updateData", updateData))
 
 	// 构建SET子句
 	setClauses := make([]string, 0, len(updateData))
@@ -180,7 +181,7 @@ func UpdateRule(c *gin.Context) {
 	values = append(values, ruleID) // 添加WHERE条件的参数
 
 	sqlQuery := "UPDATE rules SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
-	fmt.Println("sqlQuery", sqlQuery)
+	logger.L.Debug("sqlQuery", zap.String("sqlQuery", sqlQuery))
 	result := database.DB.Exec(sqlQuery, values...)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{

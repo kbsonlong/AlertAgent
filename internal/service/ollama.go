@@ -26,13 +26,9 @@ type OllamaService struct {
 
 // NewOllamaService 创建Ollama服务
 func NewOllamaService() *OllamaService {
-	// 创建默认配置
-	config := &config.OllamaConfig{
-		APIEndpoint: "http://localhost:11434", // 默认地址
-		Model:       "llama2",                 // 默认模型
-		Timeout:     300,                      // 默认30秒超时
-		MaxRetries:  3,                        // 默认最大重试3次
-	}
+	// 使用全局配置
+	cfg := config.GetConfig()
+	ollamaConfig := &cfg.Ollama
 
 	// 获取全局logger实例
 	logger := logger.L
@@ -40,26 +36,10 @@ func NewOllamaService() *OllamaService {
 		logger = zap.L()
 	}
 
-	// 尝试从数据库获取配置
-	if database.DB != nil {
-		var settings model.Settings
-		if err := database.DB.Order("updated_at desc").First(&settings).Error; err == nil {
-			config.APIEndpoint = settings.OllamaEndpoint
-			config.Model = settings.OllamaModel
-			logger.Info("loaded settings from database",
-				zap.String("endpoint", config.APIEndpoint),
-				zap.String("model", config.Model))
-		} else {
-			logger.Warn("failed to get settings from database, using default config", zap.Error(err))
-		}
-	} else {
-		logger.Warn("database connection not initialized, using default config")
-	}
-
 	return &OllamaService{
-		config: config,
+		config: ollamaConfig,
 		client: &http.Client{
-			Timeout: time.Duration(config.Timeout) * time.Second,
+			Timeout: time.Duration(ollamaConfig.Timeout) * time.Second,
 		},
 		logger: logger,
 	}
@@ -67,6 +47,11 @@ func NewOllamaService() *OllamaService {
 
 // AnalyzeAlert 分析告警
 func (s *OllamaService) AnalyzeAlert(ctx context.Context, alert *model.Alert) (string, error) {
+	// 检查是否启用Ollama功能
+	if !s.config.Enabled {
+		return "", fmt.Errorf("ollama analysis is disabled")
+	}
+
 	// 构建提示词
 	prompt := fmt.Sprintf(`请分析以下告警信息，并提供详细的分析和建议：
 
@@ -94,6 +79,11 @@ func (s *OllamaService) AnalyzeAlert(ctx context.Context, alert *model.Alert) (s
 
 // FindSimilarAlerts 查找相似告警
 func (s *OllamaService) FindSimilarAlerts(ctx context.Context, alert *model.Alert) ([]*model.Alert, error) {
+	// 检查是否启用Ollama功能
+	if !s.config.Enabled {
+		return nil, fmt.Errorf("ollama analysis is disabled")
+	}
+
 	// 构建提示词
 	prompt := fmt.Sprintf(`请根据以下告警信息，查找相似的告警：
 

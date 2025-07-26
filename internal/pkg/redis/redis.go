@@ -16,7 +16,7 @@ var Client *redis.Client
 
 // Init 初始化Redis连接
 func Init() error {
-	cfg := config.GlobalConfig.Redis
+	cfg := config.GetConfig().Redis
 
 	// 创建Redis客户端
 	Client = redis.NewClient(&redis.Options{

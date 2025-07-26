@@ -70,11 +70,15 @@ func RegisterRoutes(r *gin.Engine) {
 			}
 
 			// 系统设置
-			settings := apiV1.Group("/settings")
-			{
-				settings.GET("", v1.GetSettings)
-				settings.PUT("", v1.UpdateSettings)
-			}
+		settings := apiV1.Group("/settings")
+		{
+			settings.GET("", v1.GetSettings)
+			settings.PUT("", v1.UpdateSettings)
+		}
+
+		// 系统配置
+		apiV1.GET("/config", v1.GetSystemConfig)
+		apiV1.GET("/config/current", v1.GetCurrentConfig)
 
 			// 异步分析告警
 			asyncAlertHandler.RegisterRoutes(alerts)

@@ -5,7 +5,7 @@ export interface Knowledge {
   title: string;
   content: string;
   source: string;
-  alert_id: number;
+  source_id: number;
   created_at: string;
   updated_at: string;
 }

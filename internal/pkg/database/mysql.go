@@ -16,7 +16,7 @@ var DB *gorm.DB
 
 func Init() error {
 	var err error
-	cfg := config.GlobalConfig.Database
+	cfg := config.GetConfig().Database
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local&collation=utf8mb4_unicode_ci&interpolateParams=true",
 		cfg.Username,
@@ -26,16 +26,9 @@ func Init() error {
 		cfg.DBName,
 		cfg.Charset,
 	)
-	// fmt.Println(dsn)
-	fmt.Println(cfg.Charset)
-	fmt.Println(cfg.Host)
-	fmt.Println(cfg.Port)
-	fmt.Println(cfg.DBName)
-	fmt.Println(cfg.Username)
-	fmt.Println(cfg.Password)
 
 	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logger.Error),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect database: %w", err)
@@ -45,7 +38,7 @@ func Init() error {
 	if err := DB.Exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci").Error; err != nil {
 		return fmt.Errorf("failed to set character set: %w", err)
 	}
-	
+
 	// 强制设置客户端字符集
 	if err := DB.Exec("SET character_set_client = utf8mb4").Error; err != nil {
 		return fmt.Errorf("failed to set character_set_client: %w", err)

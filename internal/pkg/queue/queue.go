@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	"alert_agent/internal/pkg/logger"
 	"alert_agent/internal/pkg/types"
 
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 // Queue 队列接口
@@ -63,7 +65,10 @@ func (q *RedisQueue) PushBatch(ctx context.Context, tasks []*types.AlertTask) er
 		if err != nil {
 			return fmt.Errorf("failed to marshal task: %w", err)
 		}
-		fmt.Println("data", string(q.key))
+		logger.L.Debug("Pushing task to queue",
+			zap.String("key", q.key),
+			zap.String("data", string(data)),
+		)
 		pipe.RPush(ctx, q.key, string(data))
 	}
 	if _, err := pipe.Exec(ctx); err != nil {

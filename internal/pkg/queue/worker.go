@@ -54,7 +54,6 @@ func (w *Worker) Start(ctx context.Context) error {
 				return
 			default:
 				task, err := w.queue.Pop(ctx)
-				// fmt.Println("task", task)
 				if err != nil {
 					logger.L.Error("Failed to pop task from queue",
 						zap.Error(err),

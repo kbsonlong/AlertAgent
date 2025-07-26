@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Space, Modal, Tag, message } from 'antd';
 import { Alert, getAlerts, updateAlertStatus, analyzeAlert, asyncAnalyzeAlert, getAnalysisResult, convertToKnowledge } from '../../services/alert';
+import { getSystemConfig, SystemConfig } from '../../services/config';
 import { formatDateTime } from '../../utils/datetime';
 import ReactMarkdown from 'react-markdown';
 import { DownOutlined, UpOutlined } from '@ant-design/icons';
@@ -12,6 +13,7 @@ const AlertList: React.FC = () => {
   const [currentAlert, setCurrentAlert] = useState<Alert | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showThinkContent, setShowThinkContent] = useState(false);
+  const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
 
   const fetchAlerts = async () => {
     setLoading(true);
@@ -25,8 +27,20 @@ const AlertList: React.FC = () => {
     }
   };
 
+  const fetchSystemConfig = async () => {
+    try {
+      const config = await getSystemConfig();
+      setSystemConfig(config);
+
+    } catch (error) {
+      console.error('获取系统配置失败:', error);
+      message.error('获取系统配置失败');
+    }
+  };
+
   useEffect(() => {
     fetchAlerts();
+    fetchSystemConfig();
   }, []);
 
   const handleAcknowledge = async (record: Alert) => {
@@ -169,12 +183,12 @@ const AlertList: React.FC = () => {
     },
     {
       title: '创建时间',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
+      dataIndex: 'created_at',
+      key: 'created_at',
       render: (text: string | undefined) => formatDateTime(text || ''),
       sorter: (a: Alert, b: Alert) => {
-        if (!a.createdAt || !b.createdAt) return 0;
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        if (!a.created_at || !b.created_at) return 0;
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       },
     },
     {
@@ -192,9 +206,11 @@ const AlertList: React.FC = () => {
               解决
             </Button>
           )}
-          <Button type="link" onClick={() => handleAnalyze(record)}>
-            分析
-          </Button>
+          {systemConfig?.ollama_enabled === true && (
+            <Button type="link" onClick={() => handleAnalyze(record)}>
+              分析
+            </Button>
+          )}
           <Button type="link" onClick={() => handleConvertToKnowledge(record)}>
             转为知识库
           </Button>

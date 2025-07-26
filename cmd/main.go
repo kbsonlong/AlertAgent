@@ -26,7 +26,7 @@ import (
 // processUnanalyzedAlerts 处理未分析的告警
 func processUnanalyzedAlerts(ctx context.Context, redisQueue *queue.RedisQueue) error {
 	var alerts []model.Alert
-	fmt.Println("Processing unanalyzed alerts...")
+	logger.L.Debug("Processing unanalyzed alerts...")
 	// 获取未分析的告警
 	if err := database.DB.Where("analysis = ?", "").Find(&alerts).Error; err != nil {
 		return fmt.Errorf("failed to get unanalyzed alerts: %w", err)
@@ -44,7 +44,9 @@ func processUnanalyzedAlerts(ctx context.Context, redisQueue *queue.RedisQueue) 
 	// 创建任务列表
 	tasks := make([]*types.AlertTask, len(alerts))
 	for i, alert := range alerts {
-		fmt.Println("Processing alert:", alert.ID)
+		logger.L.Debug("Processing alert",
+			zap.Uint("id", alert.ID),
+		)
 		tasks[i] = &types.AlertTask{
 			ID:        alert.ID,
 			CreatedAt: time.Now(),
@@ -64,17 +66,27 @@ func processUnanalyzedAlerts(ctx context.Context, redisQueue *queue.RedisQueue) 
 }
 
 func main() {
-	// 加载配置
-	if err := config.Load(); err != nil {
-		fmt.Printf("Failed to load config: %v\n", err)
-		os.Exit(1)
-	}
-
 	// 初始化日志
 	if err := logger.Init("info"); err != nil {
 		fmt.Printf("Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
+
+	// 加载配置
+	if err := config.Load(); err != nil {
+		logger.L.Fatal("Failed to load config", zap.Error(err))
+		os.Exit(1)
+	}
+
+	// 注册配置重载回调函数
+	config.RegisterReloadCallback(func(newConfig config.Config) {
+		logger.L.Debug("Configuration reloaded",
+			zap.Int("port", newConfig.Server.Port),
+			zap.String("mode", newConfig.Server.Mode),
+		)
+		// 这里可以添加其他需要在配置更新时执行的逻辑
+		// 例如：重新初始化某些服务、更新日志级别等
+	})
 
 	// 初始化数据库连接
 	if err := database.Init(); err != nil {
@@ -108,8 +120,9 @@ func main() {
 	router.RegisterRoutes(engine)
 
 	// 创建HTTP服务器
+	cfg := config.GetConfig()
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", config.GlobalConfig.Server.Port),
+		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler: engine,
 	}
 
@@ -139,6 +152,9 @@ func main() {
 
 	// 停止工作器
 	workerCancel()
+
+	// 停止配置文件监听
+	config.StopWatcher()
 
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.L.Fatal("Failed to shutdown server", zap.Error(err))

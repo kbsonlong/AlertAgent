@@ -44,21 +44,35 @@ func CreateKnowledge(alert *model.Alert) (*model.Knowledge, error) {
 ## 分析结果
 
 %s
-
-## 处理建议
-
-1. 根据告警内容和分析结果，及时采取相应的处理措施
-2. 记录处理过程和结果
-3. 定期回顾和更新处理方案
-
-## 预防措施
-
-1. 加强监控和预警
-2. 制定应急预案
-3. 定期进行系统检查和维护
 `, alert.Title, alert.Source, alert.Level, alert.Content, alert.Analysis)
 
-	// 创建知识库记录
+	// 检查是否已存在相同告警ID的知识库记录
+	var existingKnowledge model.Knowledge
+	err := database.DB.Where("source = ? AND source_id = ?", "alert", alert.ID).First(&existingKnowledge).Error
+
+	if err == nil {
+		// 记录已存在，更新现有记录（排除Vector字段）
+		updateData := map[string]interface{}{
+			"title":      title,
+			"content":    content,
+			"tags":       fmt.Sprintf("%s,%s", alert.Level, alert.Source),
+			"summary":    fmt.Sprintf("%s级别告警：%s", alert.Level, alert.Title),
+			"updated_at": time.Now(),
+		}
+
+		if err := database.DB.Model(&existingKnowledge).Updates(updateData).Error; err != nil {
+			return nil, fmt.Errorf("更新知识库记录失败: %v", err)
+		}
+
+		// 重新获取更新后的记录
+		if err := database.DB.First(&existingKnowledge, existingKnowledge.ID).Error; err != nil {
+			return nil, fmt.Errorf("获取更新后的知识库记录失败: %v", err)
+		}
+
+		return &existingKnowledge, nil
+	}
+
+	// 记录不存在，创建新的知识库记录
 	knowledge := &model.Knowledge{
 		Title:     title,
 		Content:   content,
@@ -66,7 +80,6 @@ func CreateKnowledge(alert *model.Alert) (*model.Knowledge, error) {
 		Tags:      fmt.Sprintf("%s,%s", alert.Level, alert.Source),
 		Source:    "alert",
 		SourceID:  alert.ID,
-		Vector:    "", // 暂时设置为空字符串，避免JSON错误
 		Summary:   fmt.Sprintf("%s级别告警：%s", alert.Level, alert.Title),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -79,40 +92,6 @@ func CreateKnowledge(alert *model.Alert) (*model.Knowledge, error) {
 
 	return knowledge, nil
 }
-
-// FindSimilarKnowledge 查找相似知识
-// func (s *KnowledgeService) FindSimilarKnowledge(ctx context.Context, content string, limit int) ([]*model.Knowledge, error) {
-// 	// 生成查询内容的向量表示
-// 	vector, err := s.generateVector(ctx, content)
-// 	if err != nil {
-// 		s.logger.Error("Failed to generate vector", zap.Error(err))
-// 		return nil, fmt.Errorf("failed to generate vector: %w", err)
-// 	}
-
-// 	// 从数据库中查找所有知识条目
-// 	var allKnowledge []*model.Knowledge
-// 	if err := database.DB.Find(&allKnowledge).Error; err != nil {
-// 		s.logger.Error("Failed to get knowledge from database", zap.Error(err))
-// 		return nil, fmt.Errorf("failed to get knowledge from database: %w", err)
-// 	}
-
-// 	// 计算相似度并排序
-// 	for _, k := range allKnowledge {
-// 		k.Similarity = s.cosineSimilarity(vector, k.Vector)
-// 	}
-
-// 	// 按相似度降序排序
-// 	sort.Slice(allKnowledge, func(i, j int) bool {
-// 		return allKnowledge[i].Similarity > allKnowledge[j].Similarity
-// 	})
-
-// 	// 返回相似度最高的N个结果
-// 	if len(allKnowledge) > limit {
-// 		allKnowledge = allKnowledge[:limit]
-// 	}
-
-// 	return allKnowledge, nil
-// }
 
 // generateSummary 生成内容摘要
 func (s *KnowledgeService) generateSummary(ctx context.Context, content string) (string, error) {
