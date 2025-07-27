@@ -984,62 +984,160 @@ sequenceDiagram
 
 #### 4.1.1 Sidecar模式配置分发实现
 
-**1. AlertAgent配置接口**:
+**1. AlertAgent统一配置接口**:
 ```go
 type ConfigAPI struct {
     ruleManager    *RuleManager
     configManager  *ConfigManager
+    renderer       *ConfigRenderer
 }
 
-// 提供Prometheus规则配置接口
-func (ca *ConfigAPI) GetPrometheusRules(c *gin.Context) {
+// 统一配置接口 - 直接返回渲染好的配置
+func (ca *ConfigAPI) GetConfig(c *gin.Context) {
     clusterID := c.Query("cluster_id")
-    if clusterID == "" {
-        c.JSON(400, gin.H{"error": "cluster_id is required"})
+    configType := c.Query("type") // "prometheus-rules" or "alertmanager-config"
+    
+    if clusterID == "" || configType == "" {
+        c.JSON(400, gin.H{"error": "cluster_id and type are required"})
         return
     }
     
-    rules, err := ca.ruleManager.GetRulesByCluster(clusterID)
+    var renderedConfig string
+    var err error
+    
+    switch configType {
+    case "prometheus-rules":
+        rules, err := ca.ruleManager.GetRulesByCluster(clusterID)
+        if err != nil {
+            c.JSON(500, gin.H{"error": err.Error()})
+            return
+        }
+        renderedConfig, err = ca.renderer.RenderPrometheusRules(rules)
+        
+    case "alertmanager-config":
+        config, err := ca.configManager.GetAlertmanagerConfig(clusterID)
+        if err != nil {
+            c.JSON(500, gin.H{"error": err.Error()})
+            return
+        }
+        renderedConfig, err = ca.renderer.RenderAlertmanagerConfig(config)
+        
+    default:
+        c.JSON(400, gin.H{"error": "unsupported config type"})
+        return
+    }
+    
     if err != nil {
         c.JSON(500, gin.H{"error": err.Error()})
         return
     }
     
-    // 渲染为Prometheus规则格式
-    ruleContent, err := ca.renderPrometheusRules(rules)
-    if err != nil {
-        c.JSON(500, gin.H{"error": err.Error()})
-        return
-    }
-    
+    // 设置响应头并返回渲染好的配置
     c.Header("Content-Type", "application/yaml")
-    c.String(200, ruleContent)
+    c.Header("X-Config-Hash", ca.calculateHash(renderedConfig))
+    c.String(200, renderedConfig)
 }
 
-// 提供Alertmanager配置接口
-func (ca *ConfigAPI) GetAlertmanagerConfig(c *gin.Context) {
-    clusterID := c.Query("cluster_id")
-    if clusterID == "" {
-        c.JSON(400, gin.H{"error": "cluster_id is required"})
-        return
-    }
+// 配置渲染器
+type ConfigRenderer struct {
+    prometheusTemplate    *template.Template
+    alertmanagerTemplate  *template.Template
+}
+
+func (cr *ConfigRenderer) RenderPrometheusRules(rules []*Rule) (string, error) {
+    tmpl := `groups:
+{{- range .Groups }}
+- name: {{ .Name }}
+  interval: {{ .Interval }}
+  rules:
+  {{- range .Rules }}
+  - alert: {{ .AlertName }}
+    expr: {{ .Expression }}
+    for: {{ .Duration }}
+    labels:
+      severity: {{ .Severity }}
+      team: {{ .Team }}
+      cluster: {{ .Cluster }}
+    annotations:
+      summary: {{ .Summary }}
+      description: {{ .Description }}
+  {{- end }}
+{{- end }}`
     
-    config, err := ca.configManager.GetAlertmanagerConfig(clusterID)
+    t, err := template.New("prometheus-rules").Parse(tmpl)
     if err != nil {
-        c.JSON(500, gin.H{"error": err.Error()})
-        return
+        return "", err
     }
     
-    c.Header("Content-Type", "application/yaml")
-    c.String(200, config)
+    var buf bytes.Buffer
+    if err := t.Execute(&buf, map[string]interface{}{"Groups": rules}); err != nil {
+        return "", err
+    }
+    
+    return buf.String(), nil
+}
+
+func (cr *ConfigRenderer) RenderAlertmanagerConfig(config *AlertmanagerConfig) (string, error) {
+    tmpl := `global:
+  smtp_smarthost: '{{ .Global.SMTPHost }}:{{ .Global.SMTPPort }}'
+  smtp_from: '{{ .Global.SMTPFrom }}'
+
+route:
+  group_by: {{ .Route.GroupBy }}
+  group_wait: {{ .Route.GroupWait }}
+  group_interval: {{ .Route.GroupInterval }}
+  repeat_interval: {{ .Route.RepeatInterval }}
+  receiver: '{{ .Route.Receiver }}'
+  routes:
+  {{- range .Route.Routes }}
+  - match:
+      severity: {{ .Severity }}
+    receiver: {{ .Receiver }}
+    continue: {{ .Continue }}
+  {{- end }}
+
+receivers:
+{{- range .Receivers }}
+- name: '{{ .Name }}'
+  webhook_configs:
+  {{- range .WebhookConfigs }}
+  - url: '{{ .URL }}'
+    send_resolved: {{ .SendResolved }}
+  {{- end }}
+{{- end }}
+
+inhibit_rules:
+{{- range .InhibitRules }}
+- source_match:
+    severity: '{{ .SourceMatch.Severity }}'
+  target_match:
+    severity: '{{ .TargetMatch.Severity }}'
+  equal: {{ .Equal }}
+{{- end }}`
+    
+    t, err := template.New("alertmanager-config").Parse(tmpl)
+    if err != nil {
+        return "", err
+    }
+    
+    var buf bytes.Buffer
+    if err := t.Execute(&buf, config); err != nil {
+        return "", err
+    }
+    
+    return buf.String(), nil
+}
+
+func (ca *ConfigAPI) calculateHash(content string) string {
+    h := sha256.Sum256([]byte(content))
+    return hex.EncodeToString(h[:])
 }
 
 // 注册路由
 func (ca *ConfigAPI) RegisterRoutes(r *gin.Engine) {
     api := r.Group("/api/v1")
     {
-        api.GET("/configs/prometheus/rules", ca.GetPrometheusRules)
-        api.GET("/configs/alertmanager", ca.GetAlertmanagerConfig)
+        api.GET("/configs", ca.GetConfig)
     }
 }
 ```
@@ -1062,16 +1160,17 @@ func (cs *ConfigSyncer) Start(ctx context.Context) error {
     
     // 启动时立即同步一次
     if err := cs.syncConfig(); err != nil {
-        logrus.Errorf("Initial config sync failed: %v", err)
+        log.Printf("Initial config sync failed: %v", err)
     }
     
     for {
         select {
         case <-ctx.Done():
+            log.Println("Context cancelled, stopping config syncer")
             return ctx.Err()
         case <-ticker.C:
             if err := cs.syncConfig(); err != nil {
-                logrus.Errorf("Config sync failed: %v", err)
+                log.Printf("Config sync failed: %v", err)
             }
         }
     }
@@ -1104,39 +1203,97 @@ func (cs *ConfigSyncer) syncConfig() error {
     return nil
 }
 
-func (cs *ConfigSyncer) fetchConfig() ([]byte, error) {
-    var endpoint string
-    switch cs.ConfigType {
-    case "prometheus":
-        endpoint = fmt.Sprintf("%s/api/v1/configs/prometheus/rules?cluster_id=%s", 
-            cs.AlertAgentEndpoint, cs.ClusterID)
-    case "alertmanager":
-        endpoint = fmt.Sprintf("%s/api/v1/configs/alertmanager?cluster_id=%s", 
-            cs.AlertAgentEndpoint, cs.ClusterID)
-    default:
-        return nil, fmt.Errorf("unknown config type: %s", cs.ConfigType)
+// fetchConfig函数已合并到fetchConfigWithHash中，提供更完整的功能
+```
+
+**3. 优化的Sidecar配置同步逻辑**:
+```go
+// 添加字段存储上次的hash
+type ConfigSyncer struct {
+    AlertAgentEndpoint string
+    ClusterID         string
+    SyncInterval      time.Duration
+    ConfigPath        string
+    ReloadURL         string
+    ConfigType        string // "prometheus" or "alertmanager"
+    lastConfigHash    string // 存储上次配置的hash
+    httpClient        *http.Client
+}
+
+func (cs *ConfigSyncer) syncConfig() error {
+    // 1. 从AlertAgent拉取渲染好的配置
+    config, serverHash, err := cs.fetchConfigWithHash()
+    if err != nil {
+        return fmt.Errorf("failed to fetch config: %w", err)
     }
     
-    resp, err := http.Get(endpoint)
+    // 2. 对比hash，如果没有变化则跳过
+     if serverHash != "" && serverHash == cs.lastConfigHash {
+         log.Printf("%s config unchanged (server hash match), skipping sync", cs.ConfigType)
+         return nil
+     }
+     
+     // 3. 本地hash对比作为备用
+     localHash := cs.calculateHash(config)
+     if serverHash == "" {
+         serverHash = localHash
+     }
+     
+     if serverHash == cs.lastConfigHash {
+         log.Printf("%s config unchanged (local hash match), skipping sync", cs.ConfigType)
+         return nil
+     }
+    
+    // 4. 写入配置文件
+    if err := cs.writeConfigFile(config); err != nil {
+        return fmt.Errorf("failed to write config: %w", err)
+    }
+    
+    // 5. 触发热加载
+    if err := cs.triggerReload(); err != nil {
+        return fmt.Errorf("failed to trigger reload: %w", err)
+    }
+    
+    // 6. 更新hash
+     cs.lastConfigHash = serverHash
+     log.Printf("Successfully synced %s config (hash: %s)", cs.ConfigType, serverHash)
+     return nil
+}
+
+func (cs *ConfigSyncer) fetchConfigWithHash() ([]byte, string, error) {
+    // 使用统一的配置接口
+    var configType string
+    switch cs.ConfigType {
+    case "prometheus":
+        configType = "prometheus-rules"
+    case "alertmanager":
+        configType = "alertmanager-config"
+    default:
+        return nil, "", fmt.Errorf("unknown config type: %s", cs.ConfigType)
+    }
+    
+    endpoint := fmt.Sprintf("%s/api/v1/configs?cluster_id=%s&type=%s", 
+        cs.AlertAgentEndpoint, cs.ClusterID, configType)
+    
+    resp, err := cs.httpClient.Get(endpoint)
     if err != nil {
-        return nil, err
+        return nil, "", err
     }
     defer resp.Body.Close()
     
     if resp.StatusCode != http.StatusOK {
-        return nil, fmt.Errorf("API returned status: %s", resp.Status)
+        return nil, "", fmt.Errorf("API returned status: %s", resp.Status)
     }
     
-    return ioutil.ReadAll(resp.Body)
-}
-```
-
-**3. Sidecar配置文件操作**:
-```go
-func (cs *ConfigSyncer) hasConfigChanged(newConfig []byte) bool {
-    currentHash := cs.getCurrentConfigHash()
-    newHash := cs.calculateHash(newConfig)
-    return currentHash != newHash
+    config, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        return nil, "", err
+    }
+    
+    // 获取服务端计算的hash
+    serverHash := resp.Header.Get("X-Config-Hash")
+    
+    return config, serverHash, nil
 }
 
 func (cs *ConfigSyncer) writeConfigFile(config []byte) error {
@@ -1145,33 +1302,29 @@ func (cs *ConfigSyncer) writeConfigFile(config []byte) error {
         return err
     }
     
-    // 原子性写入
+    // 原子性写入：先写临时文件，再重命名
     tmpFile := cs.ConfigPath + ".tmp"
     if err := ioutil.WriteFile(tmpFile, config, 0644); err != nil {
         return err
     }
     
-    if err := os.Rename(tmpFile, cs.ConfigPath); err != nil {
-        return err
-    }
-    
-    // 更新配置哈希
-    cs.updateConfigHash(config)
-    return nil
+    return os.Rename(tmpFile, cs.ConfigPath)
 }
 
 func (cs *ConfigSyncer) triggerReload() error {
-    resp, err := http.Post(cs.ReloadURL, "application/json", nil)
+    resp, err := cs.httpClient.Post(cs.ReloadURL, "application/json", nil)
     if err != nil {
         return err
     }
     defer resp.Body.Close()
     
     if resp.StatusCode != http.StatusOK {
-        return fmt.Errorf("reload failed with status: %d", resp.StatusCode)
+        body, _ := ioutil.ReadAll(resp.Body)
+        return fmt.Errorf("reload failed with status %d: %s", resp.StatusCode, string(body))
     }
     
-    return nil
+    log.Printf("%s reload triggered successfully", cs.ConfigType)
+     return nil
 }
 
 func (cs *ConfigSyncer) calculateHash(data []byte) string {
@@ -1179,18 +1332,85 @@ func (cs *ConfigSyncer) calculateHash(data []byte) string {
     return hex.EncodeToString(h[:])
 }
 
-func (cs *ConfigSyncer) getCurrentConfigHash() string {
-    // 从文件或内存中获取当前配置的哈希值
-    // 这里简化实现，实际可以存储在文件或内存中
-    return cs.lastConfigHash
-}
-
-func (cs *ConfigSyncer) updateConfigHash(config []byte) {
-    cs.lastConfigHash = cs.calculateHash(config)
+// 初始化函数
+func NewConfigSyncer(alertAgentEndpoint, clusterID, configType, configPath, reloadURL string, syncInterval time.Duration) *ConfigSyncer {
+    return &ConfigSyncer{
+        AlertAgentEndpoint: alertAgentEndpoint,
+        ClusterID:         clusterID,
+        ConfigType:        configType,
+        ConfigPath:        configPath,
+        ReloadURL:         reloadURL,
+        SyncInterval:      syncInterval,
+        httpClient:        &http.Client{Timeout: 30 * time.Second},
+    }
 }
 ```
 
-**4. Kubernetes部署配置**:
+**4. Sidecar主函数实现**:
+```go
+// main.go - 统一的Sidecar主程序
+package main
+
+import (
+    "context"
+    "log"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
+)
+
+func main() {
+    // 从环境变量获取配置
+    alertAgentEndpoint := os.Getenv("ALERTAGENT_ENDPOINT")
+    clusterID := os.Getenv("CLUSTER_ID")
+    configType := os.Getenv("CONFIG_TYPE") // "prometheus" or "alertmanager"
+    configPath := os.Getenv("CONFIG_PATH")
+    reloadURL := os.Getenv("RELOAD_URL")
+    
+    if alertAgentEndpoint == "" || clusterID == "" || configType == "" || configPath == "" || reloadURL == "" {
+        log.Fatal("Missing required environment variables")
+    }
+    
+    // 解析同步间隔
+    syncInterval := 30 * time.Second
+    if interval := os.Getenv("SYNC_INTERVAL"); interval != "" {
+        if d, err := time.ParseDuration(interval); err == nil {
+            syncInterval = d
+        }
+    }
+    
+    // 创建配置同步器
+    syncer := NewConfigSyncer(alertAgentEndpoint, clusterID, configType, configPath, reloadURL, syncInterval)
+    
+    // 设置信号处理
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    
+    sigChan := make(chan os.Signal, 1)
+    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+    
+    go func() {
+        <-sigChan
+        log.Println("Received shutdown signal, stopping syncer...")
+        cancel()
+    }()
+    
+    log.Printf("Starting %s config syncer for cluster %s", configType, clusterID)
+    log.Printf("Sync interval: %v", syncInterval)
+    log.Printf("Config path: %s", configPath)
+    log.Printf("Reload URL: %s", reloadURL)
+    
+    // 启动同步器
+    if err := syncer.Start(ctx); err != nil && err != context.Canceled {
+        log.Fatalf("Syncer failed: %v", err)
+    }
+    
+    log.Println("Config syncer stopped")
+}
+```
+
+**5. Kubernetes部署配置**:
 ```yaml
 # prometheus-with-sidecar.yaml
 apiVersion: apps/v1
@@ -1232,9 +1452,9 @@ spec:
           - name: data-volume
             mountPath: /prometheus
       
-      # Prometheus规则同步Sidecar
-      - name: prometheus-rule-syncer
-        image: alertagent/rule-syncer:latest
+      # 统一的配置同步Sidecar
+      - name: config-syncer
+        image: alertagent/config-syncer:latest
         env:
           - name: ALERTAGENT_ENDPOINT
             value: "http://alertagent-service.default.svc.cluster.local"
@@ -1251,6 +1471,13 @@ spec:
         volumeMounts:
           - name: rules-volume
             mountPath: /etc/prometheus/rules
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
       
       volumes:
         - name: config-volume
@@ -1298,8 +1525,8 @@ spec:
           - name: data-volume
             mountPath: /alertmanager
       
-      # Alertmanager配置同步Sidecar
-      - name: alertmanager-config-syncer
+      # 统一的配置同步Sidecar
+      - name: config-syncer
         image: alertagent/config-syncer:latest
         env:
           - name: ALERTAGENT_ENDPOINT
@@ -1317,6 +1544,13 @@ spec:
         volumeMounts:
           - name: config-volume
             mountPath: /etc/alertmanager
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
       
       volumes:
         - name: config-volume
