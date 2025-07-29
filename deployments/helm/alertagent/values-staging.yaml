@@ -1,0 +1,444 @@
+# AlertAgent Helm Chart - 测试环境配置
+
+# 全局配置
+global:
+  imageRegistry: "registry.example.com/"
+  imagePullPolicy: IfNotPresent
+  storageClass: "standard"
+  namespace: "alertagent-staging"
+
+# AlertAgent API 服务
+api:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: alertagent/api
+    tag: "staging"
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+  ingress:
+    enabled: true
+    className: "nginx"
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: "letsencrypt-staging"
+      nginx.ingress.kubernetes.io/rate-limit: "200"
+      nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    hosts:
+      - host: api-staging.alertagent.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: alertagent-api-staging-tls
+        hosts:
+          - api-staging.alertagent.example.com
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+# AlertAgent Worker 服务
+worker:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: alertagent/worker
+    tag: "staging"
+  service:
+    type: ClusterIP
+    port: 8081
+    targetPort: 8081
+  resources:
+    limits:
+      cpu: 800m
+      memory: 800Mi
+    requests:
+      cpu: 150m
+      memory: 200Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    customMetrics:
+      - type: External
+        external:
+          metric:
+            name: redis_queue_length
+            selector:
+              matchLabels:
+                queue: "alert_processing"
+          target:
+            type: AverageValue
+            averageValue: "15"
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+# AlertAgent Rule Server
+ruleServer:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: alertagent/rule-server
+    tag: "staging"
+  service:
+    type: ClusterIP
+    port: 8082
+    targetPort: 8082
+  resources:
+    limits:
+      cpu: 600m
+      memory: 600Mi
+    requests:
+      cpu: 100m
+      memory: 150Mi
+  mysql:
+    enabled: true
+    primary:
+      persistence:
+        enabled: true
+        size: 10Gi
+        storageClass: "standard"
+      resources:
+        limits:
+          cpu: 500m
+          memory: 1Gi
+        requests:
+          cpu: 100m
+          memory: 256Mi
+
+# PostgreSQL 配置
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "staging-postgres-password"
+    username: "alertagent"
+    password: "staging-alertagent-password"
+    database: "alertagent"
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: "standard"
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 200m
+        memory: 512Mi
+    initdb:
+      scripts:
+        init.sql: |
+          -- 测试环境初始化脚本
+          CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+          CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
+          CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+          
+          -- 测试数据
+          INSERT INTO clusters (id, name, description, status, created_at, updated_at) VALUES
+          ('550e8400-e29b-41d4-a716-446655440001', 'test-cluster-1', 'Test Cluster 1', 'active', NOW(), NOW()),
+          ('550e8400-e29b-41d4-a716-446655440002', 'test-cluster-2', 'Test Cluster 2', 'active', NOW(), NOW())
+          ON CONFLICT (id) DO NOTHING;
+  metrics:
+    enabled: true
+    resources:
+      limits:
+        cpu: 150m
+        memory: 200Mi
+      requests:
+        cpu: 75m
+        memory: 100Mi
+
+# Redis 配置
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: "staging-redis-password"
+  architecture: standalone
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: "standard"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+  metrics:
+    enabled: true
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+
+# Prometheus 配置
+prometheus:
+  enabled: true
+  server:
+    persistentVolume:
+      enabled: true
+      size: 20Gi
+      storageClass: "standard"
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 200m
+        memory: 512Mi
+    retention: "15d"
+  alertmanager:
+    enabled: true
+    persistentVolume:
+      enabled: true
+      size: 5Gi
+      storageClass: "standard"
+    resources:
+      limits:
+        cpu: 300m
+        memory: 512Mi
+      requests:
+        cpu: 75m
+        memory: 128Mi
+  nodeExporter:
+    enabled: true
+    resources:
+      limits:
+        cpu: 150m
+        memory: 200Mi
+      requests:
+        cpu: 75m
+        memory: 100Mi
+  kubeStateMetrics:
+    enabled: true
+    resources:
+      limits:
+        cpu: 150m
+        memory: 200Mi
+      requests:
+        cpu: 75m
+        memory: 100Mi
+  ingress:
+    enabled: true
+    className: "nginx"
+    host: "prometheus-staging.alertagent.example.com"
+    tls: true
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/auth-type: basic
+      nginx.ingress.kubernetes.io/auth-secret: prometheus-basic-auth
+      cert-manager.io/cluster-issuer: "letsencrypt-staging"
+
+# Grafana 配置
+grafana:
+  enabled: true
+  adminUser: "admin"
+  adminPassword: "staging-admin-password"
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: "standard"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  ingress:
+    enabled: true
+    className: "nginx"
+    host: "grafana-staging.alertagent.example.com"
+    tls: true
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: "letsencrypt-staging"
+  datasources:
+    prometheus:
+      url: "http://prometheus-server:80"
+  dashboardProviders:
+    enabled: true
+  smtp:
+    enabled: true
+    host: "smtp.example.com:587"
+    user: "grafana-staging@example.com"
+    password: "staging-smtp-password"
+    fromAddress: "grafana-staging@example.com"
+    fromName: "AlertAgent Grafana Staging"
+
+# 应用配置
+config:
+  app:
+    name: "AlertAgent"
+    version: "staging"
+    environment: "staging"
+  server:
+    host: "0.0.0.0"
+    port: 8080
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "90s"
+  logging:
+    level: "debug"
+    format: "json"
+    output: "stdout"
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+  tracing:
+    enabled: true
+    jaegerEndpoint: "http://jaeger-collector:14268/api/traces"
+    serviceName: "alertagent-staging"
+    sampleRate: 0.1
+  health:
+    enabled: true
+    path: "/health"
+  features:
+    aiAnalysis:
+      enabled: true
+      difyApiUrl: "https://api.dify.ai/v1"
+      model: "gpt-3.5-turbo"
+      timeout: "30s"
+    clustering:
+      enabled: true
+      algorithm: "dbscan"
+      minSamples: 3
+      eps: 0.4
+    notification:
+      enabled: true
+      channels:
+        - "dingtalk"
+        - "email"
+      retryAttempts: 3
+      retryDelay: "5s"
+  rateLimit:
+    enabled: true
+    requests: 500
+    window: "1m"
+  cache:
+    enabled: true
+    ttl: "5m"
+    maxSize: 5000
+
+# 密钥配置
+secrets:
+  database:
+    host: ""
+    port: "5432"
+    name: "alertagent"
+    username: "alertagent"
+    password: "staging-alertagent-password"
+    sslMode: "prefer"
+  redis:
+    host: ""
+    port: "6379"
+    password: "staging-redis-password"
+    database: "0"
+  jwt:
+    secret: "staging-jwt-secret-key-change-in-production"
+    expiration: "24h"
+  encryption:
+    key: "staging-encryption-key-32-chars"
+  smtp:
+    host: "smtp.example.com"
+    port: "587"
+    username: "noreply-staging@example.com"
+    password: "staging-smtp-password"
+    from: "AlertAgent Staging <noreply-staging@example.com>"
+  dingtalk:
+    webhook: "https://oapi.dingtalk.com/robot/send?access_token=staging-token"
+    secret: "staging-dingtalk-secret"
+  dify:
+    apiKey: "staging-dify-api-key"
+    baseUrl: "https://api.dify.ai/v1"
+  mysql:
+    host: ""
+    port: "3306"
+    database: "rule_engine"
+    username: "root"
+    password: "staging-mysql-password"
+    rootPassword: "staging-mysql-root-password"
+
+# 网络策略
+networkPolicy:
+  enabled: true
+  ingress:
+    enabled: true
+    namespaceSelector:
+      matchLabels:
+        name: "ingress-nginx"
+  egress:
+    enabled: true
+    dnsPolicy: ClusterFirst
+
+# 服务账户
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod 安全策略
+podSecurityPolicy:
+  enabled: true
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+
+# 资源配额
+resourceQuota:
+  enabled: true
+  hard:
+    requests.cpu: "5"
+    requests.memory: "10Gi"
+    limits.cpu: "10"
+    limits.memory: "20Gi"
+    persistentvolumeclaims: "10"
+    services: "15"
+    secrets: "15"
+    configmaps: "15"
+
+# 限制范围
+limitRange:
+  enabled: true
+  limits:
+    - default:
+        cpu: "300m"
+        memory: "300Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "100Mi"
+      type: Container
+    - max:
+        cpu: "2"
+        memory: "4Gi"
+      min:
+        cpu: "50m"
+        memory: "64Mi"
+      type: Container

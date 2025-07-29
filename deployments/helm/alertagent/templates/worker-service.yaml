@@ -1,0 +1,26 @@
+{{- if .Values.worker.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "alertagent.fullname" . }}-worker
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.worker.labels" . | nindent 4 }}
+  {{- with .Values.worker.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.worker.service.type }}
+  ports:
+    - port: {{ .Values.worker.service.port }}
+      targetPort: {{ .Values.worker.service.targetPort }}
+      protocol: TCP
+      name: http
+    - port: {{ .Values.config.metrics.port }}
+      targetPort: {{ .Values.config.metrics.port }}
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "alertagent.worker.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -1,0 +1,364 @@
+{{- if .Values.ruleServer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "alertagent.fullname" . }}-rule-server
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.ruleServer.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.ruleServer.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  selector:
+    matchLabels:
+      {{- include "alertagent.ruleServer.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.config.metrics.port }}"
+        prometheus.io/path: "{{ .Values.config.metrics.path }}"
+      labels:
+        {{- include "alertagent.ruleServer.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "alertagent.serviceAccountName" . }}
+      securityContext:
+        {{- include "alertagent.securityContext" . | nindent 8 }}
+      {{- if .Values.ruleServer.mysql.enabled }}
+      initContainers:
+        # 等待 MySQL 就绪
+        - name: wait-for-mysql
+          image: mysql:8.0
+          command:
+            - sh
+            - -c
+            - |
+              until mysqladmin ping -h {{ include "alertagent.mysql.host" . }} -u root -p"$MYSQL_ROOT_PASSWORD" --silent; do
+                echo "Waiting for MySQL..."
+                sleep 2
+              done
+              echo "MySQL is ready!"
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertagent.fullname" . }}-mysql-secret
+                  key: mysql-root-password
+          securityContext:
+            {{- include "alertagent.containerSecurityContext" . | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: rule-server
+          image: "{{ include "alertagent.imageRegistry" . }}{{ .Values.ruleServer.image.repository }}:{{ .Values.ruleServer.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ include "alertagent.imagePullPolicy" . }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.ruleServer.service.targetPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.config.metrics.port }}
+              protocol: TCP
+          env:
+            - name: APP_NAME
+              value: "RuleServer"
+            - name: APP_VERSION
+              value: {{ .Chart.AppVersion | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logging.level | quote }}
+            - name: METRICS_ENABLED
+              value: {{ .Values.config.metrics.enabled | quote }}
+            - name: MYSQL_HOST
+              value: {{ include "alertagent.mysql.host" . | quote }}
+            - name: MYSQL_PORT
+              value: "3306"
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertagent.fullname" . }}-mysql-secret
+                  key: mysql-database
+            - name: MYSQL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertagent.fullname" . }}-mysql-secret
+                  key: mysql-user
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertagent.fullname" . }}-mysql-secret
+                  key: mysql-password
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          resources:
+            {{- toYaml .Values.ruleServer.resources | nindent 12 }}
+          securityContext:
+            {{- include "alertagent.containerSecurityContext" . | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "alertagent.fullname" . }}-config
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.ruleServer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.ruleServer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.ruleServer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "alertagent.fullname" . }}-rule-server
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.ruleServer.labels" . | nindent 4 }}
+  {{- with .Values.ruleServer.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.ruleServer.service.type }}
+  ports:
+    - port: {{ .Values.ruleServer.service.port }}
+      targetPort: {{ .Values.ruleServer.service.targetPort }}
+      protocol: TCP
+      name: http
+    - port: {{ .Values.config.metrics.port }}
+      targetPort: {{ .Values.config.metrics.port }}
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "alertagent.ruleServer.selectorLabels" . | nindent 4 }}
+
+{{- if .Values.ruleServer.mysql.enabled }}
+---
+# MySQL for Rule Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "alertagent.fullname" . }}-rule-server-mysql
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mysql
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "alertagent.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mysql
+  template:
+    metadata:
+      labels:
+        {{- include "alertagent.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mysql
+    spec:
+      securityContext:
+        {{- include "alertagent.securityContext" . | nindent 8 }}
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertagent.fullname" . }}-mysql-secret
+                  key: mysql-root-password
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertagent.fullname" . }}-mysql-secret
+                  key: mysql-database
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertagent.fullname" . }}-mysql-secret
+                  key: mysql-user
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertagent.fullname" . }}-mysql-secret
+                  key: mysql-password
+          ports:
+            - containerPort: 3306
+              name: mysql
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+            - name: mysql-config
+              mountPath: /etc/mysql/conf.d
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - mysqladmin
+                - ping
+                - -h
+                - localhost
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - mysqladmin
+                - ping
+                - -h
+                - localhost
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.ruleServer.mysql.primary.resources | nindent 12 }}
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: mysql-data
+          persistentVolumeClaim:
+            claimName: {{ include "alertagent.fullname" . }}-rule-server-mysql-data
+        - name: mysql-config
+          configMap:
+            name: {{ include "alertagent.fullname" . }}-mysql-config
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "alertagent.fullname" . }}-rule-server-mysql-data
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mysql
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.ruleServer.mysql.primary.persistence.size }}
+  {{- if .Values.ruleServer.mysql.primary.persistence.storageClass }}
+  storageClassName: {{ .Values.ruleServer.mysql.primary.persistence.storageClass }}
+  {{- else if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass }}
+  {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "alertagent.fullname" . }}-rule-server-mysql
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mysql
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+      targetPort: 3306
+      protocol: TCP
+      name: mysql
+  selector:
+    {{- include "alertagent.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mysql
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "alertagent.fullname" . }}-mysql-config
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mysql
+data:
+  my.cnf: |
+    [mysqld]
+    # 基本配置
+    default-storage-engine = InnoDB
+    character-set-server = utf8mb4
+    collation-server = utf8mb4_unicode_ci
+    
+    # 性能优化
+    innodb_buffer_pool_size = 128M
+    innodb_log_file_size = 64M
+    innodb_flush_log_at_trx_commit = 2
+    innodb_flush_method = O_DIRECT
+    
+    # 连接配置
+    max_connections = 200
+    max_connect_errors = 1000
+    
+    # 查询缓存
+    query_cache_type = 1
+    query_cache_size = 32M
+    
+    # 日志配置
+    slow_query_log = 1
+    slow_query_log_file = /var/log/mysql/slow.log
+    long_query_time = 2
+    
+    # 二进制日志
+    log-bin = mysql-bin
+    binlog_format = ROW
+    expire_logs_days = 7
+    
+    # 安全配置
+    local_infile = 0
+    skip-show-database
+{{- end }}
+{{- end }}

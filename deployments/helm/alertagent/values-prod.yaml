@@ -1,0 +1,539 @@
+# AlertAgent Helm Chart - 生产环境配置
+
+# 全局配置
+global:
+  imageRegistry: "registry.example.com/"
+  imagePullPolicy: IfNotPresent
+  storageClass: "fast-ssd"
+  namespace: "alertagent"
+
+# AlertAgent API 服务
+api:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: alertagent/api
+    tag: "v1.0.0"
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+  ingress:
+    enabled: true
+    className: "nginx"
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      nginx.ingress.kubernetes.io/rate-limit: "100"
+      nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    hosts:
+      - host: api.alertagent.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: alertagent-api-tls
+        hosts:
+          - api.alertagent.example.com
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    behavior:
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        policies:
+          - type: Percent
+            value: 10
+            periodSeconds: 60
+      scaleUp:
+        stabilizationWindowSeconds: 60
+        policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                    - api
+            topologyKey: kubernetes.io/hostname
+
+# AlertAgent Worker 服务
+worker:
+  enabled: true
+  replicaCount: 5
+  image:
+    repository: alertagent/worker
+    tag: "v1.0.0"
+  service:
+    type: ClusterIP
+    port: 8081
+    targetPort: 8081
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 5
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    customMetrics:
+      - type: External
+        external:
+          metric:
+            name: redis_queue_length
+            selector:
+              matchLabels:
+                queue: "alert_processing"
+          target:
+            type: AverageValue
+            averageValue: "10"
+    behavior:
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        policies:
+          - type: Percent
+            value: 20
+            periodSeconds: 60
+      scaleUp:
+        stabilizationWindowSeconds: 60
+        policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 60
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 3
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                    - worker
+            topologyKey: kubernetes.io/hostname
+
+# AlertAgent Rule Server
+ruleServer:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: alertagent/rule-server
+    tag: "v1.0.0"
+  service:
+    type: ClusterIP
+    port: 8082
+    targetPort: 8082
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  mysql:
+    enabled: true
+    primary:
+      persistence:
+        enabled: true
+        size: 20Gi
+        storageClass: "fast-ssd"
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+        requests:
+          cpu: 200m
+          memory: 512Mi
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                    - rule-server
+            topologyKey: kubernetes.io/hostname
+
+# PostgreSQL 配置
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "CHANGE_ME_POSTGRES_PASSWORD"
+    username: "alertagent"
+    password: "CHANGE_ME_ALERTAGENT_PASSWORD"
+    database: "alertagent"
+  primary:
+    persistence:
+      enabled: true
+      size: 100Gi
+      storageClass: "fast-ssd"
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    initdb:
+      scripts:
+        init.sql: |
+          -- 生产环境初始化脚本
+          CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+          CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
+          CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+          
+          -- 性能优化设置
+          ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements';
+          ALTER SYSTEM SET max_connections = 200;
+          ALTER SYSTEM SET shared_buffers = '1GB';
+          ALTER SYSTEM SET effective_cache_size = '3GB';
+          ALTER SYSTEM SET maintenance_work_mem = '256MB';
+          ALTER SYSTEM SET checkpoint_completion_target = 0.9;
+          ALTER SYSTEM SET wal_buffers = '16MB';
+          ALTER SYSTEM SET default_statistics_target = 100;
+          ALTER SYSTEM SET random_page_cost = 1.1;
+          ALTER SYSTEM SET effective_io_concurrency = 200;
+  metrics:
+    enabled: true
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"
+    retention: "30d"
+
+# Redis 配置
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: "CHANGE_ME_REDIS_PASSWORD"
+  architecture: replication
+  master:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: "fast-ssd"
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 200m
+        memory: 512Mi
+  replica:
+    replicaCount: 2
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: "fast-ssd"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+  metrics:
+    enabled: true
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+  sentinel:
+    enabled: true
+    masterSet: "alertagent-redis"
+
+# Prometheus 配置
+prometheus:
+  enabled: true
+  server:
+    persistentVolume:
+      enabled: true
+      size: 100Gi
+      storageClass: "fast-ssd"
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    retention: "30d"
+    replicaCount: 2
+  alertmanager:
+    enabled: true
+    persistentVolume:
+      enabled: true
+      size: 10Gi
+      storageClass: "fast-ssd"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+    replicaCount: 2
+  nodeExporter:
+    enabled: true
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  kubeStateMetrics:
+    enabled: true
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  ingress:
+    enabled: true
+    className: "nginx"
+    host: "prometheus.alertagent.example.com"
+    tls: true
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/auth-type: basic
+      nginx.ingress.kubernetes.io/auth-secret: prometheus-basic-auth
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+# Grafana 配置
+grafana:
+  enabled: true
+  adminUser: "admin"
+  adminPassword: "CHANGE_ME_GRAFANA_PASSWORD"
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: "fast-ssd"
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 200m
+      memory: 512Mi
+  ingress:
+    enabled: true
+    className: "nginx"
+    host: "grafana.alertagent.example.com"
+    tls: true
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  datasources:
+    prometheus:
+      url: "http://prometheus-server:80"
+  dashboardProviders:
+    enabled: true
+  smtp:
+    enabled: true
+    host: "smtp.example.com:587"
+    user: "grafana@example.com"
+    password: "CHANGE_ME_SMTP_PASSWORD"
+    fromAddress: "grafana@example.com"
+    fromName: "AlertAgent Grafana"
+
+# 应用配置
+config:
+  app:
+    name: "AlertAgent"
+    version: "v1.0.0"
+    environment: "production"
+  server:
+    host: "0.0.0.0"
+    port: 8080
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "120s"
+  logging:
+    level: "info"
+    format: "json"
+    output: "stdout"
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+  tracing:
+    enabled: true
+    jaegerEndpoint: "http://jaeger-collector:14268/api/traces"
+    serviceName: "alertagent"
+    sampleRate: 0.01
+  health:
+    enabled: true
+    path: "/health"
+  features:
+    aiAnalysis:
+      enabled: true
+      difyApiUrl: "https://api.dify.ai/v1"
+      model: "gpt-4"
+      timeout: "30s"
+    clustering:
+      enabled: true
+      algorithm: "dbscan"
+      minSamples: 5
+      eps: 0.3
+    notification:
+      enabled: true
+      channels:
+        - "dingtalk"
+        - "email"
+        - "webhook"
+      retryAttempts: 5
+      retryDelay: "10s"
+  rateLimit:
+    enabled: true
+    requests: 1000
+    window: "1m"
+  cache:
+    enabled: true
+    ttl: "10m"
+    maxSize: 10000
+
+# 密钥配置 (生产环境中应使用外部密钥管理)
+secrets:
+  database:
+    host: ""
+    port: "5432"
+    name: "alertagent"
+    username: "alertagent"
+    password: "CHANGE_ME_ALERTAGENT_PASSWORD"
+    sslMode: "require"
+  redis:
+    host: ""
+    port: "6379"
+    password: "CHANGE_ME_REDIS_PASSWORD"
+    database: "0"
+  jwt:
+    secret: "CHANGE_ME_JWT_SECRET_KEY_PRODUCTION"
+    expiration: "24h"
+  encryption:
+    key: "CHANGE_ME_ENCRYPTION_KEY_32_CHARS"
+  smtp:
+    host: "smtp.example.com"
+    port: "587"
+    username: "noreply@example.com"
+    password: "CHANGE_ME_SMTP_PASSWORD"
+    from: "AlertAgent <noreply@example.com>"
+  dingtalk:
+    webhook: "https://oapi.dingtalk.com/robot/send?access_token=CHANGE_ME"
+    secret: "CHANGE_ME_DINGTALK_SECRET"
+  dify:
+    apiKey: "CHANGE_ME_DIFY_API_KEY"
+    baseUrl: "https://api.dify.ai/v1"
+  mysql:
+    host: ""
+    port: "3306"
+    database: "rule_engine"
+    username: "root"
+    password: "CHANGE_ME_MYSQL_PASSWORD"
+    rootPassword: "CHANGE_ME_MYSQL_ROOT_PASSWORD"
+
+# 网络策略
+networkPolicy:
+  enabled: true
+  ingress:
+    enabled: true
+    namespaceSelector:
+      matchLabels:
+        name: "ingress-nginx"
+  egress:
+    enabled: true
+    dnsPolicy: ClusterFirst
+
+# 服务账户
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT:role/AlertAgentRole"
+  name: ""
+
+# Pod 安全策略
+podSecurityPolicy:
+  enabled: true
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+
+# 资源配额
+resourceQuota:
+  enabled: true
+  hard:
+    requests.cpu: "10"
+    requests.memory: "20Gi"
+    limits.cpu: "20"
+    limits.memory: "40Gi"
+    persistentvolumeclaims: "10"
+    services: "20"
+    secrets: "20"
+    configmaps: "20"
+
+# 限制范围
+limitRange:
+  enabled: true
+  limits:
+    - default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      type: Container
+    - max:
+        cpu: "4"
+        memory: "8Gi"
+      min:
+        cpu: "50m"
+        memory: "64Mi"
+      type: Container

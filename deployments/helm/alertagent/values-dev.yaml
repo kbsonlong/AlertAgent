@@ -1,0 +1,367 @@
+# AlertAgent Helm Chart - 开发环境配置
+
+# 全局配置
+global:
+  imageRegistry: ""
+  imagePullPolicy: Always
+  storageClass: ""
+  namespace: "alertagent-dev"
+
+# AlertAgent API 服务
+api:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: alertagent/api
+    tag: "dev"
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+  ingress:
+    enabled: true
+    className: "nginx"
+    annotations:
+      nginx.ingress.kubernetes.io/rewrite-target: /
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    hosts:
+      - host: alertagent-api-dev.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  autoscaling:
+    enabled: false
+  podDisruptionBudget:
+    enabled: false
+
+# AlertAgent Worker 服务
+worker:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: alertagent/worker
+    tag: "dev"
+  service:
+    type: ClusterIP
+    port: 8081
+    targetPort: 8081
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  podDisruptionBudget:
+    enabled: false
+
+# AlertAgent Rule Server
+ruleServer:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: alertagent/rule-server
+    tag: "dev"
+  service:
+    type: ClusterIP
+    port: 8082
+    targetPort: 8082
+  resources:
+    limits:
+      cpu: 300m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  mysql:
+    enabled: true
+    primary:
+      persistence:
+        enabled: true
+        size: 1Gi
+        storageClass: ""
+      resources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 50m
+          memory: 64Mi
+
+# PostgreSQL 配置
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "dev-postgres-password"
+    username: "alertagent"
+    password: "dev-alertagent-password"
+    database: "alertagent"
+  primary:
+    persistence:
+      enabled: true
+      size: 2Gi
+      storageClass: ""
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+    initdb:
+      scripts:
+        init.sql: |
+          -- 开发环境初始化脚本
+          CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+          CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
+  metrics:
+    enabled: true
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+
+# Redis 配置
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: "dev-redis-password"
+  master:
+    persistence:
+      enabled: true
+      size: 1Gi
+      storageClass: ""
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+  metrics:
+    enabled: true
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+
+# Prometheus 配置
+prometheus:
+  enabled: true
+  server:
+    persistentVolume:
+      enabled: true
+      size: 2Gi
+      storageClass: ""
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+    retention: "7d"
+  alertmanager:
+    enabled: true
+    persistentVolume:
+      enabled: true
+      size: 1Gi
+      storageClass: ""
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+  nodeExporter:
+    enabled: true
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+  kubeStateMetrics:
+    enabled: true
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+  ingress:
+    enabled: true
+    className: "nginx"
+    host: "prometheus-dev.local"
+    tls: false
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+
+# Grafana 配置
+grafana:
+  enabled: true
+  adminUser: "admin"
+  adminPassword: "dev-admin-password"
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+  resources:
+    limits:
+      cpu: 300m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  ingress:
+    enabled: true
+    className: "nginx"
+    host: "grafana-dev.local"
+    tls: false
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  datasources:
+    prometheus:
+      url: "http://prometheus-server:80"
+  dashboardProviders:
+    enabled: true
+
+# 应用配置
+config:
+  app:
+    name: "AlertAgent"
+    version: "dev"
+    environment: "development"
+  server:
+    host: "0.0.0.0"
+    port: 8080
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "60s"
+  logging:
+    level: "debug"
+    format: "json"
+    output: "stdout"
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+  tracing:
+    enabled: false
+    jaegerEndpoint: ""
+    serviceName: "alertagent"
+    sampleRate: 0.1
+  health:
+    enabled: true
+    path: "/health"
+  features:
+    aiAnalysis:
+      enabled: false
+      difyApiUrl: ""
+      model: "gpt-3.5-turbo"
+      timeout: "30s"
+    clustering:
+      enabled: true
+      algorithm: "dbscan"
+      minSamples: 3
+      eps: 0.5
+    notification:
+      enabled: true
+      channels:
+        - "dingtalk"
+        - "email"
+      retryAttempts: 3
+      retryDelay: "5s"
+  rateLimit:
+    enabled: true
+    requests: 100
+    window: "1m"
+  cache:
+    enabled: true
+    ttl: "5m"
+    maxSize: 1000
+
+# 密钥配置
+secrets:
+  database:
+    host: ""
+    port: "5432"
+    name: "alertagent"
+    username: "alertagent"
+    password: "dev-alertagent-password"
+    sslMode: "disable"
+  redis:
+    host: ""
+    port: "6379"
+    password: "dev-redis-password"
+    database: "0"
+  jwt:
+    secret: "dev-jwt-secret-key-change-in-production"
+    expiration: "24h"
+  encryption:
+    key: "dev-encryption-key-32-chars-long"
+  smtp:
+    host: "smtp.example.com"
+    port: "587"
+    username: "noreply@example.com"
+    password: "smtp-password"
+    from: "AlertAgent Dev <noreply@example.com>"
+  dingtalk:
+    webhook: "https://oapi.dingtalk.com/robot/send?access_token=your-token"
+    secret: "your-dingtalk-secret"
+  dify:
+    apiKey: "your-dify-api-key"
+    baseUrl: "https://api.dify.ai/v1"
+  mysql:
+    host: ""
+    port: "3306"
+    database: "rule_engine"
+    username: "root"
+    password: "dev-mysql-password"
+    rootPassword: "dev-mysql-root-password"
+
+# 网络策略
+networkPolicy:
+  enabled: false
+
+# 服务账户
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod 安全策略
+podSecurityPolicy:
+  enabled: false
+
+# 资源配额
+resourceQuota:
+  enabled: false
+
+# 限制范围
+limitRange:
+  enabled: false

@@ -1,0 +1,299 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "alertagent.fullname" . }}-test-connection"
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: wget
+      image: busybox:1.35
+      command: ['wget']
+      args: ['{{ include "alertagent.fullname" . }}-api:{{ .Values.api.service.port }}/health']
+      resources:
+        limits:
+          cpu: 100m
+          memory: 128Mi
+        requests:
+          cpu: 50m
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65534
+        capabilities:
+          drop:
+            - ALL
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "alertagent.fullname" . }}-test-api-health"
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: curlimages/curl:8.4.0
+      command: ['curl']
+      args: 
+        - '--fail'
+        - '--silent'
+        - '--show-error'
+        - '--max-time'
+        - '30'
+        - 'http://{{ include "alertagent.fullname" . }}-api:{{ .Values.api.service.port }}/health'
+      resources:
+        limits:
+          cpu: 100m
+          memory: 128Mi
+        requests:
+          cpu: 50m
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65534
+        capabilities:
+          drop:
+            - ALL
+{{- if .Values.worker.enabled }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "alertagent.fullname" . }}-test-worker-health"
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: curlimages/curl:8.4.0
+      command: ['curl']
+      args: 
+        - '--fail'
+        - '--silent'
+        - '--show-error'
+        - '--max-time'
+        - '30'
+        - 'http://{{ include "alertagent.fullname" . }}-worker:{{ .Values.worker.service.port }}/health'
+      resources:
+        limits:
+          cpu: 100m
+          memory: 128Mi
+        requests:
+          cpu: 50m
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65534
+        capabilities:
+          drop:
+            - ALL
+{{- end }}
+{{- if .Values.ruleServer.enabled }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "alertagent.fullname" . }}-test-rule-server-health"
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "4"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: curlimages/curl:8.4.0
+      command: ['curl']
+      args: 
+        - '--fail'
+        - '--silent'
+        - '--show-error'
+        - '--max-time'
+        - '30'
+        - 'http://{{ include "alertagent.fullname" . }}-rule-server:{{ .Values.ruleServer.service.port }}/health'
+      resources:
+        limits:
+          cpu: 100m
+          memory: 128Mi
+        requests:
+          cpu: 50m
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65534
+        capabilities:
+          drop:
+            - ALL
+{{- end }}
+{{- if .Values.postgresql.enabled }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "alertagent.fullname" . }}-test-postgresql"
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: postgresql-test
+      image: postgres:15
+      command:
+        - /bin/bash
+        - -c
+        - |
+          export PGPASSWORD="$POSTGRES_PASSWORD"
+          pg_isready -h {{ include "alertagent.postgresql.host" . }} -p 5432 -U {{ .Values.postgresql.auth.username }}
+          psql -h {{ include "alertagent.postgresql.host" . }} -U {{ .Values.postgresql.auth.username }} -d {{ .Values.postgresql.auth.database }} -c "SELECT version();"
+      env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "alertagent.fullname" . }}-postgresql-secret
+              key: postgres-password
+      resources:
+        limits:
+          cpu: 100m
+          memory: 128Mi
+        requests:
+          cpu: 50m
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 999
+        capabilities:
+          drop:
+            - ALL
+{{- end }}
+{{- if .Values.redis.enabled }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "alertagent.fullname" . }}-test-redis"
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "6"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: redis-test
+      image: redis:7.2-alpine
+      command:
+        - /bin/sh
+        - -c
+        - |
+          redis-cli -h {{ include "alertagent.redis.host" . }} -p {{ include "alertagent.redis.port" . }} -a "$REDIS_PASSWORD" ping
+          redis-cli -h {{ include "alertagent.redis.host" . }} -p {{ include "alertagent.redis.port" . }} -a "$REDIS_PASSWORD" set test-key "test-value"
+          redis-cli -h {{ include "alertagent.redis.host" . }} -p {{ include "alertagent.redis.port" . }} -a "$REDIS_PASSWORD" get test-key
+          redis-cli -h {{ include "alertagent.redis.host" . }} -p {{ include "alertagent.redis.port" . }} -a "$REDIS_PASSWORD" del test-key
+      env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "alertagent.fullname" . }}-redis-secret
+              key: redis-password
+      resources:
+        limits:
+          cpu: 100m
+          memory: 128Mi
+        requests:
+          cpu: 50m
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 999
+        capabilities:
+          drop:
+            - ALL
+{{- end }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "alertagent.fullname" . }}-test-metrics"
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "7"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: metrics-test
+      image: curlimages/curl:8.4.0
+      command: ['curl']
+      args: 
+        - '--fail'
+        - '--silent'
+        - '--show-error'
+        - '--max-time'
+        - '30'
+        - 'http://{{ include "alertagent.fullname" . }}-api:{{ .Values.config.metrics.port }}{{ .Values.config.metrics.path }}'
+      resources:
+        limits:
+          cpu: 100m
+          memory: 128Mi
+        requests:
+          cpu: 50m
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65534
+        capabilities:
+          drop:
+            - ALL

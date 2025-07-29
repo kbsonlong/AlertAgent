@@ -1,0 +1,125 @@
+1. Get the application URL by running these commands:
+{{- if .Values.api.ingress.enabled }}
+{{- range $host := .Values.api.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.api.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- else if contains "NodePort" .Values.api.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ include "alertagent.namespace" . }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "alertagent.fullname" . }}-api)
+  export NODE_IP=$(kubectl get nodes --namespace {{ include "alertagent.namespace" . }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.api.service.type }}
+     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+           You can watch the status of by running 'kubectl get --namespace {{ include "alertagent.namespace" . }} svc -w {{ include "alertagent.fullname" . }}-api'
+  export SERVICE_IP=$(kubectl get svc --namespace {{ include "alertagent.namespace" . }} {{ include "alertagent.fullname" . }}-api --template "{{ "{{" }} range (index .status.loadBalancer.ingress 0) {{ "}}" }}{{ "{{" }}.{{ "}}" }}{{ "{{" }} end {{ "}}" }}")
+  echo http://$SERVICE_IP:{{ .Values.api.service.port }}
+{{- else if contains "ClusterIP" .Values.api.service.type }}
+  export POD_NAME=$(kubectl get pods --namespace {{ include "alertagent.namespace" . }} -l "app.kubernetes.io/name={{ include "alertagent.name" . }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=api" -o jsonpath="{.items[0].metadata.name}")
+  export CONTAINER_PORT=$(kubectl get pod --namespace {{ include "alertagent.namespace" . }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+  echo "Visit http://127.0.0.1:8080 to use your application"
+  kubectl --namespace {{ include "alertagent.namespace" . }} port-forward $POD_NAME 8080:$CONTAINER_PORT
+{{- end }}
+
+2. AlertAgent Services Status:
+   - API Service: {{ if .Values.api.enabled }}✓ Enabled{{ else }}✗ Disabled{{ end }}
+   - Worker Service: {{ if .Values.worker.enabled }}✓ Enabled{{ else }}✗ Disabled{{ end }}
+   - Rule Server: {{ if .Values.ruleServer.enabled }}✓ Enabled{{ else }}✗ Disabled{{ end }}
+
+3. Database Configuration:
+{{- if .Values.postgresql.enabled }}
+   - PostgreSQL: ✓ Enabled ({{ .Values.postgresql.auth.database }})
+{{- end }}
+{{- if .Values.mysql.enabled }}
+   - MySQL: ✓ Enabled ({{ .Values.mysql.auth.database }})
+{{- end }}
+{{- if .Values.ruleServer.mysql.enabled }}
+   - Rule Server MySQL: ✓ Enabled ({{ .Values.secrets.mysql.database }})
+{{- end }}
+
+4. Cache Configuration:
+{{- if .Values.redis.enabled }}
+   - Redis: ✓ Enabled
+{{- end }}
+
+5. Monitoring Configuration:
+{{- if .Values.prometheus.enabled }}
+   - Prometheus: ✓ Enabled
+{{- if .Values.prometheus.ingress.enabled }}
+   - Prometheus URL: http{{ if .Values.prometheus.ingress.tls }}s{{ end }}://{{ .Values.prometheus.ingress.host }}
+{{- end }}
+{{- end }}
+{{- if .Values.grafana.enabled }}
+   - Grafana: ✓ Enabled
+{{- if .Values.grafana.ingress.enabled }}
+   - Grafana URL: http{{ if .Values.grafana.ingress.tls }}s{{ end }}://{{ .Values.grafana.ingress.host }}
+   - Default Admin: {{ .Values.grafana.adminUser }} / {{ .Values.grafana.adminPassword }}
+{{- end }}
+{{- end }}
+
+6. Get Database Credentials:
+{{- if .Values.postgresql.enabled }}
+   export POSTGRES_PASSWORD=$(kubectl get secret --namespace {{ include "alertagent.namespace" . }} {{ include "alertagent.fullname" . }}-postgresql-secret -o jsonpath="{.data.postgres-password}" | base64 -d)
+   echo "PostgreSQL Password: $POSTGRES_PASSWORD"
+{{- end }}
+{{- if .Values.redis.enabled }}
+   export REDIS_PASSWORD=$(kubectl get secret --namespace {{ include "alertagent.namespace" . }} {{ include "alertagent.fullname" . }}-redis-secret -o jsonpath="{.data.redis-password}" | base64 -d)
+   echo "Redis Password: $REDIS_PASSWORD"
+{{- end }}
+
+7. Check Application Health:
+   kubectl get pods -n {{ include "alertagent.namespace" . }} -l app.kubernetes.io/instance={{ .Release.Name }}
+   kubectl logs -n {{ include "alertagent.namespace" . }} -l app.kubernetes.io/instance={{ .Release.Name }} -f
+
+8. Scale Services:
+   # Scale API service
+   kubectl scale deployment {{ include "alertagent.fullname" . }}-api --replicas=3 -n {{ include "alertagent.namespace" . }}
+   
+   # Scale Worker service
+   kubectl scale deployment {{ include "alertagent.fullname" . }}-worker --replicas=5 -n {{ include "alertagent.namespace" . }}
+
+9. Useful Commands:
+   # View all resources
+   kubectl get all -n {{ include "alertagent.namespace" . }}
+   
+   # View configuration
+   kubectl get configmap {{ include "alertagent.fullname" . }}-config -n {{ include "alertagent.namespace" . }} -o yaml
+   
+   # View secrets (be careful!)
+   kubectl get secrets -n {{ include "alertagent.namespace" . }}
+   
+   # Port forward to services
+   kubectl port-forward svc/{{ include "alertagent.fullname" . }}-api 8080:{{ .Values.api.service.port }} -n {{ include "alertagent.namespace" . }}
+   
+   # View events
+   kubectl get events -n {{ include "alertagent.namespace" . }} --sort-by='.lastTimestamp'
+
+10. Troubleshooting:
+    # Check pod status
+    kubectl describe pods -n {{ include "alertagent.namespace" . }}
+    
+    # Check service endpoints
+    kubectl get endpoints -n {{ include "alertagent.namespace" . }}
+    
+    # Check ingress status
+    kubectl get ingress -n {{ include "alertagent.namespace" . }}
+    
+    # Check HPA status
+    kubectl get hpa -n {{ include "alertagent.namespace" . }}
+    
+    # Check network policies
+    kubectl get networkpolicy -n {{ include "alertagent.namespace" . }}
+
+{{- if .Values.config.features.aiAnalysis.enabled }}
+11. AI Analysis Service:
+    - Dify API: {{ .Values.config.features.aiAnalysis.difyApiUrl }}
+    - Model: {{ .Values.config.features.aiAnalysis.model }}
+{{- end }}
+
+{{- if .Values.config.tracing.enabled }}
+12. Tracing:
+    - Jaeger Endpoint: {{ .Values.config.tracing.jaegerEndpoint }}
+{{- end }}
+
+For more information, visit: https://github.com/your-org/alertagent
+Documentation: https://alertagent.docs.example.com

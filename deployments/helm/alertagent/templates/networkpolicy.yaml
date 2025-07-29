@@ -1,0 +1,240 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "alertagent.fullname" . }}
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "alertagent.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  ingress:
+    {{- with .Values.networkPolicy.ingress }}
+    {{- toYaml . | nindent 4 }}
+    {{- else }}
+    # 允许来自 Ingress Controller 的流量
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    
+    # 允许来自同一命名空间的流量
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: {{ include "alertagent.namespace" . }}
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+        - protocol: TCP
+          port: 9091
+    
+    # 允许来自监控命名空间的流量
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+    {{- end }}
+  
+  egress:
+    {{- with .Values.networkPolicy.egress }}
+    {{- toYaml . | nindent 4 }}
+    {{- else }}
+    # 允许 DNS 查询
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+    
+    # 允许访问数据库
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: {{ include "alertagent.namespace" . }}
+      ports:
+        - protocol: TCP
+          port: 5432  # PostgreSQL
+        - protocol: TCP
+          port: 6379  # Redis
+        - protocol: TCP
+          port: 3306  # MySQL
+    
+    # 允许访问外部服务（HTTPS）
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+    
+    # 允许访问 Jaeger（如果启用追踪）
+    {{- if .Values.config.tracing.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: jaeger
+      ports:
+        - protocol: TCP
+          port: 14268
+    {{- end }}
+    {{- end }}
+{{- end }}
+
+---
+# API 服务专用网络策略
+{{- if and .Values.api.enabled .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "alertagent.fullname" . }}-api
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.api.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "alertagent.api.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  ingress:
+    # 允许来自 Ingress Controller 的 HTTP 流量
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    
+    # 允许来自 Prometheus 的指标收集
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+    
+    # 允许来自同一命名空间的服务间通信
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: {{ include "alertagent.namespace" . }}
+      ports:
+        - protocol: TCP
+          port: 8080
+  
+  egress:
+    # 继承通用出站规则
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: {{ include "alertagent.namespace" . }}
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+{{- end }}
+
+---
+# Worker 服务专用网络策略
+{{- if and .Values.worker.enabled .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "alertagent.fullname" . }}-worker
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.worker.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "alertagent.worker.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  ingress:
+    # 允许来自 Prometheus 的指标收集
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+    
+    # 允许来自同一命名空间的健康检查
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: {{ include "alertagent.namespace" . }}
+      ports:
+        - protocol: TCP
+          port: 9091
+  
+  egress:
+    # 继承通用出站规则
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: {{ include "alertagent.namespace" . }}
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+    
+    # 允许访问通知服务（SMTP、钉钉等）
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 587   # SMTP
+        - protocol: TCP
+          port: 465   # SMTPS
+        - protocol: TCP
+          port: 25    # SMTP
+{{- end }}

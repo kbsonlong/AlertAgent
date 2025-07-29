@@ -1,0 +1,26 @@
+{{- if .Values.resourceQuota.enabled }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "alertagent.fullname" . }}-quota
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+spec:
+  hard:
+    {{- toYaml .Values.resourceQuota.hard | nindent 4 }}
+{{- end }}
+
+---
+{{- if .Values.limitRange.enabled }}
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: {{ include "alertagent.fullname" . }}-limits
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+spec:
+  limits:
+    {{- toYaml .Values.limitRange.limits | nindent 4 }}
+{{- end }}
