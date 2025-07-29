@@ -1,28 +1,28 @@
 version: '3.8'
 
 services:
-  # MySQL 数据库
-  mysql:
-    image: mysql:8.0
-    container_name: alertagent-mysql
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: alertagent-postgres
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: along123
-      MYSQL_DATABASE: alert_agent
-      MYSQL_USER: alertagent
-      MYSQL_PASSWORD: alertagent123
+      POSTGRES_DB: alert_agent
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
-    command: --default-authentication-plugin=mysql_native_password
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     networks:
       - alertagent-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 20s
-      retries: 10
+      test: ["CMD-SHELL", "pg_isready -U postgres -d alert_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Redis 缓存
   redis:
@@ -59,20 +59,40 @@ services:
   #     retries: 5
   #     start_period: 30s
 
-  # # 可选：phpMyAdmin 数据库管理工具
-  # phpmyadmin:
-  #   image: phpmyadmin/phpmyadmin:latest
-  #   container_name: alertagent-phpmyadmin
+  # 数据库迁移服务 (一次性运行)
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    container_name: alertagent-migrate
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: password
+      DB_NAME: alert_agent
+      LOG_LEVEL: info
+    networks:
+      - alertagent-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - migration
+    restart: "no"
+
+  # # 可选：pgAdmin 数据库管理工具
+  # pgadmin:
+  #   image: dpage/pgadmin4:latest
+  #   container_name: alertagent-pgadmin
   #   restart: unless-stopped
   #   environment:
-  #     PMA_HOST: mysql
-  #     PMA_PORT: 3306
-  #     PMA_USER: root
-  #     PMA_PASSWORD: along123
+  #     PGADMIN_DEFAULT_EMAIL: admin@example.com
+  #     PGADMIN_DEFAULT_PASSWORD: admin
   #   ports:
   #     - "8081:80"
   #   depends_on:
-  #     - mysql
+  #     - postgres
   #   networks:
   #     - alertagent-network
 
@@ -91,7 +111,7 @@ services:
   #     - alertagent-network
 
 volumes:
-  mysql_data:
+  postgres_data:
     driver: local
   redis_data:
     driver: local

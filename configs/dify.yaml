@@ -1,0 +1,147 @@
+# Dify AI分析服务配置
+dify:
+  # 基础配置
+  base_url: "https://api.dify.ai"
+  api_key: "${DIFY_API_KEY}"  # 从环境变量获取
+  app_token: "${DIFY_APP_TOKEN}"  # 从环境变量获取
+  user_id: "alert-agent"
+  
+  # HTTP客户端配置
+  timeout: "30s"
+  retry_attempts: 3
+  retry_delay: "1s"
+  max_idle_conns: 10
+  max_conns_per_host: 10
+  
+  # 工作流配置
+  workflow:
+    # 默认工作流ID
+    default_workflow_id: "default-alert-analysis"
+    
+    # 工作流映射（告警类型 -> 工作流ID）
+    workflow_mapping:
+      cpu_high: "cpu-analysis-workflow"
+      memory_high: "memory-analysis-workflow"
+      disk_full: "disk-analysis-workflow"
+      network_error: "network-analysis-workflow"
+      application_error: "app-analysis-workflow"
+      database_error: "db-analysis-workflow"
+      security_alert: "security-analysis-workflow"
+    
+    # 执行配置
+    max_execution_time: "5m"
+    polling_interval: "2s"
+    max_polling_time: "10m"
+  
+  # 知识库配置
+  knowledge:
+    # 默认数据集ID列表
+    default_dataset_ids:
+      - "general-troubleshooting"
+      - "best-practices"
+      - "common-solutions"
+    
+    # 数据集映射（告警类型 -> 数据集ID列表）
+    dataset_mapping:
+      cpu_high:
+        - "cpu-performance"
+        - "system-optimization"
+        - "resource-management"
+      memory_high:
+        - "memory-management"
+        - "memory-leaks"
+        - "gc-tuning"
+      disk_full:
+        - "storage-management"
+        - "disk-cleanup"
+        - "capacity-planning"
+      network_error:
+        - "network-troubleshooting"
+        - "connectivity-issues"
+        - "dns-problems"
+      application_error:
+        - "application-logs"
+        - "error-patterns"
+        - "debugging-guides"
+      database_error:
+        - "database-performance"
+        - "query-optimization"
+        - "connection-issues"
+      security_alert:
+        - "security-incidents"
+        - "threat-analysis"
+        - "compliance-guides"
+    
+    # 搜索配置
+    search_limit: 10
+    similarity_score: 0.7
+  
+  # 分析配置
+  analysis:
+    # 并发配置
+    max_concurrent_tasks: 10
+    task_queue_size: 100
+    
+    # 超时配置
+    analysis_timeout: "10m"
+    context_timeout: "30s"
+    
+    # 重试配置
+    max_retries: 3
+    retry_interval: "5s"
+    
+    # 结果配置
+    result_ttl: "24h"
+    max_result_size: 1048576  # 1MB
+    enable_metrics: true
+    enable_tracing: false
+
+# 示例环境变量配置
+# 在 .env 文件中设置：
+# DIFY_API_KEY=your-actual-api-key
+# DIFY_APP_TOKEN=your-actual-app-token
+
+# 生产环境建议配置
+production:
+  dify:
+    # 生产环境使用更保守的配置
+    timeout: "60s"
+    retry_attempts: 5
+    retry_delay: "2s"
+    
+    workflow:
+      max_execution_time: "10m"
+      polling_interval: "5s"
+      max_polling_time: "20m"
+    
+    analysis:
+      max_concurrent_tasks: 20
+      task_queue_size: 500
+      analysis_timeout: "15m"
+      max_retries: 5
+      retry_interval: "10s"
+      result_ttl: "72h"  # 保留更长时间
+      enable_metrics: true
+      enable_tracing: true  # 生产环境启用追踪
+
+# 开发环境配置
+development:
+  dify:
+    # 开发环境使用更快的配置
+    timeout: "15s"
+    retry_attempts: 2
+    
+    workflow:
+      max_execution_time: "2m"
+      polling_interval: "1s"
+      max_polling_time: "5m"
+    
+    analysis:
+      max_concurrent_tasks: 5
+      task_queue_size: 50
+      analysis_timeout: "5m"
+      max_retries: 2
+      retry_interval: "3s"
+      result_ttl: "6h"  # 开发环境保留时间较短
+      enable_metrics: true
+      enable_tracing: true

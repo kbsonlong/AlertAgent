@@ -36,3 +36,20 @@ log:
     max_age: 7
     max_backups: 10
     compress: true
+features:
+    enabled: true
+    config_path: "config/features.yaml"
+    monitoring_enabled: true
+    ai_maturity_enabled: true
+    default_phase: "phase_one"
+    auto_degradation_enabled: true
+    metrics_retention_hours: 168  # 7 days
+    alerting:
+        enabled: true
+        webhook_url: ""
+        slack_channel: "#alerts"
+        email_recipients: []
+        alert_thresholds:
+            error_rate: 0.05
+            latency_p99: 1000
+            ai_accuracy_drop: 0.1

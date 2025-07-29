@@ -1,4 +1,4 @@
-# AlertAgent 重新架构设计文档
+# AlertAgent 架构设计文档
 
 **文档版本**: v1.0  
 **创建时间**: 2024-12-19  
@@ -7,7 +7,7 @@
 
 ## 1. 架构概述
 
-### 1.1 重新定位
+### 1.1 定位
 
 AlertAgent 从原有的独立告警系统重新定位为**智能告警管理和分发中心**，与 Alertmanager、n8n+Dify 形成完整的智能告警处理生态系统。
 
@@ -39,17 +39,22 @@ AlertAgent 从原有的独立告警系统重新定位为**智能告警管理和�
 │  │ │ 智能网关     │ │────│ │ 通知分发器   │ │────│ │ 决策引擎     │ │         │
 │  │ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │         │
 │  │ ┌─────────────┐ │    │                 │    │ ┌─────────────┐ │         │
-│  │ │ API 网关     │ │    │                 │    │ │ 知识库       │ │         │
+│  │ │ 渠道管理器   │ │    │                 │    │ │ 知识库       │ │         │
 │  │ └─────────────┘ │    │                 │    │ └─────────────┘ │         │
+│  │ ┌─────────────┐ │    │                 │    │                 │         │
+│  │ │ API 网关     │ │    │                 │    │                 │         │
+│  │ └─────────────┘ │    │                 │    │                 │         │
 │  └─────────────────┘    └─────────────────┘    └─────────────────┘         │
 │           │                       │                       │                │
 │           ▼                       ▼                       ▼                │
 │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐         │
 │  │   数据存储层     │    │   监控数据源     │    │   外部通知渠道   │         │
 │  │                 │    │                 │    │                 │         │
-│  │ • MySQL         │    │ • Prometheus    │    │ • 邮件           │         │
-│  │ • Redis         │    │ • VictoriaMetrics│   │ • 钉钉           │         │
-│  │ • InfluxDB      │    │ • Grafana       │    │ • 微信           │         │
+│  │ • MySQL         │    │ • Prometheus    │    │ • 钉钉           │         │
+│  │ • Redis         │    │ • VictoriaMetrics│   │ • 企业微信       │         │
+│  │ • InfluxDB      │    │ • Grafana       │    │ • 邮件           │         │
+│  │                 │    │                 │    │ • Webhook        │         │
+│  │                 │    │                 │    │ • Slack          │         │
 │  └─────────────────┘    └─────────────────┘    └─────────────────┘         │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -58,7 +63,70 @@ AlertAgent 从原有的独立告警系统重新定位为**智能告警管理和�
 
 ### 3.1 AlertAgent - 智能告警管理中心
 
-#### 3.1.1 规则管理器 (Rule Manager)
+#### 3.1.1 告警渠道管理器 (Channel Manager)
+
+**职责**:
+- 多种告警渠道的统一管理
+- 渠道配置的验证和测试
+- 渠道健康状态监控
+- 插件化渠道扩展支持
+
+**核心功能**:
+```go
+type ChannelManager struct {
+    pluginManager *PluginManager
+    healthChecker *HealthChecker
+    channelRepo   repository.ChannelRepository
+    configCrypto  ConfigCrypto
+}
+
+// 渠道创建和管理
+func (cm *ChannelManager) CreateChannel(req *CreateChannelRequest) (*Channel, error)
+func (cm *ChannelManager) UpdateChannel(id string, req *UpdateChannelRequest) (*Channel, error)
+func (cm *ChannelManager) DeleteChannel(id string) error
+
+// 消息发送
+func (cm *ChannelManager) SendMessage(channelID string, message *Message) error
+func (cm *ChannelManager) BroadcastMessage(channelIDs []string, message *Message) error
+
+// 渠道测试和健康检查
+func (cm *ChannelManager) TestChannel(id string) error
+func (cm *ChannelManager) GetChannelHealth(id string) (*HealthStatus, error)
+```
+
+**支持的渠道类型**:
+- **钉钉**: 支持群机器人Webhook、签名验证、@功能
+- **企业微信**: 支持应用消息推送、部门和用户消息
+- **邮件**: 支持SMTP发送、HTML/文本格式、模板渲染
+- **Webhook**: 支持自定义HTTP请求、认证、重试机制
+- **Slack**: 支持Bot API、频道消息、用户私信
+- **自定义插件**: 支持插件化扩展新的渠道类型
+
+**插件架构设计**:
+```go
+// 渠道插件标准接口
+type ChannelPlugin interface {
+    GetType() string
+    GetName() string
+    GetConfigSchema() *ConfigSchema
+    ValidateConfig(config map[string]interface{}) error
+    TestConnection(config map[string]interface{}) error
+    SendMessage(config map[string]interface{}, message *Message) error
+    GetHealthStatus(config map[string]interface{}) (*HealthStatus, error)
+}
+
+// 插件管理器
+type PluginManager struct {
+    plugins map[string]ChannelPlugin
+    mutex   sync.RWMutex
+}
+
+func (pm *PluginManager) RegisterPlugin(plugin ChannelPlugin) error
+func (pm *PluginManager) GetPlugin(pluginType string) (ChannelPlugin, error)
+func (pm *PluginManager) ListPlugins() []PluginInfo
+```
+
+#### 3.1.2 规则管理器 (Rule Manager)
 
 **职责**:
 - 告警规则的 CRUD 操作
@@ -1612,7 +1680,125 @@ sequenceDiagram
 
 ### 5.1 AlertAgent API
 
-#### 5.1.1 规则管理 API
+#### 5.1.1 告警渠道管理 API
+
+```go
+// 创建告警渠道
+POST /api/v1/channels
+{
+  "name": "运维钉钉群",
+  "type": "dingtalk",
+  "description": "运维团队钉钉群通知",
+  "config": {
+    "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=xxx",
+    "secret": "SEC123456789",
+    "at_mobiles": "13800138000\n13900139000",
+    "at_all": "false"
+  },
+  "group_id": "group-ops",
+  "tags": ["urgent", "ops"]
+}
+
+// 更新告警渠道
+PUT /api/v1/channels/{id}
+{
+  "name": "运维钉钉群-更新",
+  "description": "更新后的描述",
+  "config": {
+    "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=new_token",
+    "secret": "NEW_SECRET"
+  }
+}
+
+// 获取渠道列表
+GET /api/v1/channels?type=dingtalk&group_id=group-ops&status=active&page=1&page_size=20
+{
+  "channels": [
+    {
+      "id": "channel-123",
+      "name": "运维钉钉群",
+      "type": "dingtalk",
+      "description": "运维团队钉钉群通知",
+      "group_id": "group-ops",
+      "tags": ["urgent", "ops"],
+      "status": "active",
+      "health_status": "healthy",
+      "last_health_check": "2024-12-19T10:00:00Z",
+      "created_at": "2024-12-19T09:00:00Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "page_size": 20
+}
+
+// 测试渠道连接
+POST /api/v1/channels/{id}/test
+{
+  "status": "success",
+  "message": "测试消息发送成功",
+  "response_time": 150
+}
+
+// 发送消息到渠道
+POST /api/v1/channels/{id}/send
+{
+  "title": "告警通知",
+  "content": "CPU使用率过高，当前值85%",
+  "level": "warning",
+  "labels": {
+    "instance": "server-1",
+    "severity": "warning"
+  }
+}
+
+// 获取插件列表
+GET /api/v1/plugins
+{
+  "plugins": [
+    {
+      "type": "dingtalk",
+      "name": "钉钉",
+      "schema": {
+        "fields": [
+          {
+            "name": "webhook_url",
+            "type": "text",
+            "label": "Webhook URL",
+            "required": true,
+            "validation": {
+              "pattern": "^https://oapi\\.dingtalk\\.com/robot/send\\?access_token=.*"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+
+// 获取渠道统计
+GET /api/v1/channels/{id}/stats?start_date=2024-12-01&end_date=2024-12-19
+{
+  "channel_id": "channel-123",
+  "stats": [
+    {
+      "date": "2024-12-19",
+      "total_messages": 45,
+      "success_messages": 43,
+      "failed_messages": 2,
+      "success_rate": 95.6,
+      "avg_response_time": 120
+    }
+  ],
+  "summary": {
+    "total_messages": 850,
+    "success_rate": 97.2,
+    "avg_response_time": 115
+  }
+}
+```
+
+#### 5.1.2 规则管理 API
 
 ```go
 // 创建告警规则
@@ -1630,7 +1816,8 @@ POST /api/v1/rules
     "summary": "High CPU usage detected",
     "description": "CPU usage is above 80% for 5 minutes"
   },
-  "targets": ["cluster-1", "cluster-2"]
+  "targets": ["cluster-1", "cluster-2"],
+  "notification_channels": ["channel-123", "channel-456"]
 }
 
 // 规则分发状态
@@ -1859,6 +2046,37 @@ database:
     host: "redis"
     port: 6379
     database: 0
+
+# 告警渠道配置
+channels:
+  # 配置加密密钥
+  encryption_key: "your-32-byte-encryption-key-here"
+  
+  # 健康检查配置
+  health_check:
+    enabled: true
+    interval: "5m"
+    timeout: "30s"
+    retry_attempts: 3
+  
+  # 插件配置
+  plugins:
+    enabled: ["dingtalk", "wechat", "email", "webhook", "slack"]
+    plugin_dir: "/app/plugins"
+  
+  # 消息发送配置
+  message:
+    async_send: true
+    queue_size: 1000
+    worker_count: 10
+    retry_attempts: 3
+    retry_interval: "30s"
+  
+  # 限流配置
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60
+    burst_size: 10
 
 alertmanager:
   clusters:
@@ -2167,6 +2385,84 @@ inhibit_rules:
 ### 7.1 核心表结构
 
 ```sql
+-- 告警渠道表
+CREATE TABLE alert_channels (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    description TEXT,
+    config JSON NOT NULL,
+    group_id VARCHAR(36),
+    tags JSON,
+    status ENUM('active', 'inactive', 'error') DEFAULT 'active',
+    health_status ENUM('healthy', 'unhealthy', 'unknown') DEFAULT 'unknown',
+    last_health_check TIMESTAMP NULL,
+    health_error_message TEXT,
+    created_by VARCHAR(36),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_type (type),
+    INDEX idx_status (status),
+    INDEX idx_group_id (group_id),
+    INDEX idx_created_by (created_by)
+);
+
+-- 渠道分组表
+CREATE TABLE channel_groups (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    parent_id VARCHAR(36),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (parent_id) REFERENCES channel_groups(id) ON DELETE SET NULL,
+    INDEX idx_parent_id (parent_id)
+);
+
+-- 渠道模板表
+CREATE TABLE channel_templates (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    description TEXT,
+    config_template JSON NOT NULL,
+    created_by VARCHAR(36),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_type (type),
+    INDEX idx_created_by (created_by)
+);
+
+-- 渠道使用统计表
+CREATE TABLE channel_usage_stats (
+    id VARCHAR(36) PRIMARY KEY,
+    channel_id VARCHAR(36) NOT NULL,
+    date DATE NOT NULL,
+    total_messages INT DEFAULT 0,
+    success_messages INT DEFAULT 0,
+    failed_messages INT DEFAULT 0,
+    avg_response_time INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (channel_id) REFERENCES alert_channels(id) ON DELETE CASCADE,
+    UNIQUE KEY uk_channel_date (channel_id, date),
+    INDEX idx_date (date)
+);
+
+-- 渠道权限表
+CREATE TABLE channel_permissions (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    channel_id VARCHAR(36) NOT NULL,
+    permission ENUM('read', 'write', 'admin') NOT NULL,
+    granted_by VARCHAR(36),
+    granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (channel_id) REFERENCES alert_channels(id) ON DELETE CASCADE,
+    UNIQUE KEY uk_user_channel (user_id, channel_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_channel_id (channel_id)
+);
+
 -- Alertmanager 集群管理表
 CREATE TABLE alertmanager_clusters (
     id VARCHAR(36) PRIMARY KEY,
@@ -2317,6 +2613,10 @@ ALTER TABLE alerts ADD COLUMN ai_analysis_id VARCHAR(36);
 ALTER TABLE alerts ADD COLUMN convergence_id VARCHAR(36);
 ALTER TABLE alerts ADD COLUMN auto_resolved BOOLEAN DEFAULT FALSE;
 ALTER TABLE alerts ADD COLUMN resolution_method VARCHAR(100);
+ALTER TABLE alerts ADD COLUMN notification_channels JSON; -- 关联的通知渠道
+
+-- 扩展 rules 表，添加渠道关联
+ALTER TABLE rules ADD COLUMN notification_channels JSON AFTER annotations; -- 关联的通知渠道列表
 
 -- 添加外键约束
 ALTER TABLE alerts ADD FOREIGN KEY (cluster_id) REFERENCES alertmanager_clusters(id);
@@ -3182,33 +3482,49 @@ logging:
 
 ### 10.1 第一阶段：基础架构搭建（4-6周）
 
-**目标**: 建立 AlertAgent 与 Alertmanager 的基础集成
+**目标**: 建立 AlertAgent 与 Alertmanager 的基础集成，实现告警渠道管理
 
 **主要任务**:
 1. **重构 AlertAgent 核心架构**
+   - 实现告警渠道管理器
    - 实现规则管理器
    - 开发集群管理器
    - 构建智能网关基础框架
 
-2. **Alertmanager 集成**
+2. **告警渠道管理系统**
+   - 设计和实现插件架构
+   - 开发核心渠道插件（钉钉、企微、邮件、Webhook、Slack）
+   - 实现渠道配置管理和验证
+   - 建立渠道健康检查机制
+
+3. **Alertmanager 集成**
    - 实现配置文件动态生成
    - 开发规则分发机制
    - 建立健康检查系统
 
-3. **数据库扩展**
+4. **数据库扩展**
+   - 新增告警渠道相关表
    - 新增集群管理表
    - 扩展规则分发记录
    - 实现数据迁移脚本
 
-4. **基础 API 开发**
+5. **基础 API 开发**
+   - 告警渠道管理 API
    - 规则管理 API
    - 集群管理 API
    - 健康检查 API
 
+6. **前端界面开发**
+   - 渠道管理界面
+   - 渠道配置表单
+   - 渠道状态监控
+
 **交付物**:
+- 完整的告警渠道管理系统
 - 可运行的 AlertAgent + Alertmanager 集成系统
 - 基础的规则分发功能
 - 集群管理界面
+- 渠道管理前端界面
 - 部署文档
 
 ### 10.2 第二阶段：智能分析集成（6-8周）
@@ -3308,10 +3624,11 @@ logging:
 
 ### 11.1 架构优势
 
-1. **职责分离**: AlertAgent 专注规则管理，Alertmanager 专注告警执行，各司其职
+1. **职责分离**: AlertAgent 专注规则和渠道管理，Alertmanager 专注告警执行，各司其职
 2. **技术解耦**: 通过标准接口集成，降低技术栈耦合度
 3. **水平扩展**: 支持多集群管理，可根据需求灵活扩展
 4. **高可用性**: 分布式架构设计，单点故障不影响整体服务
+5. **插件化设计**: 告警渠道采用插件架构，易于扩展新的通知方式
 
 ### 11.2 智能化优势
 
@@ -3319,20 +3636,23 @@ logging:
 2. **自动化处理**: 通过 n8n 实现复杂的自动化工作流
 3. **持续学习**: 基于处理结果的反馈学习机制
 4. **知识积累**: 构建运维知识库，提升处理效率
+5. **智能路由**: 基于告警内容和历史数据智能选择通知渠道
 
 ### 11.3 运维优势
 
-1. **统一管理**: 集中管理多个 Alertmanager 集群
-2. **可视化操作**: 提供友好的 Web 界面
-3. **监控完善**: 全面的监控指标和健康检查
+1. **统一管理**: 集中管理多个 Alertmanager 集群和告警渠道
+2. **可视化操作**: 提供友好的 Web 界面，支持渠道配置和状态监控
+3. **监控完善**: 全面的监控指标和健康检查，包括渠道可用性监控
 4. **易于维护**: 标准化的部署和运维流程
+5. **多渠道支持**: 统一管理钉钉、企微、邮件、Webhook、Slack等多种通知渠道
 
 ### 11.4 扩展性优势
 
-1. **插件化设计**: 支持自定义分析插件和处理器
+1. **插件化设计**: 支持自定义分析插件、处理器和告警渠道插件
 2. **开放接口**: 标准的 REST API 和 Webhook 接口
 3. **多云支持**: 支持不同云平台和环境部署
 4. **生态兼容**: 与现有监控生态系统无缝集成
+5. **渠道扩展**: 通过插件接口轻松添加新的告警渠道类型
 
 ---
 

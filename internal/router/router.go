@@ -3,14 +3,16 @@ package router
 import (
 	v1 "alert_agent/internal/api/v1"
 	"alert_agent/internal/middleware"
+	"alert_agent/internal/pkg/logger"
 	"alert_agent/internal/pkg/queue"
 	"alert_agent/internal/pkg/redis"
+	"alert_agent/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
 // RegisterRoutes 注册所有路由
-func RegisterRoutes(r *gin.Engine) {
+func RegisterRoutes(r *gin.Engine, featureService *service.FeatureService) {
 	// 中间件
 	r.Use(middleware.Logger())
 	r.Use(middleware.Recovery())
@@ -104,6 +106,26 @@ func RegisterRoutes(r *gin.Engine) {
 			providers.PUT("/:id", v1.UpdateProvider)
 			providers.DELETE("/:id", v1.DeleteProvider)
 			providers.POST("/test", v1.TestProvider)
+		}
+
+		// 功能开关管理
+		if featureService != nil {
+			featureHandler := v1.NewFeatureHandler(featureService, logger.L)
+			features := apiV1.Group("/features")
+			{
+				features.GET("", featureHandler.ListFeatures)
+				features.GET("/:name", featureHandler.GetFeature)
+				features.PUT("/:name", featureHandler.UpdateFeature)
+				features.GET("/:name/check", featureHandler.CheckFeature)
+				features.GET("/:name/ai-maturity", featureHandler.GetAIMaturity)
+				features.POST("/:name/ai-metrics", featureHandler.RecordAIMetrics)
+				features.GET("/:name/monitoring", featureHandler.GetMonitoringReport)
+				features.POST("/phases/:phase/enable", featureHandler.EnablePhase)
+				features.POST("/phases/:phase/disable", featureHandler.DisablePhase)
+				features.GET("/alerts", featureHandler.GetActiveAlerts)
+				features.GET("/export", featureHandler.ExportConfig)
+				features.POST("/import", featureHandler.ImportConfig)
+			}
 		}
 	}
 }

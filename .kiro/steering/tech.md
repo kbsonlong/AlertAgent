@@ -1,72 +1,101 @@
-# 技术栈
+# Technology Stack
 
-## 后端 (Go)
-- **框架**: Gin Web 框架
-- **ORM**: GORM 数据库操作
-- **数据库**: MySQL 8.0+ 主存储
-- **缓存**: Redis 6.0+ 缓存和队列管理
-- **日志**: Zap 结构化日志，logrus 备用
-- **配置**: 基于 YAML 的配置管理
-- **AI 集成**: Ollama 本地大语言模型推理
+## Backend Stack
 
-### 核心依赖
-- `github.com/gin-gonic/gin` - HTTP Web 框架
-- `gorm.io/gorm` + `gorm.io/driver/mysql` - ORM 和 MySQL 驱动
-- `github.com/redis/go-redis/v9` - Redis 客户端
-- `go.uber.org/zap` - 结构化日志
-- `gopkg.in/yaml.v3` - YAML 配置解析
+- **Language**: Go 1.21+
+- **Web Framework**: Gin (HTTP router and middleware)
+- **ORM**: GORM (database abstraction layer)
+- **Database**: MySQL 8.0+ (primary storage)
+- **Cache**: Redis 6.0+ (caching and task queue)
+- **Logging**: Zap (structured logging)
+- **Configuration**: YAML-based config with hot reload via fsnotify
+- **AI Integration**: Ollama (local AI model inference)
 
-## 前端 (React/TypeScript)
-- **框架**: React 19 + TypeScript
-- **UI 组件库**: Ant Design (antd) 5.24+
-- **路由**: React Router DOM 7.4+
-- **HTTP 客户端**: Axios API 请求
-- **构建工具**: Vite 6.2+
-- **Markdown**: react-markdown 渲染分析结果
+## Frontend Stack
 
-### 核心依赖
-- `react` + `react-dom` - React 核心框架
-- `antd` + `@ant-design/icons` - UI 组件和图标
-- `react-router-dom` - 客户端路由
-- `axios` - API 调用的 HTTP 客户端
-- `typescript` - 类型安全和开发体验
+- **Framework**: React 19.0+ with TypeScript
+- **Build Tool**: Vite 6.2+
+- **UI Library**: Ant Design 5.24+
+- **HTTP Client**: Axios 1.8+
+- **Routing**: React Router DOM 7.4+
+- **Icons**: Ant Design Icons 6.0+
 
-## 开发命令
+## Development Tools
 
-### 后端
+- **Package Management**: Go modules, npm
+- **Code Quality**: ESLint, golangci-lint
+- **Hot Reload**: Air (Go), Vite (React)
+- **Container**: Docker & Docker Compose for development environment
+
+## Common Commands
+
+### Development Environment
+
 ```bash
-# 安装依赖
-go mod download
+# Start local development environment
+make dev
 
-# 运行开发服务器
+# Start Docker development environment  
+make docker-dev
+
+# Stop development environment
+make dev-stop
+make docker-dev-stop
+
+# Check environment setup
+make check
+```
+
+### Project Management
+
+```bash
+# Install dependencies
+make deps
+
+# Build project
+make build
+
+# Run tests
+make test
+
+# Code linting
+make lint
+
+# Clean build artifacts
+make clean
+```
+
+### Backend Development
+
+```bash
+# Run Go application
 go run cmd/main.go
 
-# 构建二进制文件
-go build -o bin/alert_agent cmd/main.go
+# Install Go dependencies
+go mod download && go mod tidy
 
-# 初始化数据库
-mysql -u root -p < scripts/init.sql
+# Run Go tests
+go test -v ./...
 ```
 
-### 前端
+### Frontend Development
+
 ```bash
-# 安装依赖
+# Start React dev server
+cd web && npm run dev
+
+# Install frontend dependencies
 cd web && npm install
 
-# 开发服务器
-npm run dev
+# Build frontend
+cd web && npm run build
 
-# 生产构建
-npm run build
-
-# 代码检查
-npm run lint
-
-# 预览生产构建
-npm run preview
+# Lint frontend code
+cd web && npm run lint
 ```
 
-## 配置文件
-- 后端配置: `config/config.yaml`
-- 前端环境: `web/.env`
-- 数据库初始化: `scripts/init.sql`
+## Configuration
+
+- **Backend Config**: `config/config.yaml` (hot-reloadable)
+- **Frontend Config**: Environment variables in `web/.env`
+- **Docker Config**: `docker-compose.dev.yml` for development services

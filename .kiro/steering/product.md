@@ -1,24 +1,25 @@
-# 产品概述
+# Product Overview
 
-## 运维告警管理系统
+## AlertAgent - 运维告警管理系统
 
-基于 Go/Gin 后端和 React/TypeScript 前端构建的综合告警管理系统，集成 Ollama 本地知识库实现智能告警分析。
+AlertAgent is an operations alert management system built with Go (Gin) backend and React frontend, integrated with Ollama for intelligent alert analysis.
 
-### 核心功能
+### Core Features
 
-- **告警管理**: 创建、追踪和管理告警，支持状态流转（新建 → 已确认 → 已解决）
-- **规则引擎**: 配置告警规则，支持灵活的触发条件和通知策略
-- **通知系统**: 多渠道通知（邮件、短信、webhook），支持模板管理和分组路由
-- **AI 分析**: 使用本地 Ollama 模型进行智能告警分析：
-  - 告警分析和处理建议
-  - 相似告警检测
-  - 知识库集成
-- **知识库**: 将处理过的告警转换为可复用的知识条目
+- **Alert Rule Management**: Configure alert rules with flexible trigger conditions
+- **Alert Record Management**: Track alert events with status flow (new → acknowledged → resolved)
+- **Notification Management**: Multi-channel notifications (email, SMS, webhook) with group management
+- **Template Management**: Customizable notification templates with variable support
+- **AI-Powered Analysis**: Ollama integration for intelligent alert analysis and solution recommendations
 
-### 关键组件
+### Key Components
 
-- 告警记录，支持严重程度分级（严重、高、中、低）
-- 支持变量替换的通知模板
-- 针对性告警的通知组
-- 基于 Redis 的异步处理队列
-- MySQL 数据持久化和 Redis 缓存
+- **Backend**: RESTful API server handling alert processing, rule management, and AI analysis
+- **Frontend**: React-based web interface for alert monitoring and management
+- **Database**: MySQL for persistent storage with Redis for caching and queuing
+- **AI Integration**: Ollama for local AI model inference and alert analysis
+- **Queue System**: Redis-based task queue for asynchronous alert processing
+
+### Target Users
+
+Operations teams, DevOps engineers, and system administrators who need intelligent alert management and automated incident response capabilities.

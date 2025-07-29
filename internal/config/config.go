@@ -48,6 +48,28 @@ type Config struct {
 		MaxRetries   int    `yaml:"max_retries"`
 		DialTimeout  int    `yaml:"dial_timeout"`
 	} `yaml:"redis"`
+	Features FeatureConfig `yaml:"features"`
+}
+
+// FeatureConfig 功能开关配置
+type FeatureConfig struct {
+	Enabled                bool                   `yaml:"enabled"`                  // 是否启用功能开关系统
+	ConfigPath             string                 `yaml:"config_path"`              // 功能配置文件路径
+	MonitoringEnabled      bool                   `yaml:"monitoring_enabled"`       // 是否启用监控
+	AIMaturityEnabled      bool                   `yaml:"ai_maturity_enabled"`      // 是否启用AI成熟度评估
+	DefaultPhase           string                 `yaml:"default_phase"`            // 默认阶段
+	AutoDegradationEnabled bool                   `yaml:"auto_degradation_enabled"` // 是否启用自动降级
+	MetricsRetentionHours  int                    `yaml:"metrics_retention_hours"`  // 指标保留时间
+	AlertingConfig         FeatureAlertingConfig  `yaml:"alerting"`                 // 告警配置
+}
+
+// FeatureAlertingConfig 功能告警配置
+type FeatureAlertingConfig struct {
+	Enabled           bool                   `yaml:"enabled"`
+	WebhookURL        string                 `yaml:"webhook_url"`
+	SlackChannel      string                 `yaml:"slack_channel"`
+	EmailRecipients   []string               `yaml:"email_recipients"`
+	AlertThresholds   map[string]float64     `yaml:"alert_thresholds"`
 }
 
 // OllamaConfig Ollama配置

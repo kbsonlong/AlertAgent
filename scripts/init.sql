@@ -1,7 +1,76 @@
--- 创建数据库
-CREATE DATABASE IF NOT EXISTS alert_agent DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- AlertAgent PostgreSQL 数据库初始化脚本
+-- 设置数据库配置
 
-USE alert_agent;
+-- 创建扩展
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+CREATE EXTENSION IF NOT EXISTS "btree_gin";
+
+-- 设置时区
+SET timezone = 'Asia/Shanghai';
+
+-- 创建自定义类型
+DO $$ BEGIN
+    CREATE TYPE alert_status AS ENUM ('pending', 'firing', 'resolved', 'silenced');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE rule_status AS ENUM ('active', 'inactive', 'draft');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE channel_type AS ENUM ('email', 'slack', 'webhook', 'dingtalk', 'wechat', 'sms');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE processing_status AS ENUM ('pending', 'processing', 'completed', 'failed', 'skipped');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+-- 创建函数：更新 updated_at 字段
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- 创建函数：生成短 UUID
+CREATE OR REPLACE FUNCTION generate_short_uuid()
+RETURNS TEXT AS $$
+BEGIN
+    RETURN SUBSTRING(REPLACE(uuid_generate_v4()::TEXT, '-', ''), 1, 12);
+END;
+$$ language 'plpgsql';
+
+-- 设置默认权限
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO postgres;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO postgres;
+
+-- 创建索引函数
+CREATE OR REPLACE FUNCTION create_gin_index(table_name TEXT, column_name TEXT)
+RETURNS VOID AS $$
+BEGIN
+    EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_%s_gin ON %s USING gin(%s)', 
+                   table_name, column_name, table_name, column_name);
+END;
+$$ language 'plpgsql';
+
+-- 输出初始化完成信息
+DO $$
+BEGIN
+    RAISE NOTICE 'AlertAgent PostgreSQL 数据库初始化完成';
+    RAISE NOTICE '时区设置: %', current_setting('timezone');
+    RAISE NOTICE '数据库版本: %', version();
+END $$;
 
 -- 告警规则表
 CREATE TABLE IF NOT EXISTS rules (

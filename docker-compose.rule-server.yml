@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: rule-server-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: alert_agent
+      MYSQL_USER: alert_user
+      MYSQL_PASSWORD: alert_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - rule-network
+
+  rule-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.rule-server
+    container_name: rule-server-app
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: alert_user
+      DB_PASSWORD: alert_password
+      DB_NAME: alert_agent
+      PORT: 8080
+      GIN_MODE: release
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - rule-network
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  rule-network:
+    driver: bridge

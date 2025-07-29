@@ -1,0 +1,244 @@
+# AlertAgent 功能开关配置
+# 分阶段实施策略：第一阶段专注告警及时性，第二阶段启用智能功能
+
+# 第一阶段功能配置（告警及时性优先）
+phase_one_features:
+  direct_routing:
+    name: "direct_routing"
+    phase: "phase_one"
+    state: "enabled"
+    description: "直通路由：告警直接通过用户定义渠道发送，确保告警及时性"
+    monitoring_config:
+      metrics_enabled: true
+      alerts_enabled: true
+      log_level: "info"
+      sample_rate: 1.0
+      alert_thresholds:
+        error_rate: 0.01
+        latency_p99: 100
+
+  basic_convergence:
+    name: "basic_convergence"
+    phase: "phase_one"
+    state: "disabled"  # 默认禁用，可选开关
+    description: "基础告警收敛功能，减少告警噪音"
+    dependencies: ["direct_routing"]
+    rollout_config:
+      percentage: 0
+      user_groups: []
+      clusters: []
+      conditions:
+        min_alert_volume: "10"  # 最小告警量才启用收敛
+    monitoring_config:
+      metrics_enabled: true
+      alerts_enabled: true
+      log_level: "info"
+      sample_rate: 0.1
+
+  async_analysis:
+    name: "async_analysis"
+    phase: "phase_one"
+    state: "enabled"
+    description: "异步AI分析功能，不影响告警发送的及时性"
+    dependencies: ["direct_routing"]
+    monitoring_config:
+      metrics_enabled: true
+      alerts_enabled: true
+      log_level: "info"
+      sample_rate: 0.5
+      alert_thresholds:
+        processing_latency: 5000  # 5秒
+        queue_depth: 1000
+
+  channel_management:
+    name: "channel_management"
+    phase: "phase_one"
+    state: "enabled"
+    description: "告警渠道管理系统"
+    monitoring_config:
+      metrics_enabled: true
+      alerts_enabled: true
+      log_level: "info"
+      sample_rate: 1.0
+
+  cluster_sync:
+    name: "cluster_sync"
+    phase: "phase_one"
+    state: "enabled"
+    description: "Alertmanager集群配置同步"
+    monitoring_config:
+      metrics_enabled: true
+      alerts_enabled: true
+      log_level: "info"
+      sample_rate: 1.0
+
+# 第二阶段功能配置（智能功能）
+phase_two_features:
+  smart_routing:
+    name: "smart_routing"
+    phase: "phase_two"
+    state: "disabled"
+    description: "基于AI的智能路由决策"
+    dependencies: ["direct_routing", "async_analysis"]
+    ai_maturity_requirement:
+      min_accuracy: 0.85
+      min_confidence: 0.8
+      max_latency: 500
+      min_success_rate: 0.95
+      evaluation_period: 24
+    rollout_config:
+      percentage: 0
+      user_groups: ["beta_testers"]
+      clusters: ["dev", "staging"]
+      start_time: null
+      end_time: null
+      conditions:
+        ai_maturity_score: "0.85"
+    monitoring_config:
+      metrics_enabled: true
+      alerts_enabled: true
+      log_level: "debug"
+      sample_rate: 1.0
+      alert_thresholds:
+        accuracy_drop: 0.1
+        latency_increase: 0.2
+        error_rate: 0.05
+
+  advanced_convergence:
+    name: "advanced_convergence"
+    phase: "phase_two"
+    state: "disabled"
+    description: "高级告警收敛引擎，基于机器学习的智能收敛"
+    dependencies: ["basic_convergence", "smart_routing"]
+    ai_maturity_requirement:
+      min_accuracy: 0.8
+      min_confidence: 0.75
+      max_latency: 1000
+      min_success_rate: 0.9
+      evaluation_period: 48
+    monitoring_config:
+      metrics_enabled: true
+      alerts_enabled: true
+      log_level: "debug"
+      sample_rate: 1.0
+
+  auto_suppression:
+    name: "auto_suppression"
+    phase: "phase_two"
+    state: "disabled"
+    description: "自动告警抑制，基于历史数据和模式识别"
+    dependencies: ["smart_routing", "advanced_convergence"]
+    ai_maturity_requirement:
+      min_accuracy: 0.9
+      min_confidence: 0.85
+      max_latency: 300
+      min_success_rate: 0.95
+      evaluation_period: 72
+    monitoring_config:
+      metrics_enabled: true
+      alerts_enabled: true
+      log_level: "debug"
+      sample_rate: 1.0
+
+  ai_decision_making:
+    name: "ai_decision_making"
+    phase: "phase_two"
+    state: "disabled"
+    description: "AI驱动的自动化决策和操作"
+    dependencies: ["smart_routing", "async_analysis"]
+    ai_maturity_requirement:
+      min_accuracy: 0.9
+      min_confidence: 0.85
+      max_latency: 300
+      min_success_rate: 0.98
+      evaluation_period: 48
+    rollout_config:
+      percentage: 0
+      user_groups: ["ai_early_adopters"]
+      clusters: ["staging"]
+      conditions:
+        manual_approval: "required"
+        ai_confidence_threshold: "0.9"
+    monitoring_config:
+      metrics_enabled: true
+      alerts_enabled: true
+      log_level: "debug"
+      sample_rate: 1.0
+      alert_thresholds:
+        accuracy_drop: 0.05
+        confidence_drop: 0.1
+        error_rate: 0.02
+
+  auto_remediation:
+    name: "auto_remediation"
+    phase: "phase_two"
+    state: "disabled"
+    description: "自动修复功能，基于AI分析结果执行修复操作"
+    dependencies: ["ai_decision_making", "auto_suppression"]
+    ai_maturity_requirement:
+      min_accuracy: 0.95
+      min_confidence: 0.9
+      max_latency: 200
+      min_success_rate: 0.99
+      evaluation_period: 168  # 7 days
+    rollout_config:
+      percentage: 0
+      user_groups: ["automation_experts"]
+      clusters: ["staging"]
+      conditions:
+        manual_approval: "required"
+        safety_checks: "enabled"
+        rollback_capability: "verified"
+    monitoring_config:
+      metrics_enabled: true
+      alerts_enabled: true
+      log_level: "debug"
+      sample_rate: 1.0
+      alert_thresholds:
+        failure_rate: 0.01
+        rollback_rate: 0.05
+
+# 全局配置
+global_settings:
+  # 阶段切换策略
+  phase_transition:
+    auto_promotion: false  # 是否自动晋升到下一阶段
+    promotion_criteria:
+      phase_one_to_two:
+        min_uptime_days: 30
+        max_error_rate: 0.01
+        min_ai_maturity_score: 0.8
+        user_satisfaction_score: 4.0
+    
+  # 降级策略
+  degradation_policy:
+    auto_degradation: true
+    degradation_triggers:
+      error_rate_threshold: 0.1
+      latency_threshold: 5000
+      ai_accuracy_drop: 0.2
+      consecutive_failures: 5
+    recovery_criteria:
+      stabilization_period: 300  # 5分钟
+      success_rate_threshold: 0.95
+      
+  # 监控配置
+  monitoring:
+    metrics_collection_interval: 30  # 秒
+    alert_evaluation_interval: 60    # 秒
+    retention_policy:
+      metrics: "7d"
+      logs: "30d"
+      alerts: "90d"
+      
+  # 安全配置
+  security:
+    feature_modification_requires_approval: true
+    audit_logging: true
+    sensitive_features: ["auto_remediation", "ai_decision_making"]
+    
+  # 实验配置
+  experimentation:
+    a_b_testing_enabled: true
+    canary_deployment_enabled: true
+    feature_flags_ui_enabled: true

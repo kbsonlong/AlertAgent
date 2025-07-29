@@ -1,0 +1,259 @@
+name: Database Migration Test
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'internal/infrastructure/migration/**'
+      - 'cmd/migrate/**'
+      - 'scripts/init.sql'
+      - '.github/workflows/migration-test.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'internal/infrastructure/migration/**'
+      - 'cmd/migrate/**'
+      - 'scripts/init.sql'
+      - '.github/workflows/migration-test.yml'
+
+jobs:
+  migration-test:
+    name: Test Database Migration
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: alert_agent_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+        options: >
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache: true
+    
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    - name: Install dependencies
+      run: go mod download
+    
+    - name: Build migration tool
+      run: |
+        go build -o bin/migrate ./cmd/migrate
+        chmod +x bin/migrate
+    
+    - name: Wait for PostgreSQL
+      run: |
+        until pg_isready -h localhost -p 5432 -U postgres; do
+          echo "Waiting for PostgreSQL..."
+          sleep 2
+        done
+    
+    - name: Initialize database
+      run: |
+        PGPASSWORD=test_password psql -h localhost -U postgres -d alert_agent_test -f scripts/init.sql
+      env:
+        PGPASSWORD: test_password
+    
+    - name: Test migration up
+      run: |
+        ./bin/migrate -action=migrate
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_USER: postgres
+        DB_PASSWORD: test_password
+        DB_NAME: alert_agent_test
+        LOG_LEVEL: debug
+    
+    - name: Validate migration status
+      run: |
+        ./bin/migrate -action=status
+        ./bin/migrate -action=validate
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_USER: postgres
+        DB_PASSWORD: test_password
+        DB_NAME: alert_agent_test
+        LOG_LEVEL: info
+    
+    - name: Test migration rollback
+      run: |
+        # 获取当前最新版本
+        LATEST_VERSION=$(./bin/migrate -action=info | grep "Latest Version" | awk '{print $3}' || echo "v2.0.0-001")
+        echo "Latest version: $LATEST_VERSION"
+        
+        # 如果有多个版本，测试回滚到前一个版本
+        if [ "$LATEST_VERSION" != "v2.0.0-001" ]; then
+          ./bin/migrate -action=rollback -version=v2.0.0-001
+          ./bin/migrate -action=status
+        else
+          echo "Only one migration version, skipping rollback test"
+        fi
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_USER: postgres
+        DB_PASSWORD: test_password
+        DB_NAME: alert_agent_test
+        LOG_LEVEL: info
+    
+    - name: Test migration re-apply
+      run: |
+        ./bin/migrate -action=migrate
+        ./bin/migrate -action=validate
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_USER: postgres
+        DB_PASSWORD: test_password
+        DB_NAME: alert_agent_test
+        LOG_LEVEL: info
+    
+    - name: Check database schema
+      run: |
+        PGPASSWORD=test_password psql -h localhost -U postgres -d alert_agent_test -c "\dt"
+        PGPASSWORD=test_password psql -h localhost -U postgres -d alert_agent_test -c "SELECT version, name, success, executed_at FROM migrations ORDER BY executed_at;"
+      env:
+        PGPASSWORD: test_password
+    
+    - name: Test migration info
+      run: |
+        ./bin/migrate -action=info
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_USER: postgres
+        DB_PASSWORD: test_password
+        DB_NAME: alert_agent_test
+        LOG_LEVEL: info
+
+  migration-docker-test:
+    name: Test Migration with Docker
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build migration Docker image
+      run: |
+        docker build -f Dockerfile.migrate -t alertagent-migrate:test .
+    
+    - name: Start PostgreSQL with Docker Compose
+      run: |
+        docker-compose -f docker-compose.dev.yml up -d postgres
+        
+        # 等待数据库启动
+        timeout=60
+        counter=0
+        while [ $counter -lt $timeout ]; do
+          if docker-compose -f docker-compose.dev.yml exec -T postgres pg_isready -U postgres -d alert_agent; then
+            echo "Database is ready"
+            break
+          fi
+          sleep 2
+          counter=$((counter + 2))
+        done
+    
+    - name: Test Docker migration
+      run: |
+        docker run --rm --network alertagent_alertagent-network \
+          -e DB_HOST=postgres \
+          -e DB_PORT=5432 \
+          -e DB_USER=postgres \
+          -e DB_PASSWORD=password \
+          -e DB_NAME=alert_agent \
+          -e LOG_LEVEL=debug \
+          alertagent-migrate:test ./migrate -action=migrate
+    
+    - name: Validate Docker migration
+      run: |
+        docker run --rm --network alertagent_alertagent-network \
+          -e DB_HOST=postgres \
+          -e DB_PORT=5432 \
+          -e DB_USER=postgres \
+          -e DB_PASSWORD=password \
+          -e DB_NAME=alert_agent \
+          alertagent-migrate:test ./migrate -action=validate
+    
+    - name: Check migration status
+      run: |
+        docker run --rm --network alertagent_alertagent-network \
+          -e DB_HOST=postgres \
+          -e DB_PORT=5432 \
+          -e DB_USER=postgres \
+          -e DB_PASSWORD=password \
+          -e DB_NAME=alert_agent \
+          alertagent-migrate:test ./migrate -action=status
+    
+    - name: Cleanup
+      if: always()
+      run: |
+        docker-compose -f docker-compose.dev.yml down --volumes --remove-orphans
+
+  migration-lint:
+    name: Lint Migration Code
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    
+    - name: Install golangci-lint
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+        args: --timeout=5m
+        only-new-issues: true
+        working-directory: .
+    
+    - name: Run go vet
+      run: go vet ./cmd/migrate/... ./internal/infrastructure/migration/...
+    
+    - name: Run go fmt check
+      run: |
+        if [ "$(gofmt -s -l ./cmd/migrate ./internal/infrastructure/migration | wc -l)" -gt 0 ]; then
+          echo "Code is not formatted properly:"
+          gofmt -s -l ./cmd/migrate ./internal/infrastructure/migration
+          exit 1
+        fi
+    
+    - name: Check for TODO/FIXME comments
+      run: |
+        if grep -r "TODO\|FIXME" ./cmd/migrate ./internal/infrastructure/migration; then
+          echo "Found TODO/FIXME comments in migration code"
+          exit 1
+        fi

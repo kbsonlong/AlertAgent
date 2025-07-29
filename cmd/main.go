@@ -110,6 +110,19 @@ func main() {
 	// 创建Ollama服务
 	ollamaService := service.NewOllamaService()
 
+	// 创建功能开关服务
+	featureService, err := service.NewFeatureService(logger.L)
+	if err != nil {
+		logger.L.Fatal("Failed to initialize feature service", zap.Error(err))
+	}
+	
+	// 确保在程序退出时关闭功能服务
+	defer func() {
+		if featureService != nil {
+			featureService.Shutdown()
+		}
+	}()
+
 	// 创建工作器
 	worker := queue.NewWorker(redisQueue, ollamaService)
 
@@ -117,7 +130,7 @@ func main() {
 	engine := gin.Default()
 
 	// 注册路由
-	router.RegisterRoutes(engine)
+	router.RegisterRoutes(engine, featureService)
 
 	// 创建HTTP服务器
 	cfg := config.GetConfig()
