@@ -151,15 +151,26 @@ func (c *DifyClientImpl) GetWorkflowStatus(ctx context.Context, workflowRunID st
 }
 
 // SearchKnowledge 搜索知识库
-func (c *DifyClientImpl) SearchKnowledge(ctx context.Context, query string, datasetIDs []string) (*analysis.KnowledgeSearchResult, error) {
+func (c *DifyClientImpl) SearchKnowledge(ctx context.Context, query string, options *analysis.KnowledgeSearchOptions) (*analysis.KnowledgeSearchResult, error) {
 	url := fmt.Sprintf("%s/v1/datasets/search", c.baseURL)
 	
-	request := map[string]interface{}{
+	reqData := map[string]interface{}{
 		"query": query,
-		"dataset_ids": datasetIDs,
 	}
 	
-	reqBody, err := json.Marshal(request)
+	if options != nil {
+		if options.DatasetIDs != nil {
+			reqData["dataset_ids"] = options.DatasetIDs
+		}
+		if options.Limit > 0 {
+			reqData["limit"] = options.Limit
+		}
+		if options.SimilarityThreshold > 0 {
+			reqData["similarity_threshold"] = options.SimilarityThreshold
+		}
+	}
+	
+	reqBody, err := json.Marshal(reqData)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request failed: %w", err)
 	}

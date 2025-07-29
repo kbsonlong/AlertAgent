@@ -82,12 +82,8 @@ func (r *DifyAnalysisRepositoryImpl) UpdateAnalysisResult(ctx context.Context, r
 	}
 	
 	// 序列化结果
-	if result.Result != nil {
-		resultJSON, err := json.Marshal(result.Result)
-		if err != nil {
-			return fmt.Errorf("failed to marshal result: %w", err)
-		}
-		model.ResultJSON = string(resultJSON)
+	if result.Result != "" {
+		model.ResultJSON = result.Result
 	}
 	
 	// 序列化使用量
@@ -115,12 +111,16 @@ func (r *DifyAnalysisRepositoryImpl) UpdateAnalysisResult(ctx context.Context, r
 // DifyAnalysisResultModel 分析结果数据模型
 type DifyAnalysisResultModel struct {
 	ID             string    `gorm:"primaryKey;size:255" json:"id"`
+	TaskID         string    `gorm:"size:255;index" json:"task_id"`
 	AlertID        uint      `gorm:"index;not null" json:"alert_id"`
 	AnalysisType   string    `gorm:"size:50;not null" json:"analysis_type"`
 	ConversationID string    `gorm:"size:255" json:"conversation_id"`
 	MessageID      string    `gorm:"size:255" json:"message_id"`
 	ResultJSON     string    `gorm:"type:text" json:"result_json"`
 	RawResponse    string    `gorm:"type:text" json:"raw_response"`
+	RootCause      string    `gorm:"type:text" json:"root_cause"`
+	Impact         string    `gorm:"type:text" json:"impact"`
+	Recommendations string   `gorm:"type:text" json:"recommendations"`
 	Confidence     float64   `gorm:"type:decimal(5,4)" json:"confidence"`
 	ProcessingTime int64     `gorm:"default:0" json:"processing_time"`
 	UsageJSON      string    `gorm:"type:text" json:"usage_json"`
@@ -154,12 +154,8 @@ func (r *DifyAnalysisRepositoryImpl) SaveAnalysisResult(ctx context.Context, res
 	}
 	
 	// 序列化结果
-	if result.Result != nil {
-		resultJSON, err := json.Marshal(result.Result)
-		if err != nil {
-			return fmt.Errorf("failed to marshal result: %w", err)
-		}
-		model.ResultJSON = string(resultJSON)
+	if result.Result != "" {
+		model.ResultJSON = result.Result
 	}
 	
 	// 序列化使用量
@@ -453,9 +449,8 @@ func (r *DifyAnalysisRepositoryImpl) modelToResult(model *DifyAnalysisResultMode
 				zap.Error(err),
 			)
 		} else {
-			// 需要将 resultData 转换为 *analysis.AnalysisResult
-			// 这里暂时设置为 nil，实际使用时需要根据具体结构进行转换
-			result.Result = nil
+			// 将 JSON 字符串设置为 Result
+			result.Result = model.ResultJSON
 		}
 	}
 	

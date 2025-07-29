@@ -33,6 +33,11 @@ func (r *GORMAlertRepository) Update(ctx context.Context, alertModel *model.Aler
 	return r.db.WithContext(ctx).Save(alertModel).Error
 }
 
+// UpdateByID 根据ID更新告警字段
+func (r *GORMAlertRepository) UpdateByID(ctx context.Context, id uint, updates map[string]interface{}) error {
+	return r.db.WithContext(ctx).Model(&model.Alert{}).Where("id = ?", id).Updates(updates).Error
+}
+
 // GetByID 根据ID获取告警
 func (r *GORMAlertRepository) GetByID(ctx context.Context, id uint) (*model.Alert, error) {
 	var alertModel model.Alert

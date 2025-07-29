@@ -1,13 +1,19 @@
 package di
 
 import (
+	"time"
+	
+	"alert_agent/internal/application/analysis"
 	"alert_agent/internal/application/channel"
 	"alert_agent/internal/application/cluster"
+	"alert_agent/internal/infrastructure/alert"
 	"alert_agent/internal/infrastructure/container"
+	"alert_agent/internal/infrastructure/dify"
 	"alert_agent/internal/infrastructure/repository"
 	"alert_agent/internal/interfaces/http"
 
 	analysisDomain "alert_agent/internal/domain/analysis"
+	alertDomain "alert_agent/internal/domain/alert"
 	channelDomain "alert_agent/internal/domain/channel"
 	clusterDomain "alert_agent/internal/domain/cluster"
 
@@ -23,14 +29,21 @@ type Container struct {
 	logger      *zap.Logger
 
 	// Repositories
-	clusterRepo clusterDomain.Repository
-	channelRepo channelDomain.Repository
+	clusterRepo         clusterDomain.Repository
+	channelRepo         channelDomain.Repository
+	alertRepo           alertDomain.AlertRepository
+	difyAnalysisRepo    analysisDomain.DifyAnalysisRepository
 
 	// Services
-	clusterService  clusterDomain.Service
-	channelService  channelDomain.Service
-	channelManager  channelDomain.ChannelManager
-	analysisService analysisDomain.AnalysisService
+	clusterService      clusterDomain.Service
+	channelService      channelDomain.Service
+	channelManager      channelDomain.ChannelManager
+	analysisService     analysisDomain.AnalysisService
+	difyAnalysisService analysisDomain.DifyAnalysisService
+
+	// Dify Components
+	difyClient analysisDomain.DifyClient
+	difyConfig *analysis.DifyAnalysisConfig
 
 	// Analysis Container
 	analysisContainer *container.AnalysisContainer
@@ -59,6 +72,8 @@ func NewContainer(db *gorm.DB, redisClient *redis.Client, logger *zap.Logger) *C
 func (c *Container) initRepositories() {
 	c.clusterRepo = repository.NewClusterRepository(c.db)
 	c.channelRepo = repository.NewChannelRepository(c.db)
+	c.alertRepo = alert.NewGORMAlertRepository(c.db)
+	c.difyAnalysisRepo = repository.NewDifyAnalysisRepository(c.db, c.logger)
 }
 
 // initServices 初始化服务层
@@ -66,6 +81,41 @@ func (c *Container) initServices() {
 	c.clusterService = cluster.NewClusterService(c.clusterRepo)
 	c.channelService = channel.NewChannelService(c.channelRepo)
 	c.channelManager = channel.NewDefaultChannelManager(c.channelRepo, c.channelService, c.logger)
+	
+	// 初始化 Dify 配置和客户端
+	c.initDifyComponents()
+	
+	// 初始化 Dify 分析服务
+	c.difyAnalysisService = analysis.NewDifyAnalysisService(
+		c.difyClient,
+		c.difyAnalysisRepo,
+		c.alertRepo,
+		c.logger,
+		c.difyConfig,
+	)
+}
+
+// initDifyComponents 初始化 Dify 组件
+func (c *Container) initDifyComponents() {
+	// 初始化 Dify 配置
+	c.difyConfig = &analysis.DifyAnalysisConfig{
+		// 这里应该从配置文件或环境变量加载
+		DefaultTimeout:        30 * time.Second,
+		MaxRetries:           3,
+		RetryInterval:        5 * time.Second,
+		DefaultAgentID:       "default-agent",
+		DefaultWorkflowID:    "default-workflow",
+		ConcurrencyLimit:     10,
+		TaskCleanupInterval:  1 * time.Hour,
+		TaskRetentionTime:    24 * time.Hour,
+	}
+	
+	// 创建 Dify 客户端
+	c.difyClient = dify.NewDifyClient(
+		"http://dify:5001", // baseURL
+		"your-api-key",     // apiKey
+		c.logger,
+	)
 }
 
 // initAnalysisContainer 初始化分析容器
@@ -76,11 +126,15 @@ func (c *Container) initAnalysisContainer() {
 
 // initHTTPRouter 初始化HTTP路由
 func (c *Container) initHTTPRouter() {
+	// 注意：这里需要根据实际的 NewRouter 函数签名来调整参数
+	// 暂时使用 nil 作为占位符，实际使用时需要传入正确的参数
 	c.router = http.NewRouter(
 		c.clusterService,
 		c.channelService,
 		c.channelManager,
 		c.analysisService,
+		nil, // n8nService - 需要根据实际情况传入
+		nil, // workflowManager - 需要根据实际情况传入
 		c.logger,
 	)
 }

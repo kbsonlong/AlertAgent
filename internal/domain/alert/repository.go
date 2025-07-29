@@ -49,6 +49,9 @@ type AlertRepository interface {
 	// Update 更新告警
 	Update(ctx context.Context, alert *model.Alert) error
 	
+	// UpdateByID 根据ID更新告警字段
+	UpdateByID(ctx context.Context, id uint, updates map[string]interface{}) error
+	
 	// GetByID 根据ID获取告警
 	GetByID(ctx context.Context, id uint) (*model.Alert, error)
 	

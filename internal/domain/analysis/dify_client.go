@@ -13,8 +13,14 @@ type DifyClient interface {
 	// RunWorkflow 执行 Dify 工作流
 	RunWorkflow(ctx context.Context, request *DifyWorkflowRequest) (*DifyWorkflowResponse, error)
 	
+	// CancelWorkflow 取消工作流
+	CancelWorkflow(ctx context.Context, workflowRunID string) error
+	
 	// GetConversation 获取对话历史
 	GetConversation(ctx context.Context, conversationID string) (*DifyConversation, error)
+	
+	// SearchKnowledge 搜索知识库
+	SearchKnowledge(ctx context.Context, query string, options *KnowledgeSearchOptions) (*KnowledgeSearchResult, error)
 	
 	// HealthCheck 健康检查
 	HealthCheck(ctx context.Context) error
@@ -247,7 +253,7 @@ type DifyModelInfo struct {
 	// 版本
 	Version string `json:"version"`
 	
-	// 功能
+	// 功能特性
 	Features []string `json:"features"`
 	
 	// 参数
@@ -268,6 +274,12 @@ type DifyAnalysisRepository interface {
 	// GetAnalysisHistory 获取分析历史
 	GetAnalysisHistory(ctx context.Context, filter *DifyAnalysisFilter) ([]*DifyAnalysisResult, error)
 	
+	// GetAnalysisTrends 获取分析趋势
+	GetAnalysisTrends(ctx context.Context, request *DifyTrendRequest) (*DifyTrendResponse, error)
+	
+	// GetAnalysisMetrics 获取分析指标
+	GetAnalysisMetrics(ctx context.Context, timeRange *TimeRange) (*DifyAnalysisMetrics, error)
+	
 	// UpdateAnalysisResult 更新分析结果
 	UpdateAnalysisResult(ctx context.Context, result *DifyAnalysisResult) error
 	
@@ -279,6 +291,9 @@ type DifyAnalysisRepository interface {
 type DifyAnalysisResult struct {
 	// ID
 	ID string `json:"id"`
+	
+	// 任务ID
+	TaskID string `json:"task_id"`
 	
 	// 告警ID
 	AlertID uint `json:"alert_id"`
@@ -292,17 +307,38 @@ type DifyAnalysisResult struct {
 	// 消息ID
 	MessageID string `json:"message_id"`
 	
+	// 工作流运行ID
+	WorkflowRunID string `json:"workflow_run_id,omitempty"`
+	
 	// 分析结果
-	Result *AnalysisResult `json:"result"`
+	Result string `json:"result"`
 	
 	// 原始响应
 	RawResponse string `json:"raw_response"`
+	
+	// 根因分析结果
+	RootCause string `json:"root_cause,omitempty"`
+	
+	// 影响分析结果
+	Impact string `json:"impact,omitempty"`
+	
+	// 建议列表
+	Recommendations []string `json:"recommendations,omitempty"`
+	
+	// 分类结果
+	Classification string `json:"classification,omitempty"`
 	
 	// 置信度
 	Confidence float64 `json:"confidence"`
 	
 	// 处理时间（毫秒）
 	ProcessingTime int64 `json:"processing_time"`
+	
+	// Token使用量
+	TokenUsage int `json:"token_usage,omitempty"`
+	
+	// 成本
+	Cost float64 `json:"cost,omitempty"`
 	
 	// 使用情况
 	Usage *DifyUsage `json:"usage,omitempty"`

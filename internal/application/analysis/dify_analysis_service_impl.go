@@ -251,12 +251,16 @@ func (s *DifyAnalysisServiceImpl) GetAnalysisTrends(ctx context.Context, request
 
 // SearchKnowledge 搜索知识库
 func (s *DifyAnalysisServiceImpl) SearchKnowledge(ctx context.Context, query string, options *analysis.KnowledgeSearchOptions) (*analysis.KnowledgeSearchResult, error) {
-	datasetIDs := []string{}
-	if options != nil && len(options.DatasetIDs) > 0 {
-		datasetIDs = options.DatasetIDs
+	// 设置默认选项
+	if options == nil {
+		options = &analysis.KnowledgeSearchOptions{
+			DatasetIDs: []string{"default"},
+			Limit:      10,
+			SimilarityThreshold: 0.7,
+		}
 	}
 	
-	return s.difyClient.SearchKnowledge(ctx, query, datasetIDs)
+	return s.difyClient.SearchKnowledge(ctx, query, options)
 }
 
 // BuildAlertContext 构建告警上下文
@@ -779,7 +783,7 @@ func (s *DifyAnalysisServiceImpl) calculateConfidence(response *analysis.DifyCha
 	return 0.85
 }
 
-func (s *DifyAnalysisServiceImpl) calculateCost(usage analysis.Usage) float64 {
+func (s *DifyAnalysisServiceImpl) calculateCost(usage *analysis.DifyUsage) float64 {
 	// 这里应该根据token使用量计算成本
 	// 简化处理
 	return float64(usage.TotalTokens) * 0.001
