@@ -1,0 +1,279 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: alertagent-ingress
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: ingress
+  annotations:
+    # Nginx Ingress Controller 配置
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    
+    # 速率限制
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    
+    # 请求大小限制
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    
+    # 超时配置
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    
+    # CORS 配置
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+    
+    # 健康检查
+    nginx.ingress.kubernetes.io/upstream-health-check: "true"
+    
+    # 会话亲和性
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "alertagent-session"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "86400"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "86400"
+    
+    # 证书管理 (cert-manager)
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    
+    # 安全头
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: https:; frame-ancestors 'none';";
+spec:
+  tls:
+  - hosts:
+    - alertagent.example.com
+    - api.alertagent.example.com
+    - grafana.alertagent.example.com
+    - prometheus.alertagent.example.com
+    secretName: alertagent-tls
+  rules:
+  # 主应用入口
+  - host: alertagent.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: alertagent-api-service
+            port:
+              number: 8080
+  
+  # API 服务入口
+  - host: api.alertagent.example.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: alertagent-api-service
+            port:
+              number: 8080
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: alertagent-api-service
+            port:
+              number: 8080
+      - path: /metrics
+        pathType: Exact
+        backend:
+          service:
+            name: alertagent-api-service
+            port:
+              number: 9090
+  
+  # Grafana 监控面板
+  - host: grafana.alertagent.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana-service
+            port:
+              number: 3000
+  
+  # Prometheus 监控
+  - host: prometheus.alertagent.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus-service
+            port:
+              number: 9090
+---
+# 内部服务 Ingress (仅集群内部访问)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: alertagent-internal-ingress
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: internal-ingress
+  annotations:
+    kubernetes.io/ingress.class: "nginx-internal"
+    nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  # Rule Server 内部访问
+  - host: rule-server.internal.alertagent.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: rule-server-service
+            port:
+              number: 8080
+  
+  # Worker 指标访问
+  - host: worker.internal.alertagent.local
+    http:
+      paths:
+      - path: /metrics
+        pathType: Exact
+        backend:
+          service:
+            name: alertagent-worker-service
+            port:
+              number: 9091
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: alertagent-worker-service
+            port:
+              number: 9091
+---
+# 网络策略 - 限制入站流量
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertagent-ingress-policy
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: alertagent-system
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # 允许来自 Ingress Controller 的流量
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 9091
+  
+  # 允许来自同一命名空间的流量
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: alertagent
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 9091
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+    - protocol: TCP
+      port: 3306
+  
+  # 允许来自监控命名空间的流量
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 9091
+  
+  egress:
+  # 允许访问 DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  
+  # 允许访问数据库
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: mysql
+    ports:
+    - protocol: TCP
+      port: 3306
+  
+  # 允许访问外部服务 (HTTPS)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+  
+  # 允许访问 Jaeger
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 14268

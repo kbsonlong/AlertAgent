@@ -1,0 +1,138 @@
+{{- if .Values.api.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "alertagent.fullname" . }}-api
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.api.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  selector:
+    matchLabels:
+      {{- include "alertagent.api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.config.metrics.port }}"
+        prometheus.io/path: "{{ .Values.config.metrics.path }}"
+      labels:
+        {{- include "alertagent.api.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "alertagent.serviceAccountName" . }}
+      securityContext:
+        {{- include "alertagent.securityContext" . | nindent 8 }}
+      initContainers:
+        # 等待 PostgreSQL 就绪
+        - name: wait-for-postgres
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h {{ include "alertagent.database.host" . }} -p {{ include "alertagent.database.port" . }} -U {{ .Values.secrets.database.username }}; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertagent.fullname" . }}-secrets
+                  key: database-password
+          securityContext:
+            {{- include "alertagent.containerSecurityContext" . | nindent 12 }}
+        # 等待 Redis 就绪
+        - name: wait-for-redis
+          image: redis:7-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until redis-cli -h {{ include "alertagent.redis.host" . }} -p {{ include "alertagent.redis.port" . }} -a "$REDIS_PASSWORD" ping; do
+                echo "Waiting for Redis..."
+                sleep 2
+              done
+              echo "Redis is ready!"
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertagent.fullname" . }}-secrets
+                  key: redis-password
+          securityContext:
+            {{- include "alertagent.containerSecurityContext" . | nindent 12 }}
+      containers:
+        - name: api
+          image: "{{ include "alertagent.imageRegistry" . }}{{ .Values.api.image.repository }}:{{ .Values.api.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ include "alertagent.imagePullPolicy" . }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.service.targetPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.config.metrics.port }}
+              protocol: TCP
+          env:
+            {{- include "alertagent.commonEnv" . | nindent 12 }}
+            {{- range $key, $value := .Values.api.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          volumeMounts:
+            {{- include "alertagent.commonVolumeMounts" . | nindent 12 }}
+          livenessProbe:
+            {{- include "alertagent.livenessProbe" . | nindent 12 }}
+          readinessProbe:
+            {{- include "alertagent.readinessProbe" . | nindent 12 }}
+          startupProbe:
+            {{- include "alertagent.startupProbe" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            {{- include "alertagent.containerSecurityContext" . | nindent 12 }}
+      volumes:
+        {{- include "alertagent.commonVolumes" . | nindent 8 }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- else }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/name
+                      operator: In
+                      values:
+                        - {{ include "alertagent.name" . }}
+                    - key: app.kubernetes.io/component
+                      operator: In
+                      values:
+                        - api
+                topologyKey: kubernetes.io/hostname
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

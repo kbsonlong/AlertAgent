@@ -1,0 +1,26 @@
+{{- if .Values.api.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "alertagent.fullname" . }}-api
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.api.labels" . | nindent 4 }}
+  {{- with .Values.api.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.api.service.type }}
+  ports:
+    - port: {{ .Values.api.service.port }}
+      targetPort: {{ .Values.api.service.targetPort }}
+      protocol: TCP
+      name: http
+    - port: {{ .Values.config.metrics.port }}
+      targetPort: {{ .Values.config.metrics.port }}
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "alertagent.api.selectorLabels" . | nindent 4 }}
+{{- end }}

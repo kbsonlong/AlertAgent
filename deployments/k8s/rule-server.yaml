@@ -1,0 +1,407 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/component: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: standard  # 根据集群配置调整
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/component: database
+type: Opaque
+data:
+  # MySQL 配置 (base64 编码)
+  mysql-root-password: cm9vdHBhc3N3b3Jk  # rootpassword
+  mysql-database: cnVsZV9zZXJ2ZXI=  # rule_server
+  mysql-user: cnVsZXVzZXI=  # ruleuser
+  mysql-password: cnVsZXBhc3N3b3Jk  # rulepassword
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: rule-server-system
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # MySQL 使用 Recreate 策略确保数据一致性
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mysql
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mysql
+        app.kubernetes.io/component: database
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      securityContext:
+        fsGroup: 999  # mysql 用户组 ID
+      containers:
+      - name: mysql
+        image: mysql:8.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3306
+          name: mysql
+          protocol: TCP
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-root-password
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-database
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-user
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-password
+        volumeMounts:
+        - name: mysql-storage
+          mountPath: /var/lib/mysql
+        - name: mysql-config
+          mountPath: /etc/mysql/conf.d
+          readOnly: true
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        livenessProbe:
+          exec:
+            command:
+            - mysqladmin
+            - ping
+            - -h
+            - localhost
+            - -u
+            - root
+            - -p$(MYSQL_ROOT_PASSWORD)
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - mysql
+            - -h
+            - localhost
+            - -u
+            - root
+            - -p$(MYSQL_ROOT_PASSWORD)
+            - -e
+            - SELECT 1
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        securityContext:
+          runAsUser: 999
+          runAsGroup: 999
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+      volumes:
+      - name: mysql-storage
+        persistentVolumeClaim:
+          claimName: mysql-pvc
+      - name: mysql-config
+        configMap:
+          name: mysql-config
+          defaultMode: 0644
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/component: database
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3306
+    targetPort: 3306
+    protocol: TCP
+    name: mysql
+  selector:
+    app.kubernetes.io/name: mysql
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/component: database
+data:
+  my.cnf: |
+    [mysqld]
+    # 基本配置
+    default-storage-engine=INNODB
+    character-set-server=utf8mb4
+    collation-server=utf8mb4_unicode_ci
+    
+    # 连接配置
+    max_connections=200
+    max_connect_errors=1000
+    
+    # 缓冲区配置
+    innodb_buffer_pool_size=512M
+    innodb_log_file_size=128M
+    innodb_log_buffer_size=16M
+    
+    # 查询缓存
+    query_cache_type=1
+    query_cache_size=64M
+    
+    # 慢查询日志
+    slow_query_log=1
+    slow_query_log_file=/var/lib/mysql/slow.log
+    long_query_time=2
+    
+    # 二进制日志
+    log-bin=mysql-bin
+    binlog_format=ROW
+    expire_logs_days=7
+    
+    # 安全配置
+    skip-name-resolve
+    
+    [mysql]
+    default-character-set=utf8mb4
+    
+    [client]
+    default-character-set=utf8mb4
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rule-server
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: rule-server
+    app.kubernetes.io/component: rule-engine
+    app.kubernetes.io/part-of: rule-server-system
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rule-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rule-server
+        app.kubernetes.io/component: rule-engine
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: rule-server
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      initContainers:
+      - name: wait-for-mysql
+        image: mysql:8.0
+        command:
+        - sh
+        - -c
+        - |
+          until mysqladmin ping -h mysql-service -u root -p"$MYSQL_ROOT_PASSWORD" --silent; do
+            echo "Waiting for MySQL..."
+            sleep 2
+          done
+          echo "MySQL is ready!"
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-root-password
+      containers:
+      - name: rule-server
+        image: alertagent/rule-server:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: APP_ENV
+          value: "production"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: LOG_FORMAT
+          value: "json"
+        - name: RULE_SERVER_PORT
+          value: "8080"
+        - name: DB_HOST
+          value: "mysql-service"
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-database
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-password
+        - name: FEATURE_RULE_VALIDATION
+          value: "true"
+        - name: FEATURE_RULE_CACHING
+          value: "true"
+        - name: FEATURE_RULE_VERSIONING
+          value: "true"
+        - name: CACHE_TTL
+          value: "300s"
+        - name: HEALTH_CHECK_INTERVAL
+          value: "30s"
+        - name: JAEGER_ENDPOINT
+          value: "http://jaeger-collector:14268/api/traces"
+        - name: TRACE_SAMPLE_RATE
+          value: "0.1"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        - name: rules-data
+          mountPath: /app/rules
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 30
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: config
+        configMap:
+          name: alertagent-config
+      - name: tmp
+        emptyDir: {}
+      - name: rules-data
+        emptyDir: {}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rule-server-service
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: rule-server
+    app.kubernetes.io/component: rule-engine
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: rule-server
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rule-server
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: rule-server
+    app.kubernetes.io/component: rule-engine
+automountServiceAccountToken: false

@@ -1,0 +1,495 @@
+# AlertAgent Helm Chart 默认配置
+
+# 全局配置
+global:
+  # 镜像仓库
+  imageRegistry: ""
+  # 镜像拉取策略
+  imagePullPolicy: IfNotPresent
+  # 镜像拉取密钥
+  imagePullSecrets: []
+  # 存储类
+  storageClass: ""
+  # 命名空间
+  namespace: alertagent
+
+# AlertAgent API 服务配置
+api:
+  enabled: true
+  replicaCount: 2
+  
+  image:
+    repository: alertagent/api
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+    annotations: {}
+  
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/rate-limit: "100"
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    hosts:
+      - host: api.alertagent.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: alertagent-api-tls
+        hosts:
+          - api.alertagent.local
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  
+  env:
+    GIN_MODE: release
+    LOG_LEVEL: info
+    METRICS_ENABLED: "true"
+    TRACING_ENABLED: "true"
+
+# AlertAgent Worker 服务配置
+worker:
+  enabled: true
+  replicaCount: 1
+  
+  image:
+    repository: alertagent/worker
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 9091
+    targetPort: 9091
+    annotations: {}
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    behavior:
+      scaleUp:
+        stabilizationWindowSeconds: 60
+        policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+  
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  
+  env:
+    LOG_LEVEL: info
+    WORKER_CONCURRENCY: "10"
+    QUEUE_SIZE: "1000"
+    METRICS_ENABLED: "true"
+
+# Rule Server 配置
+ruleServer:
+  enabled: true
+  replicaCount: 1
+  
+  image:
+    repository: alertagent/rule-server
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+    annotations: {}
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+  
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  
+  # MySQL 配置
+  mysql:
+    enabled: true
+    auth:
+      rootPassword: "root123"
+      database: "rule_engine"
+      username: "rule_user"
+      password: "rule_pass"
+    primary:
+      persistence:
+        enabled: true
+        size: 8Gi
+        storageClass: ""
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+
+# PostgreSQL 配置
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "postgres123"
+    database: "alertagent"
+    username: "alertagent"
+    password: "alertagent123"
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+    initdb:
+      scripts:
+        init.sql: |
+          -- 创建扩展
+          CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+          CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
+          
+          -- 创建只读用户
+          CREATE USER alertagent_readonly WITH PASSWORD 'readonly123';
+          GRANT CONNECT ON DATABASE alertagent TO alertagent_readonly;
+          GRANT USAGE ON SCHEMA public TO alertagent_readonly;
+          GRANT SELECT ON ALL TABLES IN SCHEMA public TO alertagent_readonly;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO alertagent_readonly;
+
+# Redis 配置
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: "redis123"
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
+# Prometheus 配置
+prometheus:
+  enabled: true
+  server:
+    persistentVolume:
+      enabled: true
+      size: 50Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+    retention: "30d"
+  alertmanager:
+    enabled: true
+    persistentVolume:
+      enabled: true
+      size: 2Gi
+      storageClass: ""
+  nodeExporter:
+    enabled: true
+  kubeStateMetrics:
+    enabled: true
+  pushgateway:
+    enabled: false
+
+# Grafana 配置
+grafana:
+  enabled: true
+  admin:
+    user: admin
+    password: admin123
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    hosts:
+      - grafana.alertagent.local
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.alertagent.local
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://{{ include "alertagent.fullname" . }}-prometheus-server:80
+          access: proxy
+          isDefault: true
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'alertagent'
+          orgId: 1
+          folder: 'AlertAgent'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/alertagent
+
+# 配置管理
+config:
+  # 应用配置
+  app:
+    name: "AlertAgent"
+    version: "1.0.0"
+    environment: "production"
+    debug: false
+    
+  # 服务器配置
+  server:
+    host: "0.0.0.0"
+    port: 8080
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "60s"
+    
+  # 日志配置
+  logging:
+    level: "info"
+    format: "json"
+    output: "stdout"
+    
+  # 指标配置
+  metrics:
+    enabled: true
+    path: "/metrics"
+    port: 9090
+    
+  # 追踪配置
+  tracing:
+    enabled: true
+    jaegerEndpoint: "http://jaeger-collector:14268/api/traces"
+    samplingRate: 0.1
+    
+  # 健康检查配置
+  health:
+    enabled: true
+    path: "/health"
+    
+  # 功能开关
+  features:
+    aiAnalysis: true
+    smartRouting: true
+    autoScaling: true
+    
+  # 限流配置
+  rateLimit:
+    enabled: true
+    requests: 100
+    window: "1m"
+    
+  # 缓存配置
+  cache:
+    ttl: "5m"
+    maxSize: 1000
+
+# 密钥配置
+secrets:
+  # 数据库密钥
+  database:
+    host: ""
+    port: "5432"
+    name: "alertagent"
+    username: "alertagent"
+    password: "alertagent123"
+    sslMode: "require"
+    
+  # Redis 密钥
+  redis:
+    host: ""
+    port: "6379"
+    password: "redis123"
+    database: "0"
+    
+  # JWT 密钥
+  jwt:
+    secret: "your-jwt-secret-key"
+    expiration: "24h"
+    
+  # 加密密钥
+  encryption:
+    key: "your-32-byte-encryption-key-here"
+    
+  # SMTP 配置
+  smtp:
+    host: "smtp.gmail.com"
+    port: "587"
+    username: "your-email@gmail.com"
+    password: "your-app-password"
+    
+  # 钉钉配置
+  dingtalk:
+    token: "your-dingtalk-token"
+    secret: "your-dingtalk-secret"
+    
+  # Dify 配置
+  dify:
+    apiKey: "your-dify-api-key"
+    baseURL: "https://api.dify.ai"
+
+# 网络策略
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+  egress:
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: alertagent
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+
+# 服务账户
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod 安全策略
+podSecurityPolicy:
+  enabled: false
+
+# 资源配额
+resourceQuota:
+  enabled: true
+  hard:
+    requests.cpu: "4"
+    requests.memory: "8Gi"
+    limits.cpu: "8"
+    limits.memory: "16Gi"
+    persistentvolumeclaims: "10"
+    pods: "20"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"
+
+# 限制范围
+limitRange:
+  enabled: true
+  limits:
+    - default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      type: Container
+    - default:
+        storage: "10Gi"
+      type: PersistentVolumeClaim

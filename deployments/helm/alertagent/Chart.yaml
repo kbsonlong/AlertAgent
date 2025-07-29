@@ -1,0 +1,64 @@
+apiVersion: v2
+name: alertagent
+description: A Helm chart for AlertAgent - Intelligent Alert Management System
+
+# Chart版本
+version: 0.1.0
+
+# 应用版本
+appVersion: "1.0.0"
+
+# Chart类型
+type: application
+
+# 关键词
+keywords:
+  - alerting
+  - monitoring
+  - kubernetes
+  - golang
+  - ai
+
+# 维护者信息
+maintainers:
+  - name: AlertAgent Team
+    email: team@alertagent.io
+    url: https://github.com/alertagent/alertagent
+
+# 项目主页
+home: https://alertagent.io
+
+# 源码仓库
+sources:
+  - https://github.com/alertagent/alertagent
+
+# 依赖
+dependencies:
+  - name: postgresql
+    version: "12.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: redis
+    version: "17.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+  - name: prometheus
+    version: "23.x.x"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus.enabled
+  - name: grafana
+    version: "6.x.x"
+    repository: https://grafana.github.io/helm-charts
+    condition: grafana.enabled
+
+# 注解
+annotations:
+  category: Monitoring
+  licenses: Apache-2.0
+  images: |
+    - name: alertagent-api
+      image: alertagent/api:1.0.0
+    - name: alertagent-worker
+      image: alertagent/worker:1.0.0
+    - name: rule-server
+      image: alertagent/rule-server:1.0.0

@@ -1,0 +1,204 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: standard  # 根据集群配置调整
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: alertagent-system
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # 数据库使用 Recreate 策略确保数据一致性
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/component: database
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      securityContext:
+        fsGroup: 999  # postgres 用户组 ID
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+          name: postgres
+          protocol: TCP
+        env:
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: postgres-db
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: postgres-password
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-init
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - exec pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -h 127.0.0.1 -p 5432
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - exec pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -h 127.0.0.1 -p 5432
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        securityContext:
+          runAsUser: 999
+          runAsGroup: 999
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+      - name: postgres-init
+        configMap:
+          name: postgres-init-config
+          defaultMode: 0755
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+  selector:
+    app.kubernetes.io/name: postgres
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-config
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+data:
+  01-init-db.sql: |
+    -- 创建数据库扩展
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
+    
+    -- 创建应用用户
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'alertagent_app') THEN
+            CREATE ROLE alertagent_app WITH LOGIN PASSWORD 'app_password';
+        END IF;
+    END
+    $$;
+    
+    -- 授权
+    GRANT CONNECT ON DATABASE alert_agent TO alertagent_app;
+    GRANT USAGE ON SCHEMA public TO alertagent_app;
+    GRANT CREATE ON SCHEMA public TO alertagent_app;
+    
+    -- 创建只读用户
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'alertagent_readonly') THEN
+            CREATE ROLE alertagent_readonly WITH LOGIN PASSWORD 'readonly_password';
+        END IF;
+    END
+    $$;
+    
+    GRANT CONNECT ON DATABASE alert_agent TO alertagent_readonly;
+    GRANT USAGE ON SCHEMA public TO alertagent_readonly;
+    GRANT SELECT ON ALL TABLES IN SCHEMA public TO alertagent_readonly;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO alertagent_readonly;
+  
+  02-performance-tuning.sql: |
+    -- PostgreSQL 性能优化配置
+    ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements';
+    ALTER SYSTEM SET max_connections = 200;
+    ALTER SYSTEM SET shared_buffers = '256MB';
+    ALTER SYSTEM SET effective_cache_size = '1GB';
+    ALTER SYSTEM SET maintenance_work_mem = '64MB';
+    ALTER SYSTEM SET checkpoint_completion_target = 0.9;
+    ALTER SYSTEM SET wal_buffers = '16MB';
+    ALTER SYSTEM SET default_statistics_target = 100;
+    ALTER SYSTEM SET random_page_cost = 1.1;
+    ALTER SYSTEM SET effective_io_concurrency = 200;
+    
+    -- 日志配置
+    ALTER SYSTEM SET log_destination = 'stderr';
+    ALTER SYSTEM SET logging_collector = on;
+    ALTER SYSTEM SET log_directory = 'pg_log';
+    ALTER SYSTEM SET log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log';
+    ALTER SYSTEM SET log_min_duration_statement = 1000;
+    ALTER SYSTEM SET log_checkpoints = on;
+    ALTER SYSTEM SET log_connections = on;
+    ALTER SYSTEM SET log_disconnections = on;
+    ALTER SYSTEM SET log_lock_waits = on;
+    
+    -- 重新加载配置
+    SELECT pg_reload_conf();

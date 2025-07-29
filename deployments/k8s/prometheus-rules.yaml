@@ -1,0 +1,345 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+data:
+  alertagent.yml: |
+    groups:
+    - name: alertagent.rules
+      rules:
+      # AlertAgent API 服务健康检查
+      - alert: AlertAgentAPIDown
+        expr: up{job="alertagent-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: alertagent-api
+        annotations:
+          summary: "AlertAgent API 服务不可用"
+          description: "AlertAgent API 服务已经停止响应超过 1 分钟"
+      
+      # AlertAgent Worker 服务健康检查
+      - alert: AlertAgentWorkerDown
+        expr: up{job="alertagent-worker"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: alertagent-worker
+        annotations:
+          summary: "AlertAgent Worker 服务不可用"
+          description: "AlertAgent Worker 服务已经停止响应超过 2 分钟"
+      
+      # Rule Server 服务健康检查
+      - alert: RuleServerDown
+        expr: up{job="rule-server"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: rule-server
+        annotations:
+          summary: "Rule Server 服务不可用"
+          description: "Rule Server 服务已经停止响应超过 1 分钟"
+      
+      # HTTP 请求错误率过高
+      - alert: HighHTTPErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+            /
+            sum(rate(http_requests_total[5m])) by (service)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP 错误率过高"
+          description: "服务 {{ $labels.service }} 的 HTTP 5xx 错误率超过 5%，当前值: {{ $value | humanizePercentage }}"
+      
+      # HTTP 请求延迟过高
+      - alert: HighHTTPLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP 请求延迟过高"
+          description: "服务 {{ $labels.service }} 的 95% HTTP 请求延迟超过 1 秒，当前值: {{ $value }}s"
+      
+      # 内存使用率过高
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            container_memory_working_set_bytes{pod=~"alertagent-.*"}
+            /
+            container_spec_memory_limit_bytes{pod=~"alertagent-.*"}
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "内存使用率过高"
+          description: "Pod {{ $labels.pod }} 内存使用率超过 80%，当前值: {{ $value | humanizePercentage }}"
+      
+      # CPU 使用率过高
+      - alert: HighCPUUsage
+        expr: |
+          (
+            rate(container_cpu_usage_seconds_total{pod=~"alertagent-.*"}[5m])
+            /
+            container_spec_cpu_quota{pod=~"alertagent-.*"} * container_spec_cpu_period{pod=~"alertagent-.*"}
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU 使用率过高"
+          description: "Pod {{ $labels.pod }} CPU 使用率超过 80%，当前值: {{ $value | humanizePercentage }}"
+      
+      # 数据库连接数过高
+      - alert: HighDatabaseConnections
+        expr: |
+          database_connections_active > 20
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "数据库连接数过高"
+          description: "数据库活跃连接数超过 20，当前值: {{ $value }}"
+      
+      # Redis 连接失败
+      - alert: RedisConnectionFailed
+        expr: |
+          redis_connected_clients == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis 连接失败"
+          description: "Redis 服务无法建立连接"
+      
+      # 告警处理队列积压
+      - alert: AlertQueueBacklog
+        expr: |
+          alert_queue_size > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "告警队列积压"
+          description: "告警处理队列积压超过 100 个，当前值: {{ $value }}"
+      
+      # 磁盘空间不足
+      - alert: LowDiskSpace
+        expr: |
+          (
+            node_filesystem_avail_bytes{mountpoint="/"}
+            /
+            node_filesystem_size_bytes{mountpoint="/"}
+          ) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "磁盘空间不足"
+          description: "节点 {{ $labels.instance }} 根分区可用空间少于 10%，当前值: {{ $value | humanizePercentage }}"
+      
+      # Pod 重启频繁
+      - alert: PodCrashLooping
+        expr: |
+          rate(kube_pod_container_status_restarts_total{pod=~"alertagent-.*"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod 重启频繁"
+          description: "Pod {{ $labels.pod }} 在过去 15 分钟内重启了 {{ $value }} 次"
+      
+      # 集群节点不可用
+      - alert: NodeNotReady
+        expr: |
+          kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "集群节点不可用"
+          description: "节点 {{ $labels.node }} 状态为 NotReady 超过 5 分钟"
+  
+  database.yml: |
+    groups:
+    - name: database.rules
+      rules:
+      # PostgreSQL 服务不可用
+      - alert: PostgreSQLDown
+        expr: up{job="postgres-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL 数据库不可用"
+          description: "PostgreSQL 数据库已经停止响应超过 1 分钟"
+      
+      # PostgreSQL 连接数过高
+      - alert: PostgreSQLTooManyConnections
+        expr: |
+          pg_stat_activity_count > 80
+        for: 2m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL 连接数过高"
+          description: "PostgreSQL 当前连接数: {{ $value }}，接近最大连接数限制"
+      
+      # PostgreSQL 慢查询过多
+      - alert: PostgreSQLSlowQueries
+        expr: |
+          rate(pg_stat_activity_max_tx_duration[5m]) > 60
+        for: 5m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL 慢查询过多"
+          description: "PostgreSQL 存在执行时间超过 60 秒的查询"
+      
+      # Redis 服务不可用
+      - alert: RedisDown
+        expr: up{job="redis-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis 服务不可用"
+          description: "Redis 服务已经停止响应超过 1 分钟"
+      
+      # Redis 内存使用率过高
+      - alert: RedisHighMemoryUsage
+        expr: |
+          (
+            redis_memory_used_bytes
+            /
+            redis_memory_max_bytes
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis 内存使用率过高"
+          description: "Redis 内存使用率超过 80%，当前值: {{ $value | humanizePercentage }}"
+      
+      # Redis 连接数过高
+      - alert: RedisHighConnections
+        expr: |
+          redis_connected_clients > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis 连接数过高"
+          description: "Redis 当前连接数: {{ $value }}，可能存在连接泄漏"
+  
+  business.yml: |
+    groups:
+    - name: business.rules
+      rules:
+      # 告警处理失败率过高
+      - alert: HighAlertProcessingFailureRate
+        expr: |
+          (
+            sum(rate(alert_processing_total{status="failed"}[5m]))
+            /
+            sum(rate(alert_processing_total[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: business
+        annotations:
+          summary: "告警处理失败率过高"
+          description: "告警处理失败率超过 10%，当前值: {{ $value | humanizePercentage }}"
+      
+      # 通知发送失败率过高
+      - alert: HighNotificationFailureRate
+        expr: |
+          (
+            sum(rate(notification_sent_total{status="failed"}[5m])) by (channel)
+            /
+            sum(rate(notification_sent_total[5m])) by (channel)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          category: business
+        annotations:
+          summary: "通知发送失败率过高"
+          description: "{{ $labels.channel }} 通知渠道发送失败率超过 5%，当前值: {{ $value | humanizePercentage }}"
+      
+      # 规则执行失败
+      - alert: RuleExecutionFailure
+        expr: |
+          increase(rule_execution_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          category: business
+        annotations:
+          summary: "规则执行失败"
+          description: "规则 {{ $labels.rule_id }} 执行失败，失败次数: {{ $value }}"
+      
+      # AI 分析服务不可用
+      - alert: AIAnalysisServiceDown
+        expr: |
+          ai_analysis_requests_total == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: business
+        annotations:
+          summary: "AI 分析服务不可用"
+          description: "AI 分析服务在过去 10 分钟内没有处理任何请求"
+      
+      # 集群健康状态异常
+      - alert: ClusterHealthDegraded
+        expr: |
+          cluster_health_score < 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: business
+        annotations:
+          summary: "集群健康状态异常"
+          description: "集群健康评分低于 0.8，当前值: {{ $value }}"
+      
+      # 活跃告警数量过多
+      - alert: TooManyActiveAlerts
+        expr: |
+          active_alerts_count > 1000
+        for: 5m
+        labels:
+          severity: warning
+          category: business
+        annotations:
+          summary: "活跃告警数量过多"
+          description: "当前活跃告警数量: {{ $value }}，可能存在告警风暴"
+      
+      # 工作流执行时间过长
+      - alert: WorkflowExecutionTooSlow
+        expr: |
+          histogram_quantile(0.95, sum(rate(workflow_execution_duration_seconds_bucket[5m])) by (le, workflow_type)) > 300
+        for: 5m
+        labels:
+          severity: warning
+          category: business
+        annotations:
+          summary: "工作流执行时间过长"
+          description: "工作流 {{ $labels.workflow_type }} 的 95% 执行时间超过 5 分钟，当前值: {{ $value }}s"

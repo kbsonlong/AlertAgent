@@ -1,0 +1,139 @@
+{{- if .Values.worker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "alertagent.fullname" . }}-worker
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.worker.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  selector:
+    matchLabels:
+      {{- include "alertagent.worker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.config.metrics.port }}"
+        prometheus.io/path: "{{ .Values.config.metrics.path }}"
+      labels:
+        {{- include "alertagent.worker.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "alertagent.serviceAccountName" . }}
+      securityContext:
+        {{- include "alertagent.securityContext" . | nindent 8 }}
+      initContainers:
+        # 等待 PostgreSQL 就绪
+        - name: wait-for-postgres
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h {{ include "alertagent.database.host" . }} -p {{ include "alertagent.database.port" . }} -U {{ .Values.secrets.database.username }}; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertagent.fullname" . }}-secrets
+                  key: database-password
+          securityContext:
+            {{- include "alertagent.containerSecurityContext" . | nindent 12 }}
+        # 等待 Redis 就绪
+        - name: wait-for-redis
+          image: redis:7-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until redis-cli -h {{ include "alertagent.redis.host" . }} -p {{ include "alertagent.redis.port" . }} -a "$REDIS_PASSWORD" ping; do
+                echo "Waiting for Redis..."
+                sleep 2
+              done
+              echo "Redis is ready!"
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertagent.fullname" . }}-secrets
+                  key: redis-password
+          securityContext:
+            {{- include "alertagent.containerSecurityContext" . | nindent 12 }}
+      containers:
+        - name: worker
+          image: "{{ include "alertagent.imageRegistry" . }}{{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ include "alertagent.imagePullPolicy" . }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.worker.service.targetPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.config.metrics.port }}
+              protocol: TCP
+          env:
+            {{- include "alertagent.commonEnv" . | nindent 12 }}
+            {{- range $key, $value := .Values.worker.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          volumeMounts:
+            {{- include "alertagent.commonVolumeMounts" . | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          securityContext:
+            {{- include "alertagent.containerSecurityContext" . | nindent 12 }}
+      volumes:
+        {{- include "alertagent.commonVolumes" . | nindent 8 }}
+      {{- with .Values.worker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

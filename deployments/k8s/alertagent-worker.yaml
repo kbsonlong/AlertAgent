@@ -1,0 +1,365 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertagent-worker
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: alertagent-system
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertagent-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alertagent-worker
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+        config.checksum: "{{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}"
+    spec:
+      serviceAccountName: alertagent-worker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          until pg_isready -h postgres-service -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+          echo "PostgreSQL is ready!"
+        env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: postgres-password
+      - name: wait-for-redis
+        image: redis:7-alpine
+        command:
+        - sh
+        - -c
+        - |
+          until redis-cli -h redis-service -p 6379 -a "$REDIS_PASSWORD" ping; do
+            echo "Waiting for Redis..."
+            sleep 2
+          done
+          echo "Redis is ready!"
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: redis-password
+      containers:
+      - name: alertagent-worker
+        image: alertagent/worker:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9091
+          name: metrics
+          protocol: TCP
+        env:
+        - name: APP_ENV
+          value: "production"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: LOG_FORMAT
+          value: "json"
+        - name: WORKER_METRICS_PORT
+          value: "9091"
+        - name: QUEUE_WORKERS
+          value: "4"
+        - name: DB_HOST
+          value: "postgres-service"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: postgres-db
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: postgres-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: postgres-password
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: redis-password
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: jwt-secret
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: encryption-key
+        - name: SMTP_HOST
+          value: "smtp.example.com"
+        - name: SMTP_PORT
+          value: "587"
+        - name: SMTP_USER
+          value: "noreply@example.com"
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: smtp-password
+        - name: SMTP_FROM
+          value: "AlertAgent <noreply@example.com>"
+        - name: DINGTALK_WEBHOOK
+          value: "https://oapi.dingtalk.com/robot/send?access_token=your_token"
+        - name: DINGTALK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: dingtalk-secret
+        - name: WECOM_WEBHOOK
+          value: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=your_key"
+        - name: SLACK_WEBHOOK
+          value: "https://hooks.slack.com/services/your/slack/webhook"
+        - name: OLLAMA_HOST
+          value: "http://ollama:11434"
+        - name: N8N_HOST
+          value: "http://n8n:5678"
+        - name: DIFY_API_URL
+          value: "https://api.dify.ai"
+        - name: DIFY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: dify-api-key
+        - name: FEATURE_AI_ANALYSIS
+          value: "true"
+        - name: FEATURE_AUTO_RESOLUTION
+          value: "false"
+        - name: FEATURE_CLUSTER_MANAGEMENT
+          value: "true"
+        - name: FEATURE_NOTIFICATION_TEMPLATES
+          value: "true"
+        - name: CACHE_TTL
+          value: "300s"
+        - name: CACHE_CLEANUP_INTERVAL
+          value: "600s"
+        - name: HEALTH_CHECK_INTERVAL
+          value: "30s"
+        - name: JAEGER_ENDPOINT
+          value: "http://jaeger-collector:14268/api/traces"
+        - name: TRACE_SAMPLE_RATE
+          value: "0.1"
+        - name: BACKUP_ENABLED
+          value: "true"
+        - name: BACKUP_SCHEDULE
+          value: "0 2 * * *"
+        - name: BACKUP_RETENTION_DAYS
+          value: "30"
+        - name: BACKUP_S3_BUCKET
+          value: "alertagent-backups"
+        - name: BACKUP_S3_REGION
+          value: "us-west-2"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: aws-access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: aws-secret-access-key
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        - name: worker-data
+          mountPath: /app/data
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9091
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9091
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 9091
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 30
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: config
+        configMap:
+          name: alertagent-config
+      - name: tmp
+        emptyDir: {}
+      - name: worker-data
+        emptyDir: {}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60  # Worker 需要更长的优雅关闭时间
+      dnsPolicy: ClusterFirst
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertagent-worker-service
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent-worker
+    app.kubernetes.io/component: worker
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9091
+    targetPort: 9091
+    protocol: TCP
+    name: metrics
+  selector:
+    app.kubernetes.io/name: alertagent-worker
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alertagent-worker
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent-worker
+    app.kubernetes.io/component: worker
+automountServiceAccountToken: false
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: alertagent-worker-pdb
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent-worker
+    app.kubernetes.io/component: worker
+spec:
+  minAvailable: 0  # Worker 可以全部停止进行维护
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertagent-worker
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: alertagent-worker-hpa
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent-worker
+    app.kubernetes.io/component: worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: alertagent-worker
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  # 基于队列长度的自定义指标扩缩容
+  - type: Object
+    object:
+      metric:
+        name: redis_queue_length
+      target:
+        type: AverageValue
+        averageValue: "10"
+      describedObject:
+        apiVersion: v1
+        kind: Service
+        name: redis-service
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Max

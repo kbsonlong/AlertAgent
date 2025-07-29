@@ -90,37 +90,33 @@ docker-clean: ## 停止并清理所有 Docker 资源
 	@./scripts/docker-dev-stop.sh --cleanup
 
 # 数据库迁移
-migrate-build: ## 构建迁移工具
-	@echo "🔨 构建迁移工具..."
-	@go build -o bin/migrate ./cmd/migrate
-
-migrate: migrate-build ## 执行数据库迁移
+migrate: build-migrate ## 执行数据库迁移
 	@echo "🗄️  执行数据库迁移..."
-	@./bin/migrate -action=migrate
+	@$(MIGRATE_BINARY) -action=migrate
 
-migrate-status: migrate-build ## 查看迁移状态
+migrate-status: build-migrate ## 查看迁移状态
 	@echo "📊 查看迁移状态..."
-	@./bin/migrate -action=status
+	@$(MIGRATE_BINARY) -action=status
 
-migrate-rollback: migrate-build ## 回滚迁移 (需要指定版本)
+migrate-rollback: build-migrate ## 回滚迁移 (需要指定版本)
 	@echo "⏪ 回滚迁移到指定版本..."
-	@if [ -z "$(VERSION)" ]; then \
-		echo "❌ 错误: 请指定版本号，例如: make migrate-rollback VERSION=v2.0.0-001"; \
+	@if [ -z "$(MIGRATE_VERSION)" ]; then \
+		echo "❌ 错误: 请指定版本号，例如: make migrate-rollback MIGRATE_VERSION=v2.0.0-001"; \
 		exit 1; \
 	fi
-	@./bin/migrate -action=rollback -version=$(VERSION)
+	@$(MIGRATE_BINARY) -action=rollback -version=$(MIGRATE_VERSION)
 
-migrate-validate: migrate-build ## 验证数据库状态
+migrate-validate: build-migrate ## 验证数据库状态
 	@echo "✅ 验证数据库状态..."
-	@./bin/migrate -action=validate
+	@$(MIGRATE_BINARY) -action=validate
 
-migrate-info: migrate-build ## 显示详细迁移信息
+migrate-info: build-migrate ## 显示详细迁移信息
 	@echo "ℹ️  显示详细迁移信息..."
-	@./bin/migrate -action=info
+	@$(MIGRATE_BINARY) -action=info
 
-migrate-cleanup: migrate-build ## 清理迁移历史
+migrate-cleanup: build-migrate ## 清理迁移历史
 	@echo "🧹 清理迁移历史..."
-	@./bin/migrate -action=cleanup -keep-days=$(DAYS)
+	@$(MIGRATE_BINARY) -action=cleanup -keep-days=$(DAYS)
 
 # Docker 迁移相关命令
 migrate-docker-build: ## 构建迁移 Docker 镜像
@@ -178,23 +174,133 @@ deps: ## 安装项目依赖
 	@cd web && npm install
 	@echo "✅ 依赖安装完成"
 
-build: ## 构建项目
-	@echo "🔨 构建项目..."
-	@echo "构建后端..."
-	@go build -o bin/alertagent cmd/main.go
-	@echo "构建迁移工具..."
-	@go build -o bin/migrate ./cmd/migrate
-	@echo "构建前端..."
-	@cd web && npm run build
-	@echo "✅ 构建完成"
+# 项目信息
+PROJECT_NAME := alertagent
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+BUILD_TIME := $(shell date +%Y-%m-%d_%H:%M:%S)
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-test: ## 运行测试
-	@echo "🧪 运行测试..."
-	@echo "运行后端测试..."
-	@go test -v ./...
-	@echo "运行前端测试..."
-	@cd web && npm test
-	@echo "✅ 测试完成"
+# 目录配置
+BIN_DIR := bin
+CMD_DIR := cmd
+
+# Go 配置
+GO := go
+GOFLAGS := -v
+LDFLAGS := -ldflags "-X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME) -X main.gitCommit=$(GIT_COMMIT)"
+GOOS := $(shell go env GOOS)
+GOARCH := $(shell go env GOARCH)
+
+# 构建目标
+API_BINARY := $(BIN_DIR)/$(PROJECT_NAME)-api
+CLI_BINARY := $(BIN_DIR)/$(PROJECT_NAME)-cli
+WORKER_BINARY := $(BIN_DIR)/$(PROJECT_NAME)-worker
+MIGRATE_BINARY := $(BIN_DIR)/$(PROJECT_NAME)-migrate
+RULE_SERVER_BINARY := $(BIN_DIR)/rule-server
+N8N_DEMO_BINARY := $(BIN_DIR)/n8n-demo
+MAIN_BINARY := $(BIN_DIR)/alertagent
+
+# 创建必要的目录
+$(BIN_DIR):
+	@mkdir -p $(BIN_DIR)
+
+build: $(BIN_DIR) build-all ## 构建项目
+	@echo "✅ 所有构建完成"
+
+build-all: build-main build-migrate build-rule-server build-n8n-demo build-frontend ## 构建所有组件
+	@echo "🔨 构建所有组件完成"
+
+build-main: $(BIN_DIR) ## 构建主程序
+	@echo "🔨 构建主程序..."
+	@CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(MAIN_BINARY) cmd/main.go
+	@echo "✅ 主程序构建完成: $(MAIN_BINARY)"
+
+build-api: $(BIN_DIR) ## 构建 API 服务
+	@echo "🔨 构建 API 服务..."
+	@if [ -d "$(CMD_DIR)/api" ]; then \
+		CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(API_BINARY) ./$(CMD_DIR)/api; \
+		echo "✅ API 服务构建完成: $(API_BINARY)"; \
+	else \
+		echo "⚠️  API 服务目录不存在，跳过构建"; \
+	fi
+
+build-cli: $(BIN_DIR) ## 构建 CLI 工具
+	@echo "🔨 构建 CLI 工具..."
+	@if [ -d "$(CMD_DIR)/cli" ]; then \
+		CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(CLI_BINARY) ./$(CMD_DIR)/cli; \
+		echo "✅ CLI 工具构建完成: $(CLI_BINARY)"; \
+	else \
+		echo "⚠️  CLI 工具目录不存在，跳过构建"; \
+	fi
+
+build-worker: $(BIN_DIR) ## 构建 Worker 服务
+	@echo "🔨 构建 Worker 服务..."
+	@if [ -d "$(CMD_DIR)/worker" ]; then \
+		CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(WORKER_BINARY) ./$(CMD_DIR)/worker; \
+		echo "✅ Worker 服务构建完成: $(WORKER_BINARY)"; \
+	else \
+		echo "⚠️  Worker 服务目录不存在，跳过构建"; \
+	fi
+
+build-migrate: $(BIN_DIR) ## 构建数据库迁移工具
+	@echo "🔨 构建数据库迁移工具..."
+	@CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(MIGRATE_BINARY) ./$(CMD_DIR)/migrate
+	@echo "✅ 数据库迁移工具构建完成: $(MIGRATE_BINARY)"
+
+build-rule-server: $(BIN_DIR) ## 构建规则服务器
+	@echo "🔨 构建规则服务器..."
+	@CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(RULE_SERVER_BINARY) ./$(CMD_DIR)/rule-server
+	@echo "✅ 规则服务器构建完成: $(RULE_SERVER_BINARY)"
+
+build-n8n-demo: $(BIN_DIR) ## 构建 n8n 演示应用
+	@echo "🔨 构建 n8n 演示应用..."
+	@CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(N8N_DEMO_BINARY) ./$(CMD_DIR)/n8n-demo
+	@echo "✅ n8n 演示应用构建完成: $(N8N_DEMO_BINARY)"
+
+build-frontend: ## 构建前端
+	@echo "🔨 构建前端..."
+	@if [ -d "web" ]; then \
+		cd web && npm run build; \
+		echo "✅ 前端构建完成"; \
+	else \
+		echo "⚠️  前端目录不存在，跳过构建"; \
+	fi
+
+# 测试配置
+TEST_FLAGS := -v -race -coverprofile=$(BIN_DIR)/coverage.out
+TEST_TIMEOUT := 30m
+
+test: $(BIN_DIR) test-unit test-frontend ## 运行所有测试
+	@echo "✅ 所有测试完成"
+
+test-unit: $(BIN_DIR) ## 运行单元测试
+	@echo "🧪 运行单元测试..."
+	@$(GO) test $(TEST_FLAGS) -timeout $(TEST_TIMEOUT) -short ./...
+	@echo "✅ 单元测试完成"
+
+test-integration: $(BIN_DIR) ## 运行集成测试
+	@echo "🧪 运行集成测试..."
+	@$(GO) test $(TEST_FLAGS) -timeout $(TEST_TIMEOUT) -tags=integration ./test/...
+	@echo "✅ 集成测试完成"
+
+test-frontend: ## 运行前端测试
+	@echo "🧪 运行前端测试..."
+	@if [ -d "web" ]; then \
+		cd web && npm test; \
+		echo "✅ 前端测试完成"; \
+	else \
+		echo "⚠️  前端目录不存在，跳过测试"; \
+	fi
+
+test-coverage: test-unit ## 生成测试覆盖率报告
+	@echo "📊 生成覆盖率报告..."
+	@$(GO) tool cover -html=$(BIN_DIR)/coverage.out -o $(BIN_DIR)/coverage.html
+	@echo "✅ 覆盖率报告生成完成: $(BIN_DIR)/coverage.html"
+
+bench: ## 运行基准测试
+	@echo "🏃 运行基准测试..."
+	@$(GO) test -bench=. -benchmem -run=^$$ ./...
+	@echo "✅ 基准测试完成"
 
 lint: ## 代码检查
 	@echo "🔍 代码检查..."
@@ -210,11 +316,12 @@ lint: ## 代码检查
 
 clean: ## 清理构建文件
 	@echo "🧹 清理构建文件..."
-	@rm -rf bin/
+	@rm -rf $(BIN_DIR)/
 	@rm -rf web/dist/
 	@rm -rf logs/
 	@rm -f .backend.pid .frontend.pid
 	@rm -f coverage.out coverage.html
+	@$(GO) clean -cache -testcache -modcache
 	@echo "✅ 清理完成"
 
 check: ## 检查开发环境
@@ -260,6 +367,141 @@ install: ## 安装开发工具
 start: dev ## 启动开发环境 (dev 的别名)
 stop: dev-stop ## 停止开发环境 (dev-stop 的别名)
 restart: dev-restart ## 重启开发环境 (dev-restart 的别名)
+
+# 交叉编译
+build-cross: $(BIN_DIR) ## 交叉编译多平台二进制文件
+	@echo "🔨 交叉编译多平台二进制文件..."
+	@for os in linux darwin windows; do \
+		for arch in amd64 arm64; do \
+			if [ "$$os" = "windows" ]; then \
+				ext=".exe"; \
+			else \
+				ext=""; \
+			fi; \
+			echo "构建 $$os/$$arch..."; \
+			CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build $(GOFLAGS) $(LDFLAGS) \
+				-o $(BIN_DIR)/$(PROJECT_NAME)-main-$$os-$$arch$$ext cmd/main.go; \
+			CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build $(GOFLAGS) $(LDFLAGS) \
+				-o $(BIN_DIR)/$(PROJECT_NAME)-migrate-$$os-$$arch$$ext ./$(CMD_DIR)/migrate; \
+			CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build $(GOFLAGS) $(LDFLAGS) \
+				-o $(BIN_DIR)/rule-server-$$os-$$arch$$ext ./$(CMD_DIR)/rule-server; \
+		done; \
+	done
+	@echo "✅ 交叉编译完成"
+
+# 安装开发工具
+install-tools: ## 安装开发工具
+	@echo "🛠️  安装开发工具..."
+	@$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@$(GO) install golang.org/x/tools/cmd/goimports@latest
+	@$(GO) install github.com/google/wire/cmd/wire@latest
+	@$(GO) install github.com/swaggo/swag/cmd/swag@latest
+	@$(GO) install github.com/cosmtrek/air@latest
+	@echo "✅ 开发工具安装完成"
+
+# 代码格式化
+fmt: ## 格式化代码
+	@echo "🎨 格式化代码..."
+	@$(GO) fmt ./...
+	@if command -v goimports >/dev/null 2>&1; then \
+		goimports -w -local alert_agent .; \
+	else \
+		echo "⚠️  goimports 未安装，跳过导入整理"; \
+	fi
+	@echo "✅ 代码格式化完成"
+
+# 生成代码
+generate: ## 生成代码
+	@echo "⚙️  生成代码..."
+	@$(GO) generate ./...
+	@if command -v wire >/dev/null 2>&1; then \
+		wire ./internal/wire/...; \
+	else \
+		echo "⚠️  wire 未安装，跳过依赖注入代码生成"; \
+	fi
+	@echo "✅ 代码生成完成"
+
+# 生成 API 文档
+docs: ## 生成 API 文档
+	@echo "📚 生成 API 文档..."
+	@mkdir -p docs/swagger
+	@if command -v swag >/dev/null 2>&1; then \
+		swag init -g ./$(CMD_DIR)/api/main.go -o ./docs/swagger; \
+		echo "✅ API 文档生成完成"; \
+	else \
+		echo "⚠️  swag 未安装，跳过 API 文档生成"; \
+	fi
+
+# 开发环境设置
+dev-setup: install-tools deps generate ## 设置开发环境
+	@echo "✅ 开发环境设置完成"
+
+# 代码质量检查
+quality: fmt lint test ## 运行代码质量检查
+	@echo "✅ 代码质量检查完成"
+
+# 发布准备
+release: clean quality build-cross ## 准备发布
+	@echo "✅ 发布准备完成"
+
+# 快速构建（跳过测试）
+quick: deps generate build ## 快速构建（跳过测试）
+	@echo "✅ 快速构建完成"
+
+# 检查构建状态
+check-build: ## 检查构建状态
+	@echo "📊 项目信息:"
+	@echo "  项目名称: $(PROJECT_NAME)"
+	@echo "  版本: $(VERSION)"
+	@echo "  构建时间: $(BUILD_TIME)"
+	@echo "  Git 提交: $(GIT_COMMIT)"
+	@echo "  Go 版本: $(shell $(GO) version)"
+	@echo "  操作系统: $(GOOS)"
+	@echo "  架构: $(GOARCH)"
+	@echo ""
+	@echo "📁 构建目标:"
+	@ls -la $(BIN_DIR)/ 2>/dev/null || echo "  无构建产物"
+
+# 监控文件变化并重新构建
+watch: ## 监控文件变化并重新构建
+	@echo "👀 监控文件变化..."
+	@if command -v air >/dev/null 2>&1; then \
+		air; \
+	elif command -v fswatch >/dev/null 2>&1; then \
+		fswatch -o . -e ".*" -i "\.go$$" | xargs -n1 -I{} make build-main; \
+	else \
+		echo "❌ 请安装 air 或 fswatch: go install github.com/cosmtrek/air@latest 或 brew install fswatch"; \
+	fi
+
+# 安全扫描
+security: ## 运行安全扫描
+	@echo "🔒 运行安全扫描..."
+	@if command -v gosec >/dev/null 2>&1; then \
+		gosec ./...; \
+	else \
+		echo "⚠️  gosec 未安装，正在安装..."; \
+		$(GO) install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; \
+		gosec ./...; \
+	fi
+	@echo "✅ 安全扫描完成"
+
+# 依赖检查
+deps-check: ## 检查依赖更新
+	@echo "📦 检查依赖更新..."
+	@$(GO) list -u -m all
+	@echo "✅ 依赖检查完成"
+
+# 显示项目统计信息
+stats: ## 显示项目统计信息
+	@echo "📈 项目统计信息:"
+	@echo "  Go 文件数量: $(shell find . -name '*.go' | wc -l)"
+	@echo "  代码行数: $(shell find . -name '*.go' -exec wc -l {} + | tail -1 | awk '{print $$1}')"
+	@echo "  包数量: $(shell $(GO) list ./... | wc -l)"
+	@echo "  依赖数量: $(shell $(GO) list -m all | wc -l)"
+
+# 验证构建
+verify: clean deps generate build test ## 完整验证构建
+	@echo "✅ 构建验证完成"
 
 # 显示当前状态
 status: ## 显示服务状态
@@ -321,18 +563,23 @@ docker-logs: ## 查看 Docker 服务日志
 		echo "docker-compose.dev.yml 文件不存在"; \
 	fi
 
-# Rule Server targets
-.PHONY: build-rule-server run-rule-server test-rule-server docker-rule-server
+# 运行服务
+run-main: build-main ## 运行主程序
+	@echo "🚀 启动主程序..."
+	@$(MAIN_BINARY)
 
-# Build rule server
-build-rule-server:
-	@echo "Building rule server..."
-	go build -o bin/rule-server ./cmd/rule-server
+run-api: build-api ## 运行 API 服务
+	@echo "🚀 启动 API 服务..."
+	@$(API_BINARY)
+
+run-worker: build-worker ## 运行 Worker 服务
+	@echo "🚀 启动 Worker 服务..."
+	@$(WORKER_BINARY)
 
 # Run rule server locally
-run-rule-server: build-rule-server
-	@echo "Starting rule server..."
-	DB_HOST=localhost DB_PORT=3306 DB_USER=root DB_PASSWORD=password DB_NAME=alert_agent PORT=8080 ./bin/rule-server
+run-rule-server: build-rule-server ## 运行规则服务器
+	@echo "🚀 启动规则服务器..."
+	DB_HOST=localhost DB_PORT=3306 DB_USER=root DB_PASSWORD=password DB_NAME=alert_agent PORT=8080 $(RULE_SERVER_BINARY)
 
 # Test rule server APIs
 test-rule-server:
@@ -392,13 +639,7 @@ n8n-logs: ## 查看 n8n 日志
 	docker logs -f n8n
 
 # n8n 演示应用
-n8n-demo-build: ## 构建 n8n 演示应用
-	@echo "🔨 构建 n8n 演示应用..."
-	mkdir -p bin
-	go build -o bin/n8n-demo ./cmd/n8n-demo
-	@echo "✅ n8n 演示应用构建完成"
-
-n8n-demo: n8n-demo-build ## 运行 n8n 演示应用
+n8n-demo: build-n8n-demo ## 运行 n8n 演示应用
 	@echo "🚀 启动 n8n 演示应用..."
 	DB_HOST=localhost \
 	DB_PORT=3306 \
@@ -409,7 +650,7 @@ n8n-demo: n8n-demo-build ## 运行 n8n 演示应用
 	N8N_API_KEY=your-n8n-api-key \
 	PORT=8080 \
 	GIN_MODE=debug \
-	./bin/n8n-demo
+	$(N8N_DEMO_BINARY)
 
 n8n-demo-test: ## 测试 n8n 演示功能
 	@echo "🧪 测试 n8n 演示功能..."

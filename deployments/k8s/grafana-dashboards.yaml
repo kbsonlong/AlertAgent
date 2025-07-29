@@ -1,0 +1,526 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: monitoring
+data:
+  alertagent-overview.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "AlertAgent 系统概览",
+        "tags": ["alertagent", "overview"],
+        "style": "dark",
+        "timezone": "browser",
+        "refresh": "30s",
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "服务状态",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "up{job=~\"alertagent-.*\"}",
+                "legendFormat": "{{job}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "green", "value": 1}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "HTTP 请求速率",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total[5m])) by (service)",
+                "legendFormat": "{{service}}"
+              }
+            ],
+            "yAxes": [
+              {"label": "请求/秒", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+          },
+          {
+            "id": 3,
+            "title": "HTTP 错误率",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{status=~\"5..\"} [5m])) by (service) / sum(rate(http_requests_total[5m])) by (service)",
+                "legendFormat": "{{service}} 错误率"
+              }
+            ],
+            "yAxes": [
+              {"label": "错误率", "min": 0, "max": 1}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+          },
+          {
+            "id": 4,
+            "title": "响应时间 (P95)",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))",
+                "legendFormat": "{{service}} P95"
+              }
+            ],
+            "yAxes": [
+              {"label": "秒", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          },
+          {
+            "id": 5,
+            "title": "内存使用率",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "container_memory_working_set_bytes{pod=~\"alertagent-.*\"} / container_spec_memory_limit_bytes{pod=~\"alertagent-.*\"}",
+                "legendFormat": "{{pod}}"
+              }
+            ],
+            "yAxes": [
+              {"label": "使用率", "min": 0, "max": 1}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+          },
+          {
+            "id": 6,
+            "title": "CPU 使用率",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(container_cpu_usage_seconds_total{pod=~\"alertagent-.*\"}[5m])",
+                "legendFormat": "{{pod}}"
+              }
+            ],
+            "yAxes": [
+              {"label": "CPU 核心", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+          }
+        ]
+      }
+    }
+  
+  alertagent-business.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "AlertAgent 业务指标",
+        "tags": ["alertagent", "business"],
+        "style": "dark",
+        "timezone": "browser",
+        "refresh": "30s",
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "活跃告警数量",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "active_alerts_count",
+                "legendFormat": "活跃告警"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": 0},
+                    {"color": "yellow", "value": 100},
+                    {"color": "red", "value": 500}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "告警处理速率",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(rate(alert_processing_total[5m]))",
+                "legendFormat": "处理速率"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+          },
+          {
+            "id": 3,
+            "title": "通知发送成功率",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(rate(notification_sent_total{status=\"success\"}[5m])) / sum(rate(notification_sent_total[5m]))",
+                "legendFormat": "成功率"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percentunit",
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "yellow", "value": 0.9},
+                    {"color": "green", "value": 0.95}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0}
+          },
+          {
+            "id": 4,
+            "title": "集群健康评分",
+            "type": "gauge",
+            "targets": [
+              {
+                "expr": "cluster_health_score",
+                "legendFormat": "健康评分"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "min": 0,
+                "max": 1,
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "yellow", "value": 0.7},
+                    {"color": "green", "value": 0.9}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+          },
+          {
+            "id": 5,
+            "title": "告警处理时间分布",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, sum(rate(alert_processing_duration_seconds_bucket[5m])) by (le))",
+                "legendFormat": "P50"
+              },
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(alert_processing_duration_seconds_bucket[5m])) by (le))",
+                "legendFormat": "P95"
+              },
+              {
+                "expr": "histogram_quantile(0.99, sum(rate(alert_processing_duration_seconds_bucket[5m])) by (le))",
+                "legendFormat": "P99"
+              }
+            ],
+            "yAxes": [
+              {"label": "秒", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+          },
+          {
+            "id": 6,
+            "title": "通知渠道分布",
+            "type": "piechart",
+            "targets": [
+              {
+                "expr": "sum(rate(notification_sent_total[5m])) by (channel)",
+                "legendFormat": "{{channel}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          },
+          {
+            "id": 7,
+            "title": "规则执行统计",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(rule_execution_total{status=\"success\"}[5m]))",
+                "legendFormat": "成功"
+              },
+              {
+                "expr": "sum(rate(rule_execution_total{status=\"failed\"}[5m]))",
+                "legendFormat": "失败"
+              }
+            ],
+            "yAxes": [
+              {"label": "执行/秒", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+          },
+          {
+            "id": 8,
+            "title": "AI 分析请求",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(ai_analysis_requests_total[5m])) by (status)",
+                "legendFormat": "{{status}}"
+              }
+            ],
+            "yAxes": [
+              {"label": "请求/秒", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+          }
+        ]
+      }
+    }
+  
+  alertagent-database.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "AlertAgent 数据库监控",
+        "tags": ["alertagent", "database"],
+        "style": "dark",
+        "timezone": "browser",
+        "refresh": "30s",
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "PostgreSQL 连接数",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "pg_stat_activity_count",
+                "legendFormat": "活跃连接"
+              },
+              {
+                "expr": "pg_settings_max_connections",
+                "legendFormat": "最大连接数"
+              }
+            ],
+            "yAxes": [
+              {"label": "连接数", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "PostgreSQL 查询性能",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(pg_stat_database_tup_returned[5m])",
+                "legendFormat": "返回行数/秒"
+              },
+              {
+                "expr": "rate(pg_stat_database_tup_fetched[5m])",
+                "legendFormat": "获取行数/秒"
+              }
+            ],
+            "yAxes": [
+              {"label": "行/秒", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+          },
+          {
+            "id": 3,
+            "title": "Redis 内存使用",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "redis_memory_used_bytes",
+                "legendFormat": "已使用内存"
+              },
+              {
+                "expr": "redis_memory_max_bytes",
+                "legendFormat": "最大内存"
+              }
+            ],
+            "yAxes": [
+              {"label": "字节", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+          },
+          {
+            "id": 4,
+            "title": "Redis 操作速率",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(redis_commands_processed_total[5m])",
+                "legendFormat": "命令处理速率"
+              },
+              {
+                "expr": "redis_connected_clients",
+                "legendFormat": "连接客户端数"
+              }
+            ],
+            "yAxes": [
+              {"label": "操作/秒", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          },
+          {
+            "id": 5,
+            "title": "数据库响应时间",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(database_query_duration_seconds_bucket[5m])) by (le, operation))",
+                "legendFormat": "{{operation}} P95"
+              }
+            ],
+            "yAxes": [
+              {"label": "秒", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+          }
+        ]
+      }
+    }
+  
+  alertagent-infrastructure.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "AlertAgent 基础设施监控",
+        "tags": ["alertagent", "infrastructure"],
+        "style": "dark",
+        "timezone": "browser",
+        "refresh": "30s",
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "Pod 状态",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "kube_pod_status_phase{namespace=\"alertagent\", phase=\"Running\"}",
+                "legendFormat": "{{pod}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "green", "value": 1}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "节点资源使用率",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "(1 - rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100",
+                "legendFormat": "{{instance}} CPU"
+              },
+              {
+                "expr": "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100",
+                "legendFormat": "{{instance}} Memory"
+              }
+            ],
+            "yAxes": [
+              {"label": "使用率 (%)", "min": 0, "max": 100}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+          },
+          {
+            "id": 3,
+            "title": "网络流量",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(node_network_receive_bytes_total[5m])",
+                "legendFormat": "{{instance}} 接收"
+              },
+              {
+                "expr": "rate(node_network_transmit_bytes_total[5m])",
+                "legendFormat": "{{instance}} 发送"
+              }
+            ],
+            "yAxes": [
+              {"label": "字节/秒", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+          },
+          {
+            "id": 4,
+            "title": "磁盘使用率",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "(1 - node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100",
+                "legendFormat": "{{instance}}:{{mountpoint}}"
+              }
+            ],
+            "yAxes": [
+              {"label": "使用率 (%)", "min": 0, "max": 100}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          },
+          {
+            "id": 5,
+            "title": "容器重启次数",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "increase(kube_pod_container_status_restarts_total{namespace=\"alertagent\"}[1h])",
+                "legendFormat": "{{pod}}/{{container}}"
+              }
+            ],
+            "yAxes": [
+              {"label": "重启次数", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+          }
+        ]
+      }
+    }

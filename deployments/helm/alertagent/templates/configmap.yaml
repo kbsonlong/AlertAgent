@@ -1,0 +1,166 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "alertagent.fullname" . }}-config
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+data:
+  app.yaml: |
+    app:
+      name: {{ .Values.config.app.name | quote }}
+      version: {{ .Values.config.app.version | quote }}
+      environment: {{ .Values.config.app.environment | quote }}
+      debug: {{ .Values.config.app.debug }}
+    
+    server:
+      host: {{ .Values.config.server.host | quote }}
+      port: {{ .Values.config.server.port }}
+      readTimeout: {{ .Values.config.server.readTimeout | quote }}
+      writeTimeout: {{ .Values.config.server.writeTimeout | quote }}
+      idleTimeout: {{ .Values.config.server.idleTimeout | quote }}
+    
+    logging:
+      level: {{ .Values.config.logging.level | quote }}
+      format: {{ .Values.config.logging.format | quote }}
+      output: {{ .Values.config.logging.output | quote }}
+    
+    metrics:
+      enabled: {{ .Values.config.metrics.enabled }}
+      path: {{ .Values.config.metrics.path | quote }}
+      port: {{ .Values.config.metrics.port }}
+    
+    tracing:
+      enabled: {{ .Values.config.tracing.enabled }}
+      jaegerEndpoint: {{ .Values.config.tracing.jaegerEndpoint | quote }}
+      samplingRate: {{ .Values.config.tracing.samplingRate }}
+    
+    health:
+      enabled: {{ .Values.config.health.enabled }}
+      path: {{ .Values.config.health.path | quote }}
+    
+    features:
+      aiAnalysis: {{ .Values.config.features.aiAnalysis }}
+      smartRouting: {{ .Values.config.features.smartRouting }}
+      autoScaling: {{ .Values.config.features.autoScaling }}
+    
+    rateLimit:
+      enabled: {{ .Values.config.rateLimit.enabled }}
+      requests: {{ .Values.config.rateLimit.requests }}
+      window: {{ .Values.config.rateLimit.window | quote }}
+    
+    cache:
+      ttl: {{ .Values.config.cache.ttl | quote }}
+      maxSize: {{ .Values.config.cache.maxSize }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "alertagent.fullname" . }}-prometheus-config
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.labels" . | nindent 4 }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    
+    rule_files:
+      - "/etc/prometheus/rules/*.yml"
+    
+    scrape_configs:
+      # AlertAgent API
+      - job_name: 'alertagent-api'
+        static_configs:
+          - targets: ['{{ include "alertagent.fullname" . }}-api:{{ .Values.config.metrics.port }}']
+        metrics_path: {{ .Values.config.metrics.path }}
+        scrape_interval: 15s
+      
+      # AlertAgent Worker
+      - job_name: 'alertagent-worker'
+        static_configs:
+          - targets: ['{{ include "alertagent.fullname" . }}-worker:{{ .Values.config.metrics.port }}']
+        metrics_path: {{ .Values.config.metrics.path }}
+        scrape_interval: 15s
+      
+      # Rule Server
+      - job_name: 'rule-server'
+        static_configs:
+          - targets: ['{{ include "alertagent.fullname" . }}-rule-server:{{ .Values.config.metrics.port }}']
+        metrics_path: {{ .Values.config.metrics.path }}
+        scrape_interval: 15s
+      
+      {{- if .Values.postgresql.enabled }}
+      # PostgreSQL Exporter
+      - job_name: 'postgres-exporter'
+        static_configs:
+          - targets: ['{{ include "alertagent.fullname" . }}-postgres-exporter:9187']
+        scrape_interval: 30s
+      {{- end }}
+      
+      {{- if .Values.redis.enabled }}
+      # Redis Exporter
+      - job_name: 'redis-exporter'
+        static_configs:
+          - targets: ['{{ include "alertagent.fullname" . }}-redis-exporter:9121']
+        scrape_interval: 30s
+      {{- end }}
+      
+      # Kubernetes API Server
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+          - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: default;kubernetes;https
+      
+      # Kubernetes Nodes
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics
+      
+      # Kubernetes Pods
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name

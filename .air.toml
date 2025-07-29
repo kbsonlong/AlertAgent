@@ -1,0 +1,72 @@
+# Air 配置文件 - Go 热重载工具
+# 文档: https://github.com/cosmtrek/air
+
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp"
+
+[build]
+  # 构建的二进制文件名
+  bin = "./bin/alertagent"
+  # 构建命令
+  cmd = "go build -o ./bin/alertagent cmd/main.go"
+  # 延迟时间（毫秒）
+  delay = 1000
+  # 排除的目录
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "web/node_modules", "web/dist", "bin", "logs", ".git"]
+  # 排除的文件
+  exclude_file = []
+  # 排除的正则表达式
+  exclude_regex = ["_test.go"]
+  # 排除未更改的文件
+  exclude_unchanged = false
+  # 跟随符号链接
+  follow_symlink = false
+  # 全屏显示
+  full_bin = ""
+  # 包含的目录
+  include_dir = []
+  # 包含的文件扩展名
+  include_ext = ["go", "tpl", "tmpl", "html"]
+  # 包含的文件
+  include_file = []
+  # 终止旧进程
+  kill_delay = "0s"
+  # 日志文件
+  log = "build-errors.log"
+  # 发送中断信号前的延迟时间
+  send_interrupt = false
+  # 发送终止信号前的延迟时间
+  stop_on_root = false
+  # 使用轮询而不是 fsnotify
+  poll = false
+  # 轮询间隔（毫秒）
+  poll_interval = 0
+  # 重新运行延迟（毫秒）
+  rerun = false
+  # 重新运行延迟时间
+  rerun_delay = 500
+
+[color]
+  # 自定义每个部分显示的颜色
+  app = "blue"
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  # 显示日志时间
+  time = false
+  # 只显示主要日志
+  main_only = false
+
+[misc]
+  # 删除每次构建时的旧二进制文件
+  clean_on_exit = false
+
+[screen]
+  # 清屏
+  clear_on_rebuild = false
+  # 保持滚动
+  keep_scroll = true

@@ -1,0 +1,40 @@
+{{- if .Values.api.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "alertagent.fullname" . }}-api
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.api.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.api.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.api.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.api.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.api.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "alertagent.api.selectorLabels" . | nindent 6 }}
+{{- end }}
+
+---
+{{- if .Values.worker.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "alertagent.fullname" . }}-worker
+  namespace: {{ include "alertagent.namespace" . }}
+  labels:
+    {{- include "alertagent.worker.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.worker.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.worker.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.worker.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.worker.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "alertagent.worker.selectorLabels" . | nindent 6 }}
+{{- end }}
