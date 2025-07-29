@@ -6,6 +6,7 @@ import (
 	"alert_agent/internal/domain/channel"
 	"alert_agent/internal/domain/cluster"
 	"alert_agent/internal/infrastructure/config"
+	"alert_agent/internal/security/domain"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -45,6 +46,10 @@ func Migrate(db *gorm.DB) error {
 	err := db.AutoMigrate(
 		&cluster.Cluster{},
 		&channel.Channel{},
+		&domain.User{},
+		&domain.Role{},
+		&domain.Permission{},
+		&domain.AuditLog{},
 	)
 	if err != nil {
 		return err

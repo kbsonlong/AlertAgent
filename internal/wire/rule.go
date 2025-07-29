@@ -6,8 +6,8 @@ package wire
 import (
 	"github.com/google/wire"
 	"gorm.io/gorm"
-	"alert_agent/internal/application/rule"
-	"alert_agent/internal/domain/rule"
+	apprule "alert_agent/internal/application/rule"
+	domainrule "alert_agent/internal/domain/rule"
 	"alert_agent/internal/handler"
 	"alert_agent/internal/infrastructure/repository"
 )
@@ -15,9 +15,9 @@ import (
 // RuleSet 规则模块的依赖注入集合
 var RuleSet = wire.NewSet(
 	repository.NewRuleRepository,
-	wire.Bind(new(rule.Repository), new(*repository.RuleRepository)),
-	rule.NewService,
-	wire.Bind(new(rule.Service), new(*rule.Service)),
+	wire.Bind(new(domainrule.Repository), new(domainrule.Repository)),
+	apprule.NewService,
+	wire.Bind(new(domainrule.Service), new(*apprule.Service)),
 	handler.NewRuleHandler,
 )
 

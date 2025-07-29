@@ -7,10 +7,12 @@ import (
 	"alert_agent/internal/application/channel"
 	"alert_agent/internal/application/cluster"
 	"alert_agent/internal/infrastructure/alert"
+	"alert_agent/internal/infrastructure/config"
 	"alert_agent/internal/infrastructure/container"
 	"alert_agent/internal/infrastructure/dify"
 	"alert_agent/internal/infrastructure/repository"
 	"alert_agent/internal/interfaces/http"
+	"alert_agent/internal/security/di"
 
 	analysisDomain "alert_agent/internal/domain/analysis"
 	alertDomain "alert_agent/internal/domain/alert"
@@ -27,6 +29,7 @@ type Container struct {
 	db          *gorm.DB
 	redisClient *redis.Client
 	logger      *zap.Logger
+	config      *config.Config
 
 	// Repositories
 	clusterRepo         clusterDomain.Repository
@@ -48,21 +51,27 @@ type Container struct {
 	// Analysis Container
 	analysisContainer *container.AnalysisContainer
 
+	// Security Container
+	securityContainer *di.Container
+
 	// HTTP Router
 	router *http.Router
 }
 
-// NewContainer 创建依赖注入容器
-func NewContainer(db *gorm.DB, redisClient *redis.Client, logger *zap.Logger) *Container {
+// NewContainer 创建新的容器
+func NewContainer(db *gorm.DB, redisClient *redis.Client, logger *zap.Logger, cfg *config.Config) *Container {
 	c := &Container{
 		db:          db,
 		redisClient: redisClient,
 		logger:      logger,
+		config:      cfg,
 	}
 
 	c.initRepositories()
 	c.initServices()
+	c.initDifyComponents()
 	c.initAnalysisContainer()
+	c.initSecurityContainer()
 	c.initHTTPRouter()
 
 	return c
@@ -121,7 +130,15 @@ func (c *Container) initDifyComponents() {
 // initAnalysisContainer 初始化分析容器
 func (c *Container) initAnalysisContainer() {
 	c.analysisContainer = container.NewAnalysisContainer(c.db, c.redisClient)
-	c.analysisService = c.analysisContainer.GetAnalysisService()
+}
+
+// initSecurityContainer 初始化安全容器
+func (c *Container) initSecurityContainer() {
+	var err error
+	c.securityContainer, err = di.NewContainer()
+	if err != nil {
+		c.logger.Fatal("failed to initialize security container", zap.Error(err))
+	}
 }
 
 // initHTTPRouter 初始化HTTP路由
@@ -133,8 +150,9 @@ func (c *Container) initHTTPRouter() {
 		c.channelService,
 		c.channelManager,
 		c.analysisService,
-		nil, // n8nService - 需要根据实际情况传入
-		nil, // workflowManager - 需要根据实际情况传入
+		nil, // n8nService - 需要实际实现
+		nil, // workflowManager - 需要实际实现
+		c.securityContainer,
 		c.logger,
 	)
 }
@@ -172,6 +190,11 @@ func (c *Container) GetChannelService() channelDomain.Service {
 // GetHTTPRouter 获取HTTP路由器
 func (c *Container) GetHTTPRouter() *http.Router {
 	return c.router
+}
+
+// GetSecurityContainer 获取安全容器
+func (c *Container) GetSecurityContainer() *di.Container {
+	return c.securityContainer
 }
 
 // Close 关闭容器，释放资源

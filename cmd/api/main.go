@@ -57,7 +57,7 @@ func main() {
 	}
 
 	// 创建依赖注入容器
-	container := di.NewContainer(db, redisClient, logger)
+	container := di.NewContainer(db, redisClient, logger, cfg)
 	defer container.Close()
 
 	// 设置Gin模式

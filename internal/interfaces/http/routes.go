@@ -5,6 +5,8 @@ import (
 	"alert_agent/internal/domain/channel"
 	"alert_agent/internal/domain/cluster"
 	domainAnalysis "alert_agent/internal/domain/analysis"
+	"alert_agent/internal/security/di"
+	"alert_agent/internal/security/routes"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -12,13 +14,14 @@ import (
 
 // Router HTTP路由器
 type Router struct {
-	clusterHandler  *ClusterHandler
-	channelHandler  *ChannelHandler
-	pluginHandler   *PluginHandler
-	analysisHandler *AnalysisHandler
-	n8nService      *analysis.N8NAnalysisService
-	workflowManager domainAnalysis.N8NWorkflowManager
-	logger          *zap.Logger
+	clusterHandler    *ClusterHandler
+	channelHandler    *ChannelHandler
+	pluginHandler     *PluginHandler
+	analysisHandler   *AnalysisHandler
+	n8nService        *analysis.N8NAnalysisService
+	workflowManager   domainAnalysis.N8NWorkflowManager
+	securityContainer *di.Container
+	logger            *zap.Logger
 }
 
 // NewRouter 创建路由器
@@ -29,23 +32,34 @@ func NewRouter(
 	analysisService domainAnalysis.AnalysisService,
 	n8nService *analysis.N8NAnalysisService,
 	workflowManager domainAnalysis.N8NWorkflowManager,
+	securityContainer *di.Container,
 	logger *zap.Logger,
 ) *Router {
 	return &Router{
-		clusterHandler:  NewClusterHandler(clusterService, logger),
-		channelHandler:  NewChannelHandler(channelService, logger),
-		pluginHandler:   NewPluginHandler(channelManager, logger),
-		analysisHandler: NewAnalysisHandler(analysisService),
-		n8nService:      n8nService,
-		workflowManager: workflowManager,
-		logger:          logger,
+		clusterHandler:    NewClusterHandler(clusterService, logger),
+		channelHandler:    NewChannelHandler(channelService, logger),
+		pluginHandler:     NewPluginHandler(channelManager, logger),
+		analysisHandler:   NewAnalysisHandler(analysisService),
+		n8nService:        n8nService,
+		workflowManager:   workflowManager,
+		securityContainer: securityContainer,
+		logger:            logger,
 	}
 }
 
 // SetupRoutes 设置路由
 func (r *Router) SetupRoutes(engine *gin.Engine) {
+	// 设置全局安全中间件
+	routes.SetupSecurityMiddleware(engine)
+	
 	// 健康检查
 	engine.GET("/health", r.healthCheck)
+	
+	// 设置安全相关路由（认证、用户管理等）
+	routes.SetupAuthRoutes(engine, r.securityContainer.GetAuthHandler(), r.securityContainer.GetMiddlewareConfig())
+	
+	// 设置健康检查路由
+	routes.SetupHealthRoutes(engine)
 
 	// API v1 路由组
 	v1 := engine.Group("/api/v1")

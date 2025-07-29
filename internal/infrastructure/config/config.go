@@ -14,6 +14,7 @@ type Config struct {
 	Database DatabaseConfig `json:"database"`
 	Redis    RedisConfig    `json:"redis"`
 	Logging  LoggingConfig  `json:"logging"`
+	Security SecurityConfig `json:"security"`
 }
 
 // AppConfig 应用配置
@@ -65,6 +66,68 @@ type LoggingConfig struct {
 	ErrorPath  string `json:"error_path"`
 }
 
+// SecurityConfig 安全配置
+type SecurityConfig struct {
+	JWT        JWTConfig        `json:"jwt"`
+	Encryption EncryptionConfig `json:"encryption"`
+	Audit      AuditConfig      `json:"audit"`
+	RateLimit  RateLimitConfig  `json:"rate_limit"`
+	Auth       AuthConfig       `json:"auth"`
+	Session    SessionConfig    `json:"session"`
+}
+
+// JWTConfig JWT配置
+type JWTConfig struct {
+	Secret     string `json:"secret"`
+	Expiration int    `json:"expiration"`
+	Issuer     string `json:"issuer"`
+	Audience   string `json:"audience"`
+}
+
+// EncryptionConfig 加密配置
+type EncryptionConfig struct {
+	Key       string `json:"key"`
+	Algorithm string `json:"algorithm"`
+	KeySize   int    `json:"key_size"`
+}
+
+// AuditConfig 审计配置
+type AuditConfig struct {
+	Enabled    bool   `json:"enabled"`
+	LogPath    string `json:"log_path"`
+	MaxSize    int    `json:"max_size"`
+	MaxBackups int    `json:"max_backups"`
+	MaxAge     int    `json:"max_age"`
+	Compress   bool   `json:"compress"`
+}
+
+// RateLimitConfig 限流配置
+type RateLimitConfig struct {
+	Enabled bool `json:"enabled"`
+	RPS     int  `json:"rps"`
+	Burst   int  `json:"burst"`
+}
+
+// AuthConfig 认证配置
+type AuthConfig struct {
+	MaxLoginAttempts int `json:"max_login_attempts"`
+	LockoutDuration  int `json:"lockout_duration"`
+	PasswordMinLen   int `json:"password_min_len"`
+	RequireUppercase bool `json:"require_uppercase"`
+	RequireLowercase bool `json:"require_lowercase"`
+	RequireNumbers   bool `json:"require_numbers"`
+	RequireSymbols   bool `json:"require_symbols"`
+}
+
+// SessionConfig 会话配置
+type SessionConfig struct {
+	Timeout    int    `json:"timeout"`
+	CookieName string `json:"cookie_name"`
+	Secure     bool   `json:"secure"`
+	HttpOnly   bool   `json:"http_only"`
+	SameSite   string `json:"same_site"`
+}
+
 // Load 加载配置
 func Load() (*Config, error) {
 	cfg := &Config{
@@ -106,6 +169,48 @@ func Load() (*Config, error) {
 			Format:     getEnv("LOG_FORMAT", "json"),
 			OutputPath: getEnv("LOG_OUTPUT_PATH", "stdout"),
 			ErrorPath:  getEnv("LOG_ERROR_PATH", "stderr"),
+		},
+		Security: SecurityConfig{
+			JWT: JWTConfig{
+				Secret:     getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
+				Expiration: getEnvInt("JWT_EXPIRATION", 3600),
+				Issuer:     getEnv("JWT_ISSUER", "alert-agent"),
+				Audience:   getEnv("JWT_AUDIENCE", "alert-agent-users"),
+			},
+			Encryption: EncryptionConfig{
+				Key:       getEnv("ENCRYPTION_KEY", "your-encryption-key-32-bytes-long"),
+				Algorithm: getEnv("ENCRYPTION_ALGORITHM", "AES-GCM"),
+				KeySize:   getEnvInt("ENCRYPTION_KEY_SIZE", 32),
+			},
+			Audit: AuditConfig{
+				Enabled:    getEnvBool("AUDIT_ENABLED", true),
+				LogPath:    getEnv("AUDIT_LOG_PATH", "./logs/audit.log"),
+				MaxSize:    getEnvInt("AUDIT_MAX_SIZE", 100),
+				MaxBackups: getEnvInt("AUDIT_MAX_BACKUPS", 3),
+				MaxAge:     getEnvInt("AUDIT_MAX_AGE", 28),
+				Compress:   getEnvBool("AUDIT_COMPRESS", true),
+			},
+			RateLimit: RateLimitConfig{
+				Enabled: getEnvBool("RATE_LIMIT_ENABLED", true),
+				RPS:     getEnvInt("RATE_LIMIT_RPS", 100),
+				Burst:   getEnvInt("RATE_LIMIT_BURST", 200),
+			},
+			Auth: AuthConfig{
+				MaxLoginAttempts: getEnvInt("AUTH_MAX_LOGIN_ATTEMPTS", 5),
+				LockoutDuration:  getEnvInt("AUTH_LOCKOUT_DURATION", 900),
+				PasswordMinLen:   getEnvInt("AUTH_PASSWORD_MIN_LEN", 8),
+				RequireUppercase: getEnvBool("AUTH_REQUIRE_UPPERCASE", true),
+				RequireLowercase: getEnvBool("AUTH_REQUIRE_LOWERCASE", true),
+				RequireNumbers:   getEnvBool("AUTH_REQUIRE_NUMBERS", true),
+				RequireSymbols:   getEnvBool("AUTH_REQUIRE_SYMBOLS", false),
+			},
+			Session: SessionConfig{
+				Timeout:    getEnvInt("SESSION_TIMEOUT", 3600),
+				CookieName: getEnv("SESSION_COOKIE_NAME", "alert-agent-session"),
+				Secure:     getEnvBool("SESSION_SECURE", false),
+				HttpOnly:   getEnvBool("SESSION_HTTP_ONLY", true),
+				SameSite:   getEnv("SESSION_SAME_SITE", "Lax"),
+			},
 		},
 	}
 
