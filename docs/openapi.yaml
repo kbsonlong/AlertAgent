@@ -1,0 +1,1145 @@
+openapi: 3.0.3
+info:
+  title: AlertAgent API
+  description: |
+    AlertAgent 是一个智能告警管理系统，提供告警分析、通道管理、集群管理等功能。
+    
+    ## 主要功能
+    - 告警分析和处理
+    - 多种通知渠道管理
+    - 集群监控和管理
+    - 插件系统支持
+    - 安全认证和授权
+    
+    ## 认证方式
+    API 使用 JWT Bearer Token 进行认证。
+    
+    ## 错误处理
+    所有错误响应都遵循统一的格式，包含错误类型、错误代码和详细信息。
+  version: 1.0.0
+  contact:
+    name: AlertAgent Team
+    email: support@alertagent.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: 开发环境
+  - url: https://api.alertagent.com
+    description: 生产环境
+
+paths:
+  # 健康检查
+  /health:
+    get:
+      tags:
+        - Health
+      summary: 健康检查
+      description: 检查服务健康状态
+      responses:
+        '200':
+          description: 服务正常
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  message:
+                    type: string
+                    example: Alert Agent is running
+
+  # 分析相关API
+  /api/v1/analysis/submit:
+    post:
+      tags:
+        - Analysis
+      summary: 提交分析任务
+      description: 提交一个新的告警分析任务
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitAnalysisRequest'
+      responses:
+        '200':
+          description: 分析任务提交成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SubmitAnalysisResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/analysis/result/{task_id}:
+    get:
+      tags:
+        - Analysis
+      summary: 获取分析结果
+      description: 根据任务ID获取分析结果
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: 任务ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 分析结果获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AnalysisResultResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/analysis/progress/{task_id}:
+    get:
+      tags:
+        - Analysis
+      summary: 获取分析进度
+      description: 根据任务ID获取分析进度
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: 任务ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 分析进度获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AnalysisProgressResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/analysis/tasks:
+    get:
+      tags:
+        - Analysis
+      summary: 列出分析任务
+      description: 根据过滤条件列出分析任务
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: alert_id
+          in: query
+          description: 告警ID
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: 分析类型
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: 任务状态
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: 限制数量
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          description: 偏移量
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: 任务列表获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AnalysisTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/analysis/health:
+    get:
+      tags:
+        - Analysis
+      summary: 分析服务健康检查
+      description: 检查分析服务的健康状态
+      responses:
+        '200':
+          description: 分析服务健康
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # 通道管理API
+  /api/v1/channels:
+    get:
+      tags:
+        - Channels
+      summary: 获取通道列表
+      description: 获取通道列表，支持分页和过滤
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: 每页数量
+          schema:
+            type: integer
+            default: 10
+        - name: offset
+          in: query
+          description: 偏移量
+          schema:
+            type: integer
+            default: 0
+        - name: search
+          in: query
+          description: 搜索关键词
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: 通道类型
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: 通道状态
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 通道列表获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PageResult'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags:
+        - Channels
+      summary: 创建通道
+      description: 创建新的通知通道
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChannelRequest'
+      responses:
+        '201':
+          description: 通道创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Channel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/channels/{id}:
+    get:
+      tags:
+        - Channels
+      summary: 获取通道详情
+      description: 根据ID获取通道详情
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 通道ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 通道详情获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Channel'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags:
+        - Channels
+      summary: 更新通道
+      description: 更新通道配置
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 通道ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateChannelRequest'
+      responses:
+        '200':
+          description: 通道更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Channel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - Channels
+      summary: 删除通道
+      description: 删除指定通道
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 通道ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 通道删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/channels/{id}/test:
+    post:
+      tags:
+        - Channels
+      summary: 测试通道连接
+      description: 测试通道连接是否正常
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 通道ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 测试完成
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TestResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/channels/{id}/stats:
+    get:
+      tags:
+        - Channels
+      summary: 获取通道统计信息
+      description: 获取指定通道的统计信息，包括消息发送量、成功率等
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 通道ID
+          schema:
+            type: string
+        - name: start_date
+          in: query
+          description: 开始日期 (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          description: 结束日期 (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 统计信息获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ChannelStats'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # 集群管理API
+  /api/v1/clusters:
+    get:
+      tags:
+        - Clusters
+      summary: 获取集群列表
+      description: 获取集群列表，支持分页和过滤
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: 每页数量
+          schema:
+            type: integer
+            default: 10
+        - name: offset
+          in: query
+          description: 偏移量
+          schema:
+            type: integer
+            default: 0
+        - name: search
+          in: query
+          description: 搜索关键词
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: 集群类型
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: 集群状态
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 集群列表获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PageResult'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # 插件管理API
+  /api/v1/plugins:
+    get:
+      tags:
+        - Plugins
+      summary: 获取插件列表
+      description: 获取所有可用的通道插件列表及其配置模式
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 插件列表获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          plugins:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/PluginInfo'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # 认证API
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: 用户登录
+      description: 用户登录获取访问令牌
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: 用户注册
+      description: 注册新用户账号
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # 通用响应结构
+    APIResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [success, error]
+          description: 响应状态
+        message:
+          type: string
+          description: 响应消息
+        data:
+          type: object
+          description: 响应数据
+        error:
+          $ref: '#/components/schemas/ErrorInfo'
+      required:
+        - status
+        - message
+
+    ErrorInfo:
+      type: object
+      properties:
+        type:
+          type: string
+          description: 错误类型
+        code:
+          type: string
+          description: 错误代码
+        message:
+          type: string
+          description: 错误消息
+        details:
+          type: object
+          description: 错误详情
+
+    PageResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+          description: 数据项列表
+        total:
+          type: integer
+          description: 总数量
+        page:
+          type: integer
+          description: 当前页码
+        page_size:
+          type: integer
+          description: 每页大小
+        has_next:
+          type: boolean
+          description: 是否有下一页
+        has_prev:
+          type: boolean
+          description: 是否有上一页
+
+    # 分析相关模型
+    SubmitAnalysisRequest:
+      type: object
+      properties:
+        alert_id:
+          type: integer
+          description: 告警ID
+        type:
+          type: string
+          description: 分析类型
+          enum: [root_cause, impact, recommendation]
+        priority:
+          type: integer
+          description: 优先级 (1-10)
+          minimum: 1
+          maximum: 10
+        timeout:
+          type: integer
+          description: 超时时间（秒）
+        options:
+          type: object
+          description: 分析选项
+        callback:
+          type: string
+          description: 回调URL
+      required:
+        - alert_id
+        - type
+
+    SubmitAnalysisResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+          description: 任务ID
+        status:
+          type: string
+          description: 任务状态
+        message:
+          type: string
+          description: 响应消息
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间
+
+    AnalysisResultResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+          description: 任务ID
+        status:
+          type: string
+          description: 任务状态
+        result:
+          type: object
+          description: 分析结果
+        confidence:
+          type: number
+          format: float
+          description: 置信度
+        processing_time:
+          type: integer
+          description: 处理时间（毫秒）
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间
+        completed_at:
+          type: string
+          format: date-time
+          description: 完成时间
+
+    AnalysisProgressResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+          description: 任务ID
+        stage:
+          type: string
+          description: 当前阶段
+        progress:
+          type: number
+          format: float
+          description: 进度百分比 (0-100)
+        message:
+          type: string
+          description: 进度消息
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新时间
+
+    AnalysisTaskResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 任务ID
+        alert_id:
+          type: integer
+          description: 告警ID
+        type:
+          type: string
+          description: 分析类型
+        status:
+          type: string
+          description: 任务状态
+        priority:
+          type: integer
+          description: 优先级
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新时间
+
+    # 通道相关模型
+    Channel:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 通道ID
+        name:
+          type: string
+          description: 通道名称
+        type:
+          type: string
+          description: 通道类型
+        config:
+          type: object
+          description: 通道配置
+        status:
+          type: string
+          description: 通道状态
+          enum: [active, inactive, error]
+        health_status:
+          type: string
+          description: 健康状态
+          enum: [healthy, unhealthy, unknown]
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新时间
+
+    CreateChannelRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 通道名称
+        type:
+          type: string
+          description: 通道类型
+        config:
+          type: object
+          description: 通道配置
+        description:
+          type: string
+          description: 通道描述
+      required:
+        - name
+        - type
+        - config
+
+    UpdateChannelRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 通道名称
+        config:
+          type: object
+          description: 通道配置
+        description:
+          type: string
+          description: 通道描述
+        status:
+          type: string
+          description: 通道状态
+
+    TestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: 测试是否成功
+        message:
+          type: string
+          description: 测试消息
+        latency:
+          type: integer
+          description: 延迟（毫秒）
+        details:
+          type: object
+          description: 测试详情
+        timestamp:
+          type: integer
+          description: 时间戳
+
+    ChannelStats:
+      type: object
+      properties:
+        channel_id:
+          type: string
+          description: 通道ID
+        total_messages:
+          type: integer
+          description: 总消息数
+        success_messages:
+          type: integer
+          description: 成功消息数
+        failed_messages:
+          type: integer
+          description: 失败消息数
+        success_rate:
+          type: number
+          format: float
+          description: 成功率
+        avg_response_time:
+          type: integer
+          description: 平均响应时间（毫秒）
+        last_message_at:
+          type: string
+          format: date-time
+          description: 最后消息时间
+
+    # 插件相关模型
+    PluginInfo:
+      type: object
+      properties:
+        type:
+          type: string
+          description: 插件类型
+        name:
+          type: string
+          description: 插件名称
+        version:
+          type: string
+          description: 插件版本
+        description:
+          type: string
+          description: 插件描述
+        schema:
+          type: object
+          description: 配置模式
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: 插件能力
+
+    # 认证相关模型
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          description: 用户名
+        password:
+          type: string
+          description: 密码
+      required:
+        - username
+        - password
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: 访问令牌
+        refresh_token:
+          type: string
+          description: 刷新令牌
+        expires_in:
+          type: integer
+          description: 令牌过期时间（秒）
+        user:
+          $ref: '#/components/schemas/User'
+
+    RegisterRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          description: 用户名
+        email:
+          type: string
+          format: email
+          description: 邮箱
+        password:
+          type: string
+          description: 密码
+        roles:
+          type: array
+          items:
+            type: string
+          description: 用户角色
+      required:
+        - username
+        - email
+        - password
+
+    RegisterResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          description: 用户ID
+        username:
+          type: string
+          description: 用户名
+        email:
+          type: string
+          description: 邮箱
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 用户ID
+        username:
+          type: string
+          description: 用户名
+        email:
+          type: string
+          description: 邮箱
+        roles:
+          type: array
+          items:
+            type: string
+          description: 用户角色
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间
+        last_login_at:
+          type: string
+          format: date-time
+          description: 最后登录时间
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/APIResponse'
+              - type: object
+                properties:
+                  status:
+                    example: error
+                  message:
+                    example: Invalid request parameters
+
+    Unauthorized:
+      description: 未授权访问
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/APIResponse'
+              - type: object
+                properties:
+                  status:
+                    example: error
+                  message:
+                    example: Unauthorized access
+
+    Forbidden:
+      description: 禁止访问
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/APIResponse'
+              - type: object
+                properties:
+                  status:
+                    example: error
+                  message:
+                    example: Forbidden access
+
+    NotFound:
+      description: 资源未找到
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/APIResponse'
+              - type: object
+                properties:
+                  status:
+                    example: error
+                  message:
+                    example: Resource not found
+
+    Conflict:
+      description: 资源冲突
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/APIResponse'
+              - type: object
+                properties:
+                  status:
+                    example: error
+                  message:
+                    example: Resource conflict
+
+    InternalServerError:
+      description: 服务器内部错误
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/APIResponse'
+              - type: object
+                properties:
+                  status:
+                    example: error
+                  message:
+                    example: Internal server error
+
+tags:
+  - name: Health
+    description: 健康检查相关接口
+  - name: Analysis
+    description: 告警分析相关接口
+  - name: Channels
+    description: 通道管理相关接口
+  - name: Clusters
+    description: 集群管理相关接口
+  - name: Plugins
+    description: 插件管理相关接口
+  - name: Authentication
+    description: 认证相关接口

@@ -23,7 +23,20 @@ help: ## 显示帮助信息
 	@echo "项目管理:"
 	@echo "  deps             安装项目依赖
 	@echo "  build            构建项目"
-	@echo "  test             运行测试"
+	@echo "  test             运行基础测试"
+	@echo "  test-all         运行所有类型测试"
+	@echo "  test-unit        运行单元测试"
+	@echo "  test-integration 运行集成测试"
+	@echo "  test-performance 运行性能测试"
+	@echo "  test-load        运行负载测试"
+	@echo "  test-compatibility 运行兼容性测试"
+	@echo "  test-coverage    生成测试覆盖率报告"
+	@echo "  test-clean       清理测试环境"
+	@echo "  docs             生成所有API文档"
+	@echo "  docs-swagger     生成Swagger文档"
+	@echo "  docs-openapi     验证OpenAPI规范"
+	@echo "  docs-serve       启动文档服务器"
+	@echo "  docs-clean       清理生成的文档"
 	@echo "  lint             代码检查"
 	@echo "  clean            清理构建文件"
 	@echo "  check            检查开发环境"
@@ -269,19 +282,46 @@ build-frontend: ## 构建前端
 # 测试配置
 TEST_FLAGS := -v -race -coverprofile=$(BIN_DIR)/coverage.out
 TEST_TIMEOUT := 30m
+TEST_SCRIPT := ./scripts/run-tests.sh
 
 test: $(BIN_DIR) test-unit test-frontend ## 运行所有测试
 	@echo "✅ 所有测试完成"
 
+test-all: $(BIN_DIR) ## 运行所有类型的测试（单元、集成、性能、兼容性）
+	@echo "🧪 运行所有类型的测试..."
+	@chmod +x $(TEST_SCRIPT)
+	@$(TEST_SCRIPT) all --race
+	@echo "✅ 所有测试完成"
+
 test-unit: $(BIN_DIR) ## 运行单元测试
 	@echo "🧪 运行单元测试..."
-	@$(GO) test $(TEST_FLAGS) -timeout $(TEST_TIMEOUT) -short ./...
+	@chmod +x $(TEST_SCRIPT)
+	@$(TEST_SCRIPT) unit --race
 	@echo "✅ 单元测试完成"
 
 test-integration: $(BIN_DIR) ## 运行集成测试
 	@echo "🧪 运行集成测试..."
-	@$(GO) test $(TEST_FLAGS) -timeout $(TEST_TIMEOUT) -tags=integration ./test/...
+	@chmod +x $(TEST_SCRIPT)
+	@$(TEST_SCRIPT) integration --race
 	@echo "✅ 集成测试完成"
+
+test-performance: $(BIN_DIR) ## 运行性能测试
+	@echo "🧪 运行性能测试..."
+	@chmod +x $(TEST_SCRIPT)
+	@$(TEST_SCRIPT) performance --bench
+	@echo "✅ 性能测试完成"
+
+test-load: $(BIN_DIR) ## 运行负载测试
+	@echo "🧪 运行负载测试..."
+	@chmod +x $(TEST_SCRIPT)
+	@$(TEST_SCRIPT) load
+	@echo "✅ 负载测试完成"
+
+test-compatibility: $(BIN_DIR) ## 运行API版本兼容性测试
+	@echo "🧪 运行兼容性测试..."
+	@chmod +x $(TEST_SCRIPT)
+	@$(TEST_SCRIPT) compatibility --bench
+	@echo "✅ 兼容性测试完成"
 
 test-frontend: ## 运行前端测试
 	@echo "🧪 运行前端测试..."
@@ -292,10 +332,17 @@ test-frontend: ## 运行前端测试
 		echo "⚠️  前端目录不存在，跳过测试"; \
 	fi
 
-test-coverage: test-unit ## 生成测试覆盖率报告
+test-coverage: $(BIN_DIR) ## 生成测试覆盖率报告
 	@echo "📊 生成覆盖率报告..."
-	@$(GO) tool cover -html=$(BIN_DIR)/coverage.out -o $(BIN_DIR)/coverage.html
-	@echo "✅ 覆盖率报告生成完成: $(BIN_DIR)/coverage.html"
+	@chmod +x $(TEST_SCRIPT)
+	@$(TEST_SCRIPT) coverage
+	@echo "✅ 覆盖率报告生成完成: coverage.html"
+
+test-clean: ## 清理测试环境
+	@echo "🧹 清理测试环境..."
+	@chmod +x $(TEST_SCRIPT)
+	@$(TEST_SCRIPT) unit --clean
+	@echo "✅ 测试环境清理完成"
 
 bench: ## 运行基准测试
 	@echo "🏃 运行基准测试..."
@@ -422,15 +469,48 @@ generate: ## 生成代码
 	@echo "✅ 代码生成完成"
 
 # 生成 API 文档
-docs: ## 生成 API 文档
-	@echo "📚 生成 API 文档..."
+docs: docs-swagger docs-openapi ## 生成所有 API 文档
+	@echo "✅ 所有 API 文档生成完成"
+
+docs-swagger: ## 生成 Swagger API 文档
+	@echo "📚 生成 Swagger API 文档..."
 	@mkdir -p docs/swagger
 	@if command -v swag >/dev/null 2>&1; then \
 		swag init -g ./$(CMD_DIR)/api/main.go -o ./docs/swagger; \
-		echo "✅ API 文档生成完成"; \
+		echo "✅ Swagger API 文档生成完成"; \
 	else \
-		echo "⚠️  swag 未安装，跳过 API 文档生成"; \
+		echo "⚠️  swag 未安装，跳过 Swagger API 文档生成"; \
 	fi
+
+docs-openapi: ## 验证 OpenAPI 规范文档
+	@echo "📚 验证 OpenAPI 规范文档..."
+	@if [ -f "docs/openapi.yaml" ]; then \
+		echo "✅ OpenAPI 规范文档存在: docs/openapi.yaml"; \
+		if command -v swagger >/dev/null 2>&1; then \
+			swagger validate docs/openapi.yaml && echo "✅ OpenAPI 规范验证通过"; \
+		else \
+			echo "⚠️  swagger CLI 未安装，跳过验证"; \
+		fi; \
+	else \
+		echo "⚠️  OpenAPI 规范文档不存在: docs/openapi.yaml"; \
+	fi
+
+docs-serve: ## 启动文档服务器
+	@echo "🌐 启动文档服务器..."
+	@if command -v python3 >/dev/null 2>&1; then \
+		echo "📖 文档服务器启动在 http://localhost:8000"; \
+		cd docs && python3 -m http.server 8000; \
+	elif command -v python >/dev/null 2>&1; then \
+		echo "📖 文档服务器启动在 http://localhost:8000"; \
+		cd docs && python -m SimpleHTTPServer 8000; \
+	else \
+		echo "⚠️  Python 未安装，无法启动文档服务器"; \
+	fi
+
+docs-clean: ## 清理生成的文档
+	@echo "🧹 清理生成的文档..."
+	@rm -rf docs/swagger
+	@echo "✅ 文档清理完成"
 
 # 开发环境设置
 dev-setup: install-tools deps generate ## 设置开发环境
