@@ -49,6 +49,12 @@ type Config struct {
 		DialTimeout  int    `yaml:"dial_timeout"`
 	} `yaml:"redis"`
 	Features FeatureConfig `yaml:"features"`
+	
+	// 新增配置
+	Channel  ChannelConfig  `yaml:"channel"`
+	Cluster  ClusterConfig  `yaml:"cluster"`
+	Gateway  GatewayConfig  `yaml:"gateway"`
+	Analysis AnalysisConfig `yaml:"analysis"`
 }
 
 // FeatureConfig 功能开关配置
@@ -230,4 +236,46 @@ func StopWatcher() {
 	if watcher != nil {
 		watcher.Close()
 	}
+}
+
+// ChannelConfig 渠道配置
+type ChannelConfig struct {
+	HealthCheckInterval int                    `yaml:"health_check_interval"` // 健康检查间隔（秒）
+	MaxRetries          int                    `yaml:"max_retries"`           // 最大重试次数
+	RetryInterval       int                    `yaml:"retry_interval"`        // 重试间隔（秒）
+	Timeout             int                    `yaml:"timeout"`               // 超时时间（秒）
+	Plugins             map[string]interface{} `yaml:"plugins"`               // 插件配置
+}
+
+// ClusterConfig 集群配置
+type ClusterConfig struct {
+	DefaultSyncInterval        int `yaml:"default_sync_interval"`         // 默认同步间隔（秒）
+	DefaultHealthCheckInterval int `yaml:"default_health_check_interval"` // 默认健康检查间隔（秒）
+	MaxConcurrentSyncs         int `yaml:"max_concurrent_syncs"`          // 最大并发同步数
+	SyncTimeout                int `yaml:"sync_timeout"`                  // 同步超时时间（秒）
+}
+
+// GatewayConfig 网关配置
+type GatewayConfig struct {
+	EnableConvergence    bool                   `yaml:"enable_convergence"`     // 是否启用收敛
+	EnableSuppression    bool                   `yaml:"enable_suppression"`     // 是否启用抑制
+	EnableSmartRouting   bool                   `yaml:"enable_smart_routing"`   // 是否启用智能路由
+	ConvergenceWindow    int                    `yaml:"convergence_window"`     // 收敛窗口（秒）
+	MaxAlertsPerWindow   int                    `yaml:"max_alerts_per_window"`  // 每个窗口最大告警数
+	ProcessingTimeout    int                    `yaml:"processing_timeout"`     // 处理超时时间（秒）
+	DirectModeEnabled    bool                   `yaml:"direct_mode_enabled"`    // 是否启用直通模式
+	AdvancedFeatures     map[string]interface{} `yaml:"advanced_features"`      // 高级功能配置
+}
+
+// AnalysisConfig 分析配置
+type AnalysisConfig struct {
+	Enabled             bool                   `yaml:"enabled"`               // 是否启用AI分析
+	AsyncMode           bool                   `yaml:"async_mode"`            // 是否异步模式
+	MaxConcurrentTasks  int                    `yaml:"max_concurrent_tasks"`  // 最大并发任务数
+	TaskQueueSize       int                    `yaml:"task_queue_size"`       // 任务队列大小
+	AnalysisTimeout     int                    `yaml:"analysis_timeout"`      // 分析超时时间（秒）
+	MaxRetries          int                    `yaml:"max_retries"`           // 最大重试次数
+	RetryInterval       int                    `yaml:"retry_interval"`        // 重试间隔（秒）
+	ResultTTL           int                    `yaml:"result_ttl"`            // 结果TTL（秒）
+	Providers           map[string]interface{} `yaml:"providers"`             // 分析提供者配置
 }

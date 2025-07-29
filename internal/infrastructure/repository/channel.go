@@ -3,362 +3,359 @@ package repository
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"gorm.io/gorm"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 
 	"alert_agent/internal/domain/channel"
-	"alert_agent/internal/shared/logger"
-	"alert_agent/pkg/types"
+	"alert_agent/internal/infrastructure/database"
 )
 
-// ChannelRepository 通道仓储实现
-type ChannelRepository struct {
+// ChannelRepositoryImpl 渠道仓储实现
+type ChannelRepositoryImpl struct {
 	db     *gorm.DB
 	logger *zap.Logger
 }
 
-// NewChannelRepository 创建通道仓储
-func NewChannelRepository(db *gorm.DB) channel.Repository {
-	return &ChannelRepository{
+// NewChannelRepository 创建渠道仓储
+func NewChannelRepository(db *gorm.DB, logger *zap.Logger) channel.ChannelRepository {
+	return &ChannelRepositoryImpl{
 		db:     db,
-		logger: logger.WithComponent("channel-repository"),
+		logger: logger,
 	}
 }
 
-// Create 创建通道
-func (r *ChannelRepository) Create(ctx context.Context, ch *channel.Channel) error {
-	r.logger.Debug("creating channel", zap.String("id", ch.ID), zap.String("name", ch.Name))
-
-	if err := r.db.WithContext(ctx).Create(ch).Error; err != nil {
-		r.logger.Error("failed to create channel", zap.Error(err))
+// Create 创建渠道
+func (r *ChannelRepositoryImpl) Create(ctx context.Context, ch *channel.Channel) error {
+	dbChannel := r.toDBModel(ch)
+	if err := r.db.WithContext(ctx).Create(dbChannel).Error; err != nil {
 		return fmt.Errorf("failed to create channel: %w", err)
 	}
-
 	return nil
 }
 
-// GetByID 根据ID获取通道
-func (r *ChannelRepository) GetByID(ctx context.Context, id string) (*channel.Channel, error) {
-	r.logger.Debug("getting channel by id", zap.String("id", id))
+// Update 更新渠道
+func (r *ChannelRepositoryImpl) Update(ctx context.Context, ch *channel.Channel) error {
+	dbChannel := r.toDBModel(ch)
+	if err := r.db.WithContext(ctx).Save(dbChannel).Error; err != nil {
+		return fmt.Errorf("failed to update channel: %w", err)
+	}
+	return nil
+}
 
-	var ch channel.Channel
-	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&ch).Error; err != nil {
+// Delete 删除渠道
+func (r *ChannelRepositoryImpl) Delete(ctx context.Context, id string) error {
+	if err := r.db.WithContext(ctx).Delete(&database.Channel{}, "id = ?", id).Error; err != nil {
+		return fmt.Errorf("failed to delete channel: %w", err)
+	}
+	return nil
+}
+
+// GetByID 根据ID获取渠道
+func (r *ChannelRepositoryImpl) GetByID(ctx context.Context, id string) (*channel.Channel, error) {
+	var dbChannel database.Channel
+	if err := r.db.WithContext(ctx).First(&dbChannel, "id = ?", id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("channel not found")
 		}
-		r.logger.Error("failed to get channel by id", zap.Error(err))
 		return nil, fmt.Errorf("failed to get channel: %w", err)
 	}
-
-	return &ch, nil
+	return r.toDomainModel(&dbChannel), nil
 }
 
-// GetByName 根据名称获取通道
-func (r *ChannelRepository) GetByName(ctx context.Context, name string) (*channel.Channel, error) {
-	r.logger.Debug("getting channel by name", zap.String("name", name))
+// List 列出渠道
+func (r *ChannelRepositoryImpl) List(ctx context.Context, query *channel.ChannelQuery) ([]*channel.Channel, int64, error) {
+	db := r.db.WithContext(ctx).Model(&database.Channel{})
 
-	var ch channel.Channel
-	if err := r.db.WithContext(ctx).Where("name = ?", name).First(&ch).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("channel not found")
-		}
-		r.logger.Error("failed to get channel by name", zap.Error(err))
-		return nil, fmt.Errorf("failed to get channel: %w", err)
+	// 应用过滤条件
+	if query.Name != "" {
+		db = db.Where("name LIKE ?", "%"+query.Name+"%")
+	}
+	if query.Type != "" {
+		db = db.Where("type = ?", query.Type)
+	}
+	if query.GroupID != "" {
+		db = db.Where("group_id = ?", query.GroupID)
+	}
+	if query.Status != "" {
+		db = db.Where("status = ?", query.Status)
 	}
 
-	return &ch, nil
-}
-
-// List 获取通道列表
-func (r *ChannelRepository) List(ctx context.Context, query types.Query) ([]*channel.Channel, int64, error) {
-	r.logger.Debug("listing channels", zap.Int("limit", query.Limit), zap.Int("offset", query.Offset))
-
-	var channels []*channel.Channel
+	// 计算总数
 	var total int64
-
-	// 构建查询
-	db := r.db.WithContext(ctx).Model(&channel.Channel{})
-
-	// 应用过滤器
-	db = r.applyFilters(db, query.Filter)
-
-	// 应用搜索
-	if query.Search != "" {
-		db = db.Where("name LIKE ? OR description LIKE ?", "%"+query.Search+"%", "%"+query.Search+"%")
-	}
-
-	// 获取总数
 	if err := db.Count(&total).Error; err != nil {
-		r.logger.Error("failed to count channels", zap.Error(err))
 		return nil, 0, fmt.Errorf("failed to count channels: %w", err)
 	}
 
+	// 应用分页
+	if query.Page > 0 && query.PageSize > 0 {
+		offset := (query.Page - 1) * query.PageSize
+		db = db.Offset(offset).Limit(query.PageSize)
+	}
+
 	// 应用排序
-	if query.OrderBy != "" {
-		db = db.Order(query.OrderBy)
+	if query.SortBy != "" {
+		order := query.SortBy
+		if query.SortDesc {
+			order += " DESC"
+		}
+		db = db.Order(order)
 	} else {
 		db = db.Order("created_at DESC")
 	}
 
-	// 应用分页
-	if query.Limit > 0 {
-		db = db.Limit(query.Limit)
-	}
-	if query.Offset > 0 {
-		db = db.Offset(query.Offset)
+	// 查询数据
+	var dbChannels []database.Channel
+	if err := db.Find(&dbChannels).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to list channels: %w", err)
 	}
 
-	// 执行查询
-	if err := db.Find(&channels).Error; err != nil {
-		r.logger.Error("failed to list channels", zap.Error(err))
-		return nil, 0, fmt.Errorf("failed to list channels: %w", err)
+	// 转换为领域模型
+	channels := make([]*channel.Channel, len(dbChannels))
+	for i, dbChannel := range dbChannels {
+		channels[i] = r.toDomainModel(&dbChannel)
 	}
 
 	return channels, total, nil
 }
 
-// Update 更新通道
-func (r *ChannelRepository) Update(ctx context.Context, ch *channel.Channel) error {
-	r.logger.Debug("updating channel", zap.String("id", ch.ID), zap.String("name", ch.Name))
-
-	if err := r.db.WithContext(ctx).Save(ch).Error; err != nil {
-		r.logger.Error("failed to update channel", zap.Error(err))
-		return fmt.Errorf("failed to update channel: %w", err)
-	}
-
-	return nil
-}
-
-// Delete 删除通道
-func (r *ChannelRepository) Delete(ctx context.Context, id string) error {
-	r.logger.Debug("deleting channel", zap.String("id", id))
-
-	if err := r.db.WithContext(ctx).Where("id = ?", id).Delete(&channel.Channel{}).Error; err != nil {
-		r.logger.Error("failed to delete channel", zap.Error(err))
-		return fmt.Errorf("failed to delete channel: %w", err)
-	}
-
-	return nil
-}
-
-// GetByType 根据类型获取通道列表
-func (r *ChannelRepository) GetByType(ctx context.Context, channelType channel.ChannelType) ([]*channel.Channel, error) {
-	r.logger.Debug("getting channels by type", zap.String("type", string(channelType)))
-
-	var channels []*channel.Channel
-	if err := r.db.WithContext(ctx).Where("type = ?", channelType).Find(&channels).Error; err != nil {
-		r.logger.Error("failed to get channels by type", zap.Error(err))
+// GetByType 根据类型获取渠道
+func (r *ChannelRepositoryImpl) GetByType(ctx context.Context, channelType string) ([]*channel.Channel, error) {
+	var dbChannels []database.Channel
+	if err := r.db.WithContext(ctx).Where("type = ?", channelType).Find(&dbChannels).Error; err != nil {
 		return nil, fmt.Errorf("failed to get channels by type: %w", err)
 	}
 
-	return channels, nil
-}
-
-// GetByStatus 根据状态获取通道列表
-func (r *ChannelRepository) GetByStatus(ctx context.Context, status channel.ChannelStatus) ([]*channel.Channel, error) {
-	r.logger.Debug("getting channels by status", zap.String("status", string(status)))
-
-	var channels []*channel.Channel
-	if err := r.db.WithContext(ctx).Where("status = ?", status).Find(&channels).Error; err != nil {
-		r.logger.Error("failed to get channels by status", zap.Error(err))
-		return nil, fmt.Errorf("failed to get channels by status: %w", err)
+	channels := make([]*channel.Channel, len(dbChannels))
+	for i, dbChannel := range dbChannels {
+		channels[i] = r.toDomainModel(&dbChannel)
 	}
 
 	return channels, nil
 }
 
-// GetActiveChannels 获取激活的通道列表
-func (r *ChannelRepository) GetActiveChannels(ctx context.Context) ([]*channel.Channel, error) {
-	r.logger.Debug("getting active channels")
-
-	return r.GetByStatus(ctx, channel.ChannelStatusActive)
-}
-
-// GetByTags 根据标签获取通道列表
-func (r *ChannelRepository) GetByTags(ctx context.Context, tags []string) ([]*channel.Channel, error) {
-	r.logger.Debug("getting channels by tags", zap.Strings("tags", tags))
-
-	var channels []*channel.Channel
-	db := r.db.WithContext(ctx)
-
-	// 构建标签查询
-	for _, tag := range tags {
-		db = db.Where("JSON_CONTAINS(tags, ?)", fmt.Sprintf(`"%s"`, tag))
+// GetByGroupID 根据分组ID获取渠道
+func (r *ChannelRepositoryImpl) GetByGroupID(ctx context.Context, groupID string) ([]*channel.Channel, error) {
+	var dbChannels []database.Channel
+	if err := r.db.WithContext(ctx).Where("group_id = ?", groupID).Find(&dbChannels).Error; err != nil {
+		return nil, fmt.Errorf("failed to get channels by group: %w", err)
 	}
 
-	if err := db.Find(&channels).Error; err != nil {
-		r.logger.Error("failed to get channels by tags", zap.Error(err))
+	channels := make([]*channel.Channel, len(dbChannels))
+	for i, dbChannel := range dbChannels {
+		channels[i] = r.toDomainModel(&dbChannel)
+	}
+
+	return channels, nil
+}
+
+// GetByTags 根据标签获取渠道
+func (r *ChannelRepositoryImpl) GetByTags(ctx context.Context, tags []string) ([]*channel.Channel, error) {
+	// 这里需要根据具体的数据库实现来查询JSON数组
+	// 简化实现，实际应该使用JSON查询
+	var dbChannels []database.Channel
+	if err := r.db.WithContext(ctx).Find(&dbChannels).Error; err != nil {
 		return nil, fmt.Errorf("failed to get channels by tags: %w", err)
 	}
 
-	return channels, nil
-}
-
-// GetByLabels 根据标签获取通道列表
-func (r *ChannelRepository) GetByLabels(ctx context.Context, labels map[string]string) ([]*channel.Channel, error) {
-	r.logger.Debug("getting channels by labels", zap.Any("labels", labels))
-
-	var channels []*channel.Channel
-	db := r.db.WithContext(ctx)
-
-	// 构建标签查询
-	for key, value := range labels {
-		db = db.Where("JSON_EXTRACT(labels, ?) = ?", fmt.Sprintf("$.%s", key), value)
+	// 过滤包含指定标签的渠道
+	var filteredChannels []*channel.Channel
+	for _, dbChannel := range dbChannels {
+		if r.containsTags(dbChannel.Tags, tags) {
+			filteredChannels = append(filteredChannels, r.toDomainModel(&dbChannel))
+		}
 	}
 
-	if err := db.Find(&channels).Error; err != nil {
-		r.logger.Error("failed to get channels by labels", zap.Error(err))
-		return nil, fmt.Errorf("failed to get channels by labels: %w", err)
-	}
-
-	return channels, nil
+	return filteredChannels, nil
 }
 
-// UpdateStatus 更新通道状态
-func (r *ChannelRepository) UpdateStatus(ctx context.Context, id string, status channel.ChannelStatus) error {
-	r.logger.Debug("updating channel status", zap.String("id", id), zap.String("status", string(status)))
+// UpdateHealthStatus 更新健康状态
+func (r *ChannelRepositoryImpl) UpdateHealthStatus(ctx context.Context, id string, status channel.HealthStatus, responseTime int) error {
+	updates := map[string]interface{}{
+		"health_status":      string(status),
+		"response_time":      responseTime,
+		"last_health_check":  gorm.Expr("NOW()"),
+	}
 
-	if err := r.db.WithContext(ctx).Model(&channel.Channel{}).Where("id = ?", id).Update("status", status).Error; err != nil {
-		r.logger.Error("failed to update channel status", zap.Error(err))
-		return fmt.Errorf("failed to update channel status: %w", err)
+	if err := r.db.WithContext(ctx).Model(&database.Channel{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		return fmt.Errorf("failed to update health status: %w", err)
 	}
 
 	return nil
 }
 
-// BatchUpdate 批量更新通道
-func (r *ChannelRepository) BatchUpdate(ctx context.Context, channels []*channel.Channel) error {
-	r.logger.Debug("batch updating channels", zap.Int("count", len(channels)))
-
-	tx := r.db.WithContext(ctx).Begin()
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	for _, ch := range channels {
-		if err := tx.Save(ch).Error; err != nil {
-			r.logger.Error("failed to update channel in batch", zap.String("id", ch.ID), zap.Error(err))
-			tx.Rollback()
-			return fmt.Errorf("failed to update channel %s: %w", ch.ID, err)
-		}
+// GetUnhealthyChannels 获取不健康的渠道
+func (r *ChannelRepositoryImpl) GetUnhealthyChannels(ctx context.Context) ([]*channel.Channel, error) {
+	var dbChannels []database.Channel
+	if err := r.db.WithContext(ctx).Where("health_status = ?", "unhealthy").Find(&dbChannels).Error; err != nil {
+		return nil, fmt.Errorf("failed to get unhealthy channels: %w", err)
 	}
 
-	if err := tx.Commit().Error; err != nil {
-		r.logger.Error("failed to commit batch update", zap.Error(err))
-		return fmt.Errorf("failed to commit batch update: %w", err)
+	channels := make([]*channel.Channel, len(dbChannels))
+	for i, dbChannel := range dbChannels {
+		channels[i] = r.toDomainModel(&dbChannel)
+	}
+
+	return channels, nil
+}
+
+// CreateGroup 创建分组
+func (r *ChannelRepositoryImpl) CreateGroup(ctx context.Context, group *channel.ChannelGroup) error {
+	dbGroup := &database.ChannelGroup{
+		ID:          group.ID,
+		Name:        group.Name,
+		Description: group.Description,
+		ParentID:    group.ParentID,
+		Path:        group.Path,
+		Level:       group.Level,
+		SortOrder:   group.SortOrder,
+		CreatedAt:   group.CreatedAt,
+		UpdatedAt:   group.UpdatedAt,
+	}
+
+	if err := r.db.WithContext(ctx).Create(dbGroup).Error; err != nil {
+		return fmt.Errorf("failed to create channel group: %w", err)
 	}
 
 	return nil
 }
 
-// Count 获取通道总数
-func (r *ChannelRepository) Count(ctx context.Context, filter map[string]interface{}) (int64, error) {
-	r.logger.Debug("counting channels")
-
-	var count int64
-	db := r.db.WithContext(ctx).Model(&channel.Channel{})
-
-	// 应用过滤器
-	db = r.applyFilters(db, filter)
-
-	if err := db.Count(&count).Error; err != nil {
-		r.logger.Error("failed to count channels", zap.Error(err))
-		return 0, fmt.Errorf("failed to count channels: %w", err)
+// UpdateGroup 更新分组
+func (r *ChannelRepositoryImpl) UpdateGroup(ctx context.Context, group *channel.ChannelGroup) error {
+	dbGroup := &database.ChannelGroup{
+		ID:          group.ID,
+		Name:        group.Name,
+		Description: group.Description,
+		ParentID:    group.ParentID,
+		Path:        group.Path,
+		Level:       group.Level,
+		SortOrder:   group.SortOrder,
+		UpdatedAt:   group.UpdatedAt,
 	}
 
-	return count, nil
+	if err := r.db.WithContext(ctx).Save(dbGroup).Error; err != nil {
+		return fmt.Errorf("failed to update channel group: %w", err)
+	}
+
+	return nil
 }
 
-// Exists 检查通道是否存在
-func (r *ChannelRepository) Exists(ctx context.Context, id string) (bool, error) {
-	r.logger.Debug("checking channel existence", zap.String("id", id))
-
-	var count int64
-	if err := r.db.WithContext(ctx).Model(&channel.Channel{}).Where("id = ?", id).Count(&count).Error; err != nil {
-		r.logger.Error("failed to check channel existence", zap.Error(err))
-		return false, fmt.Errorf("failed to check channel existence: %w", err)
+// DeleteGroup 删除分组
+func (r *ChannelRepositoryImpl) DeleteGroup(ctx context.Context, id string) error {
+	if err := r.db.WithContext(ctx).Delete(&database.ChannelGroup{}, "id = ?", id).Error; err != nil {
+		return fmt.Errorf("failed to delete channel group: %w", err)
 	}
-
-	return count > 0, nil
+	return nil
 }
 
-// ExistsByName 检查通道名称是否存在
-func (r *ChannelRepository) ExistsByName(ctx context.Context, name string) (bool, error) {
-	r.logger.Debug("checking channel name existence", zap.String("name", name))
-
-	var count int64
-	if err := r.db.WithContext(ctx).Model(&channel.Channel{}).Where("name = ?", name).Count(&count).Error; err != nil {
-		r.logger.Error("failed to check channel name existence", zap.Error(err))
-		return false, fmt.Errorf("failed to check channel name existence: %w", err)
+// GetGroupByID 根据ID获取分组
+func (r *ChannelRepositoryImpl) GetGroupByID(ctx context.Context, id string) (*channel.ChannelGroup, error) {
+	var dbGroup database.ChannelGroup
+	if err := r.db.WithContext(ctx).First(&dbGroup, "id = ?", id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("channel group not found")
+		}
+		return nil, fmt.Errorf("failed to get channel group: %w", err)
 	}
 
-	return count > 0, nil
+	return &channel.ChannelGroup{
+		ID:          dbGroup.ID,
+		Name:        dbGroup.Name,
+		Description: dbGroup.Description,
+		ParentID:    dbGroup.ParentID,
+		Path:        dbGroup.Path,
+		Level:       dbGroup.Level,
+		SortOrder:   dbGroup.SortOrder,
+		CreatedAt:   dbGroup.CreatedAt,
+		UpdatedAt:   dbGroup.UpdatedAt,
+	}, nil
 }
 
-// applyFilters 应用过滤器
-func (r *ChannelRepository) applyFilters(db *gorm.DB, filter map[string]interface{}) *gorm.DB {
-	if filter == nil {
-		return db
+// ListGroups 列出分组
+func (r *ChannelRepositoryImpl) ListGroups(ctx context.Context) ([]*channel.ChannelGroup, error) {
+	var dbGroups []database.ChannelGroup
+	if err := r.db.WithContext(ctx).Order("path, sort_order").Find(&dbGroups).Error; err != nil {
+		return nil, fmt.Errorf("failed to list channel groups: %w", err)
 	}
 
-	for key, value := range filter {
-		switch key {
-		case "type":
-			db = db.Where("type = ?", value)
-		case "status":
-			db = db.Where("status = ?", value)
-		case "priority":
-			db = db.Where("priority = ?", value)
-		case "priority_gte":
-			db = db.Where("priority >= ?", value)
-		case "priority_lte":
-			db = db.Where("priority <= ?", value)
-		case "created_after":
-			db = db.Where("created_at > ?", value)
-		case "created_before":
-			db = db.Where("created_at < ?", value)
-		case "updated_after":
-			db = db.Where("updated_at > ?", value)
-		case "updated_before":
-			db = db.Where("updated_at < ?", value)
-		case "tags":
-			if tags, ok := value.([]string); ok {
-				for _, tag := range tags {
-					db = db.Where("JSON_CONTAINS(tags, ?)", fmt.Sprintf(`"%s"`, tag))
-				}
-			}
-		case "labels":
-			if labels, ok := value.(map[string]string); ok {
-				for k, v := range labels {
-					db = db.Where("JSON_EXTRACT(labels, ?) = ?", fmt.Sprintf("$.%s", k), v)
-				}
-			}
-		case "name_like":
-			db = db.Where("name LIKE ?", "%"+fmt.Sprintf("%v", value)+"%")
-		case "description_like":
-			db = db.Where("description LIKE ?", "%"+fmt.Sprintf("%v", value)+"%")
-		case "enabled":
-			if enabled, ok := value.(bool); ok {
-				db = db.Where("JSON_EXTRACT(config, '$.enabled') = ?", enabled)
-			}
-		default:
-			// 对于未知的过滤器，尝试直接匹配字段
-			if strings.Contains(key, ".") {
-				// JSON字段查询
-				parts := strings.SplitN(key, ".", 2)
-				if len(parts) == 2 {
-					db = db.Where(fmt.Sprintf("JSON_EXTRACT(%s, '$.%s') = ?", parts[0], parts[1]), value)
-				}
-			} else {
-				// 普通字段查询
-				db = db.Where(fmt.Sprintf("%s = ?", key), value)
-			}
+	groups := make([]*channel.ChannelGroup, len(dbGroups))
+	for i, dbGroup := range dbGroups {
+		groups[i] = &channel.ChannelGroup{
+			ID:          dbGroup.ID,
+			Name:        dbGroup.Name,
+			Description: dbGroup.Description,
+			ParentID:    dbGroup.ParentID,
+			Path:        dbGroup.Path,
+			Level:       dbGroup.Level,
+			SortOrder:   dbGroup.SortOrder,
+			CreatedAt:   dbGroup.CreatedAt,
+			UpdatedAt:   dbGroup.UpdatedAt,
 		}
 	}
 
-	return db
+	return groups, nil
+}
+
+// toDBModel 转换为数据库模型
+func (r *ChannelRepositoryImpl) toDBModel(ch *channel.Channel) *database.Channel {
+	return &database.Channel{
+		ID:              ch.ID,
+		Name:            ch.Name,
+		Type:            ch.Type,
+		Description:     ch.Description,
+		Config:          ch.Config,
+		GroupID:         ch.GroupID,
+		Tags:            ch.Tags,
+		Status:          string(ch.Status),
+		HealthStatus:    string(ch.HealthStatus),
+		LastHealthCheck: ch.LastHealthCheck,
+		ResponseTime:    ch.ResponseTime,
+		SuccessRate:     ch.SuccessRate,
+		CreatedBy:       ch.CreatedBy,
+		UpdatedBy:       ch.UpdatedBy,
+		CreatedAt:       ch.CreatedAt,
+		UpdatedAt:       ch.UpdatedAt,
+	}
+}
+
+// toDomainModel 转换为领域模型
+func (r *ChannelRepositoryImpl) toDomainModel(dbChannel *database.Channel) *channel.Channel {
+	return &channel.Channel{
+		ID:              dbChannel.ID,
+		Name:            dbChannel.Name,
+		Type:            dbChannel.Type,
+		Description:     dbChannel.Description,
+		Config:          dbChannel.Config,
+		GroupID:         dbChannel.GroupID,
+		Tags:            dbChannel.Tags,
+		Status:          channel.ChannelStatus(dbChannel.Status),
+		HealthStatus:    channel.HealthStatus(dbChannel.HealthStatus),
+		LastHealthCheck: dbChannel.LastHealthCheck,
+		ResponseTime:    dbChannel.ResponseTime,
+		SuccessRate:     dbChannel.SuccessRate,
+		CreatedBy:       dbChannel.CreatedBy,
+		UpdatedBy:       dbChannel.UpdatedBy,
+		CreatedAt:       dbChannel.CreatedAt,
+		UpdatedAt:       dbChannel.UpdatedAt,
+	}
+}
+
+// containsTags 检查是否包含指定标签
+func (r *ChannelRepositoryImpl) containsTags(channelTags, searchTags []string) bool {
+	if len(searchTags) == 0 {
+		return true
+	}
+
+	tagMap := make(map[string]bool)
+	for _, tag := range channelTags {
+		tagMap[tag] = true
+	}
+
+	for _, searchTag := range searchTags {
+		if !tagMap[searchTag] {
+			return false
+		}
+	}
+
+	return true
 }

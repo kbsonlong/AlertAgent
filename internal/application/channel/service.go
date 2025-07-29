@@ -9,499 +9,285 @@ import (
 	"go.uber.org/zap"
 
 	"alert_agent/internal/domain/channel"
-	"alert_agent/internal/shared/logger"
-	"alert_agent/pkg/types"
+	"alert_agent/internal/shared/errors"
 )
 
-// ChannelService 通道应用服务实现
-type ChannelService struct {
-	repo   channel.Repository
-	logger *zap.Logger
+// ChannelService 渠道服务接口
+type ChannelService interface {
+	// 渠道管理
+	CreateChannel(ctx context.Context, req *channel.CreateChannelRequest) (*channel.Channel, error)
+	UpdateChannel(ctx context.Context, id string, req *channel.UpdateChannelRequest) (*channel.Channel, error)
+	DeleteChannel(ctx context.Context, id string) error
+	GetChannel(ctx context.Context, id string) (*channel.Channel, error)
+	ListChannels(ctx context.Context, query *channel.ChannelQuery) ([]*channel.Channel, int64, error)
+
+	// 消息发送
+	SendMessage(ctx context.Context, channelID string, message *channel.Message) error
+	BroadcastMessage(ctx context.Context, channelIDs []string, message *channel.Message) error
+
+	// 健康检查和测试
+	TestChannel(ctx context.Context, id string) (*channel.TestResult, error)
+	GetChannelHealth(ctx context.Context, id string) (*channel.HealthStatus, error)
+
+	// 插件管理
+	RegisterPlugin(plugin channel.ChannelPlugin) error
+	GetAvailablePlugins() []channel.PluginInfo
 }
 
-// NewChannelService 创建通道服务
-func NewChannelService(repo channel.Repository) channel.Service {
-	return &ChannelService{
-		repo:   repo,
-		logger: logger.WithComponent("channel-service"),
+// channelServiceImpl 渠道服务实现
+type channelServiceImpl struct {
+	repo    channel.ChannelRepository
+	plugins map[string]channel.ChannelPlugin
+	logger  *zap.Logger
+}
+
+// NewChannelService 创建渠道服务
+func NewChannelService(repo channel.ChannelRepository, logger *zap.Logger) ChannelService {
+	return &channelServiceImpl{
+		repo:    repo,
+		plugins: make(map[string]channel.ChannelPlugin),
+		logger:  logger,
 	}
 }
 
-// CreateChannel 创建通道
-func (s *ChannelService) CreateChannel(ctx context.Context, req *channel.CreateChannelRequest) (*channel.Channel, error) {
-	s.logger.Info("creating channel", zap.String("name", req.Name), zap.String("type", string(req.Type)))
-
-	// 验证请求
-	if err := s.validateCreateRequest(req); err != nil {
-		return nil, fmt.Errorf("validation failed: %w", err)
+// CreateChannel 创建渠道
+func (s *channelServiceImpl) CreateChannel(ctx context.Context, req *channel.CreateChannelRequest) (*channel.Channel, error) {
+	// 验证插件是否存在
+	plugin, exists := s.plugins[req.Type]
+	if !exists {
+		return nil, errors.NewValidationError("INVALID_CHANNEL_TYPE", fmt.Sprintf("Channel type %s is not supported", req.Type))
 	}
 
-	// 检查名称是否已存在
-	exists, err := s.repo.ExistsByName(ctx, req.Name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check name existence: %w", err)
-	}
-	if exists {
-		return nil, fmt.Errorf("channel name '%s' already exists", req.Name)
+	// 验证配置
+	if err := plugin.ValidateConfig(req.Config); err != nil {
+		return nil, errors.NewValidationErrorWithDetails("INVALID_CONFIG", "Channel configuration is invalid", err.Error())
 	}
 
-	// 创建通道实体
-	now := time.Now()
+	// 创建渠道对象
 	ch := &channel.Channel{
-		ID:          uuid.New().String(),
-		Name:        req.Name,
-		Type:        req.Type,
-		Description: req.Description,
-		Config:      req.Config,
-		Status:      channel.ChannelStatusActive,
-		Priority:    req.Priority,
-		Tags:        req.Tags,
-		Labels:      req.Labels,
-		Metadata: types.Metadata{
-			CreatedAt: now,
-			UpdatedAt: now,
-			Version:   1,
-		},
-	}
-
-	// 验证通道配置
-	if err := ch.Validate(); err != nil {
-		return nil, fmt.Errorf("channel validation failed: %w", err)
+		ID:           uuid.New().String(),
+		Name:         req.Name,
+		Type:         req.Type,
+		Description:  req.Description,
+		Config:       req.Config,
+		GroupID:      req.GroupID,
+		Tags:         req.Tags,
+		Status:       channel.ChannelStatusActive,
+		HealthStatus: channel.HealthStatusUnknown,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
 	// 保存到数据库
 	if err := s.repo.Create(ctx, ch); err != nil {
-		return nil, fmt.Errorf("failed to create channel: %w", err)
+		s.logger.Error("Failed to create channel", zap.Error(err), zap.String("name", req.Name))
+		return nil, errors.NewInternalError("Failed to create channel", err)
 	}
 
-	s.logger.Info("channel created successfully", zap.String("id", ch.ID), zap.String("name", ch.Name))
+	s.logger.Info("Channel created successfully", zap.String("id", ch.ID), zap.String("name", ch.Name), zap.String("type", ch.Type))
 	return ch, nil
 }
 
-// GetChannel 获取通道
-func (s *ChannelService) GetChannel(ctx context.Context, id string) (*channel.Channel, error) {
-	s.logger.Debug("getting channel", zap.String("id", id))
-
+// UpdateChannel 更新渠道
+func (s *channelServiceImpl) UpdateChannel(ctx context.Context, id string, req *channel.UpdateChannelRequest) (*channel.Channel, error) {
+	// 获取现有渠道
 	ch, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get channel: %w", err)
+		return nil, errors.NewNotFoundError("Channel")
 	}
 
-	return ch, nil
-}
+	// 如果更新了配置，需要验证
+	if req.Config != nil {
+		plugin, exists := s.plugins[ch.Type]
+		if !exists {
+			return nil, errors.NewInternalError("Channel plugin not found", nil)
+		}
 
-// UpdateChannel 更新通道
-func (s *ChannelService) UpdateChannel(ctx context.Context, id string, req *channel.UpdateChannelRequest) (*channel.Channel, error) {
-	s.logger.Info("updating channel", zap.String("id", id))
-
-	// 获取现有通道
-	ch, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get channel: %w", err)
+		if err := plugin.ValidateConfig(req.Config); err != nil {
+			return nil, errors.NewValidationErrorWithDetails("INVALID_CONFIG", "Channel configuration is invalid", err.Error())
+		}
+		ch.Config = req.Config
 	}
 
 	// 更新字段
-	if req.Name != nil {
-		// 检查新名称是否已存在
-		if *req.Name != ch.Name {
-			exists, err := s.repo.ExistsByName(ctx, *req.Name)
-			if err != nil {
-				return nil, fmt.Errorf("failed to check name existence: %w", err)
-			}
-			if exists {
-				return nil, fmt.Errorf("channel name '%s' already exists", *req.Name)
-			}
-		}
-		ch.Name = *req.Name
+	if req.Name != "" {
+		ch.Name = req.Name
 	}
-
-	if req.Description != nil {
-		ch.Description = *req.Description
+	if req.Description != "" {
+		ch.Description = req.Description
 	}
-
-	if req.Config != nil {
-		ch.Config = *req.Config
+	if req.GroupID != "" {
+		ch.GroupID = req.GroupID
 	}
-
-	if req.Status != nil {
-		ch.Status = *req.Status
-	}
-
-	if req.Priority != nil {
-		ch.Priority = *req.Priority
-	}
-
 	if req.Tags != nil {
 		ch.Tags = req.Tags
 	}
-
-	if req.Labels != nil {
-		ch.Labels = req.Labels
+	if req.Status != "" {
+		ch.Status = req.Status
 	}
-
-	// 更新元数据
-	ch.Metadata.UpdatedAt = time.Now()
-	ch.Metadata.Version++
-
-	// 验证更新后的通道
-	if err := ch.Validate(); err != nil {
-		return nil, fmt.Errorf("channel validation failed: %w", err)
-	}
+	ch.UpdatedAt = time.Now()
 
 	// 保存更新
 	if err := s.repo.Update(ctx, ch); err != nil {
-		return nil, fmt.Errorf("failed to update channel: %w", err)
+		s.logger.Error("Failed to update channel", zap.Error(err), zap.String("id", id))
+		return nil, errors.NewInternalError("Failed to update channel", err)
 	}
 
-	s.logger.Info("channel updated successfully", zap.String("id", ch.ID), zap.String("name", ch.Name))
+	s.logger.Info("Channel updated successfully", zap.String("id", id), zap.String("name", ch.Name))
 	return ch, nil
 }
 
-// DeleteChannel 删除通道
-func (s *ChannelService) DeleteChannel(ctx context.Context, id string) error {
-	s.logger.Info("deleting channel", zap.String("id", id))
-
-	// 检查通道是否存在
-	exists, err := s.repo.Exists(ctx, id)
+// DeleteChannel 删除渠道
+func (s *channelServiceImpl) DeleteChannel(ctx context.Context, id string) error {
+	// 检查渠道是否存在
+	_, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("failed to check channel existence: %w", err)
-	}
-	if !exists {
-		return fmt.Errorf("channel not found")
+		return errors.NewNotFoundError("Channel")
 	}
 
-	// 删除通道
+	// 删除渠道
 	if err := s.repo.Delete(ctx, id); err != nil {
-		return fmt.Errorf("failed to delete channel: %w", err)
+		s.logger.Error("Failed to delete channel", zap.Error(err), zap.String("id", id))
+		return errors.NewInternalError("Failed to delete channel", err)
 	}
 
-	s.logger.Info("channel deleted successfully", zap.String("id", id))
+	s.logger.Info("Channel deleted successfully", zap.String("id", id))
 	return nil
 }
 
-// ListChannels 获取通道列表
-func (s *ChannelService) ListChannels(ctx context.Context, query types.Query) (*types.PageResult, error) {
-	s.logger.Debug("listing channels", zap.Int("limit", query.Limit), zap.Int("offset", query.Offset))
-
-	channels, total, err := s.repo.List(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list channels: %w", err)
-	}
-
-	page := query.Offset/query.Limit + 1
-	if query.Limit == 0 {
-		page = 1
-	}
-
-	return &types.PageResult{
-		Data:  channels,
-		Total: total,
-		Page:  page,
-		Size:  len(channels),
-	}, nil
-}
-
-// TestChannel 测试通道连接
-func (s *ChannelService) TestChannel(ctx context.Context, id string) (*channel.TestResult, error) {
-	s.logger.Info("testing channel", zap.String("id", id))
-
-	// 获取通道
+// GetChannel 获取渠道
+func (s *channelServiceImpl) GetChannel(ctx context.Context, id string) (*channel.Channel, error) {
 	ch, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get channel: %w", err)
+		return nil, errors.NewNotFoundError("Channel")
 	}
+	return ch, nil
+}
 
-	// 执行测试
-	start := time.Now()
-	testResult := &channel.TestResult{
-		Timestamp: start.Unix(),
-		Details:   make(map[string]interface{}),
-	}
-
-	// 根据通道类型执行不同的测试逻辑
-	err = s.performChannelTest(ctx, ch, testResult)
-	testResult.Latency = time.Since(start).Milliseconds()
-
+// ListChannels 列出渠道
+func (s *channelServiceImpl) ListChannels(ctx context.Context, query *channel.ChannelQuery) ([]*channel.Channel, int64, error) {
+	channels, total, err := s.repo.List(ctx, query)
 	if err != nil {
-		testResult.Success = false
-		testResult.Message = err.Error()
-		s.logger.Warn("channel test failed", zap.String("id", id), zap.Error(err))
-	} else {
-		testResult.Success = true
-		testResult.Message = "Channel test successful"
-		s.logger.Info("channel test successful", zap.String("id", id))
+		s.logger.Error("Failed to list channels", zap.Error(err))
+		return nil, 0, errors.NewInternalError("Failed to list channels", err)
 	}
-
-	return testResult, nil
+	return channels, total, nil
 }
 
 // SendMessage 发送消息
-func (s *ChannelService) SendMessage(ctx context.Context, channelID string, message *types.Message) error {
-	s.logger.Info("sending message", zap.String("channel_id", channelID), zap.String("message_id", message.ID))
-
-	// 获取通道
+func (s *channelServiceImpl) SendMessage(ctx context.Context, channelID string, message *channel.Message) error {
+	// 获取渠道
 	ch, err := s.repo.GetByID(ctx, channelID)
 	if err != nil {
-		return fmt.Errorf("failed to get channel: %w", err)
+		return errors.NewNotFoundError("Channel")
 	}
 
-	// 检查通道是否可以发送
-	if !ch.CanSend() {
-		return fmt.Errorf("channel is not available for sending")
+	// 检查渠道状态
+	if ch.Status != channel.ChannelStatusActive {
+		return errors.NewValidationError("CHANNEL_INACTIVE", "Channel is not active")
 	}
 
-	// 执行发送逻辑
-	err = s.performMessageSend(ctx, ch, message)
+	// 获取插件
+	plugin, exists := s.plugins[ch.Type]
+	if !exists {
+		return errors.NewInternalError("Channel plugin not found", nil)
+	}
+
+	// 发送消息
+	startTime := time.Now()
+	err = plugin.SendMessage(ch.Config, message)
+	responseTime := int(time.Since(startTime).Milliseconds())
+
+	// 更新健康状态
 	if err != nil {
-		s.logger.Error("failed to send message", zap.String("channel_id", channelID), zap.Error(err))
-		return fmt.Errorf("failed to send message: %w", err)
+		s.repo.UpdateHealthStatus(ctx, channelID, channel.HealthStatusUnhealthy, responseTime)
+		s.logger.Error("Failed to send message", zap.Error(err), zap.String("channel_id", channelID))
+		return errors.NewExternalError("Channel", "Failed to send message", err)
 	}
 
-	s.logger.Info("message sent successfully", zap.String("channel_id", channelID), zap.String("message_id", message.ID))
+	s.repo.UpdateHealthStatus(ctx, channelID, channel.HealthStatusHealthy, responseTime)
+	s.logger.Info("Message sent successfully", zap.String("channel_id", channelID), zap.Int("response_time", responseTime))
 	return nil
 }
 
-// GetChannelsByType 根据类型获取通道
-func (s *ChannelService) GetChannelsByType(ctx context.Context, channelType channel.ChannelType) ([]*channel.Channel, error) {
-	s.logger.Debug("getting channels by type", zap.String("type", string(channelType)))
-
-	channels, err := s.repo.GetByType(ctx, channelType)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get channels by type: %w", err)
+// BroadcastMessage 广播消息
+func (s *channelServiceImpl) BroadcastMessage(ctx context.Context, channelIDs []string, message *channel.Message) error {
+	var errors []error
+	for _, channelID := range channelIDs {
+		if err := s.SendMessage(ctx, channelID, message); err != nil {
+			errors = append(errors, err)
+		}
 	}
 
-	return channels, nil
-}
-
-// GetActiveChannels 获取激活的通道
-func (s *ChannelService) GetActiveChannels(ctx context.Context) ([]*channel.Channel, error) {
-	s.logger.Debug("getting active channels")
-
-	channels, err := s.repo.GetActiveChannels(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get active channels: %w", err)
-	}
-
-	return channels, nil
-}
-
-// UpdateChannelStatus 更新通道状态
-func (s *ChannelService) UpdateChannelStatus(ctx context.Context, id string, status channel.ChannelStatus) error {
-	s.logger.Info("updating channel status", zap.String("id", id), zap.String("status", string(status)))
-
-	err := s.repo.UpdateStatus(ctx, id, status)
-	if err != nil {
-		return fmt.Errorf("failed to update channel status: %w", err)
+	if len(errors) > 0 {
+		return fmt.Errorf("failed to send to %d channels: %v", len(errors), errors)
 	}
 
 	return nil
 }
 
-// ValidateChannelConfig 验证通道配置
-func (s *ChannelService) ValidateChannelConfig(ctx context.Context, channelType channel.ChannelType, config channel.ChannelConfig) error {
-	s.logger.Debug("validating channel config", zap.String("type", string(channelType)))
-
-	// 根据通道类型执行不同的验证逻辑
-	return s.performConfigValidation(channelType, config)
-}
-
-// GetChannelStats 获取通道统计信息
-func (s *ChannelService) GetChannelStats(ctx context.Context, id string) (*channel.ChannelStats, error) {
-	s.logger.Debug("getting channel stats", zap.String("id", id))
-
-	// 这里应该从监控系统或统计数据库获取统计信息
-	// 目前返回模拟数据
-	stats := &channel.ChannelStats{
-		ChannelID:   id,
-		TotalSent:   0,
-		TotalFailed: 0,
-		SuccessRate: 0.0,
-		AvgLatency:  0.0,
+// TestChannel 测试渠道
+func (s *channelServiceImpl) TestChannel(ctx context.Context, id string) (*channel.TestResult, error) {
+	// 获取渠道
+	ch, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, errors.NewNotFoundError("Channel")
 	}
 
-	return stats, nil
-}
-
-// BulkUpdateChannels 批量更新通道
-func (s *ChannelService) BulkUpdateChannels(ctx context.Context, updates []*channel.BulkUpdateRequest) error {
-	s.logger.Info("bulk updating channels", zap.Int("count", len(updates)))
-
-	for _, update := range updates {
-		_, err := s.UpdateChannel(ctx, update.ChannelID, &update.Updates)
-		if err != nil {
-			s.logger.Error("failed to update channel in bulk", zap.String("id", update.ChannelID), zap.Error(err))
-			return fmt.Errorf("failed to update channel %s: %w", update.ChannelID, err)
-		}
+	// 获取插件
+	plugin, exists := s.plugins[ch.Type]
+	if !exists {
+		return nil, errors.NewInternalError("Channel plugin not found", nil)
 	}
 
-	return nil
-}
-
-// ImportChannels 导入通道
-func (s *ChannelService) ImportChannels(ctx context.Context, channels []*channel.Channel) (*channel.ImportResult, error) {
-	s.logger.Info("importing channels", zap.Int("count", len(channels)))
-
-	result := &channel.ImportResult{
-		Total:   len(channels),
-		Success: 0,
-		Failed:  0,
-		Errors:  []string{},
-		Created: []string{},
-		Updated: []string{},
-		Skipped: []string{},
-	}
-
-	for _, ch := range channels {
-		// 检查是否已存在
-		exists, err := s.repo.ExistsByName(ctx, ch.Name)
-		if err != nil {
-			result.Failed++
-			result.Errors = append(result.Errors, fmt.Sprintf("Failed to check existence for %s: %v", ch.Name, err))
-			continue
-		}
-
-		if exists {
-			result.Skipped = append(result.Skipped, ch.Name)
-			continue
-		}
-
-		// 创建新通道
-		ch.ID = uuid.New().String()
-		ch.Metadata.CreatedAt = time.Now()
-		ch.Metadata.UpdatedAt = time.Now()
-		ch.Metadata.Version = 1
-
-		if err := s.repo.Create(ctx, ch); err != nil {
-			result.Failed++
-			result.Errors = append(result.Errors, fmt.Sprintf("Failed to create %s: %v", ch.Name, err))
-		} else {
-			result.Success++
-			result.Created = append(result.Created, ch.Name)
-		}
+	// 执行测试
+	startTime := time.Now()
+	result, err := plugin.TestConnection(ch.Config)
+	if err != nil {
+		return &channel.TestResult{
+			Success:      false,
+			ResponseTime: int(time.Since(startTime).Milliseconds()),
+			Error:        err.Error(),
+			Timestamp:    time.Now(),
+		}, nil
 	}
 
 	return result, nil
 }
 
-// ExportChannels 导出通道
-func (s *ChannelService) ExportChannels(ctx context.Context, filter map[string]interface{}) ([]*channel.Channel, error) {
-	s.logger.Info("exporting channels")
-
-	query := types.Query{
-		Filter: filter,
-		Limit:  0, // 获取所有
-	}
-
-	channels, _, err := s.repo.List(ctx, query)
+// GetChannelHealth 获取渠道健康状态
+func (s *channelServiceImpl) GetChannelHealth(ctx context.Context, id string) (*channel.HealthStatus, error) {
+	ch, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to export channels: %w", err)
+		return nil, errors.NewNotFoundError("Channel")
 	}
 
-	return channels, nil
+	return &ch.HealthStatus, nil
 }
 
-// validateCreateRequest 验证创建请求
-func (s *ChannelService) validateCreateRequest(req *channel.CreateChannelRequest) error {
-	if req.Name == "" {
-		return fmt.Errorf("name is required")
+// RegisterPlugin 注册插件
+func (s *channelServiceImpl) RegisterPlugin(plugin channel.ChannelPlugin) error {
+	pluginType := plugin.GetType()
+	if _, exists := s.plugins[pluginType]; exists {
+		return fmt.Errorf("plugin type %s already registered", pluginType)
 	}
-	if req.Type == "" {
-		return fmt.Errorf("type is required")
+
+	s.plugins[pluginType] = plugin
+	s.logger.Info("Plugin registered", zap.String("type", pluginType), zap.String("name", plugin.GetName()))
+	return nil
+}
+
+// GetAvailablePlugins 获取可用插件
+func (s *channelServiceImpl) GetAvailablePlugins() []channel.PluginInfo {
+	var plugins []channel.PluginInfo
+	for _, plugin := range s.plugins {
+		plugins = append(plugins, channel.PluginInfo{
+			Type:        plugin.GetType(),
+			Name:        plugin.GetName(),
+			Description: fmt.Sprintf("%s notification channel", plugin.GetName()),
+			Version:     "1.0.0",
+			Schema:      plugin.GetConfigSchema(),
+		})
 	}
-	return nil
-}
-
-// performChannelTest 执行通道测试
-func (s *ChannelService) performChannelTest(ctx context.Context, ch *channel.Channel, result *channel.TestResult) error {
-	// 根据通道类型执行不同的测试逻辑
-	switch ch.Type {
-	case channel.ChannelTypeEmail:
-		return s.testEmailChannel(ctx, ch, result)
-	case channel.ChannelTypeWebhook:
-		return s.testWebhookChannel(ctx, ch, result)
-	case channel.ChannelTypeSlack:
-		return s.testSlackChannel(ctx, ch, result)
-	default:
-		return fmt.Errorf("unsupported channel type: %s", ch.Type)
-	}
-}
-
-// performMessageSend 执行消息发送
-func (s *ChannelService) performMessageSend(ctx context.Context, ch *channel.Channel, message *types.Message) error {
-	// 根据通道类型执行不同的发送逻辑
-	switch ch.Type {
-	case channel.ChannelTypeEmail:
-		return s.sendEmailMessage(ctx, ch, message)
-	case channel.ChannelTypeWebhook:
-		return s.sendWebhookMessage(ctx, ch, message)
-	case channel.ChannelTypeSlack:
-		return s.sendSlackMessage(ctx, ch, message)
-	default:
-		return fmt.Errorf("unsupported channel type: %s", ch.Type)
-	}
-}
-
-// performConfigValidation 执行配置验证
-func (s *ChannelService) performConfigValidation(channelType channel.ChannelType, config channel.ChannelConfig) error {
-	// 根据通道类型执行不同的验证逻辑
-	switch channelType {
-	case channel.ChannelTypeEmail:
-		return s.validateEmailConfig(config)
-	case channel.ChannelTypeWebhook:
-		return s.validateWebhookConfig(config)
-	case channel.ChannelTypeSlack:
-		return s.validateSlackConfig(config)
-	default:
-		return fmt.Errorf("unsupported channel type: %s", channelType)
-	}
-}
-
-// 以下是各种通道类型的具体实现方法（简化版本）
-
-func (s *ChannelService) testEmailChannel(ctx context.Context, ch *channel.Channel, result *channel.TestResult) error {
-	// TODO: 实现邮件通道测试逻辑
-	result.Details["type"] = "email"
-	return nil
-}
-
-func (s *ChannelService) testWebhookChannel(ctx context.Context, ch *channel.Channel, result *channel.TestResult) error {
-	// TODO: 实现Webhook通道测试逻辑
-	result.Details["type"] = "webhook"
-	return nil
-}
-
-func (s *ChannelService) testSlackChannel(ctx context.Context, ch *channel.Channel, result *channel.TestResult) error {
-	// TODO: 实现Slack通道测试逻辑
-	result.Details["type"] = "slack"
-	return nil
-}
-
-func (s *ChannelService) sendEmailMessage(ctx context.Context, ch *channel.Channel, message *types.Message) error {
-	// TODO: 实现邮件发送逻辑
-	return nil
-}
-
-func (s *ChannelService) sendWebhookMessage(ctx context.Context, ch *channel.Channel, message *types.Message) error {
-	// TODO: 实现Webhook发送逻辑
-	return nil
-}
-
-func (s *ChannelService) sendSlackMessage(ctx context.Context, ch *channel.Channel, message *types.Message) error {
-	// TODO: 实现Slack发送逻辑
-	return nil
-}
-
-func (s *ChannelService) validateEmailConfig(config channel.ChannelConfig) error {
-	// TODO: 实现邮件配置验证逻辑
-	return nil
-}
-
-func (s *ChannelService) validateWebhookConfig(config channel.ChannelConfig) error {
-	// TODO: 实现Webhook配置验证逻辑
-	return nil
-}
-
-func (s *ChannelService) validateSlackConfig(config channel.ChannelConfig) error {
-	// TODO: 实现Slack配置验证逻辑
-	return nil
+	return plugins
 }

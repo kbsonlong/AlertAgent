@@ -1,55 +1,107 @@
 server:
-    port: 8080
-    mode: debug
-    jwt_secret: your-jwt-secret-key
+  port: 8080
+  mode: debug
+  jwt_secret: your-jwt-secret-key
+
 database:
-    driver: mysql
-    host: localhost
-    port: 3306
-    username: root
-    password: along123
-    dbname: alert_agent
-    charset: utf8mb4
-    max_idle_conns: 10
-    max_open_conns: 100
-    parse_time: true
-    loc: Local
-ollama:
-    enabled: true
-    api_endpoint: http://10.98.65.131:11434
-    model: llama3:latest
-    timeout: 30
-    max_retries: 3
+  host: localhost
+  port: 3306
+  username: root
+  password: password
+  dbname: alert_agent
+  charset: utf8mb4
+  max_idle_conns: 10
+  max_open_conns: 100
+
 redis:
-    host: localhost
-    port: 6379
-    password: ""
-    db: 0
-    pool_size: 100
-    min_idle_conns: 10
-    max_retries: 3
-    dial_timeout: 5
-log:
-    level: info
-    filename: logs/alert_agent.log
-    max_size: 100
-    max_age: 7
-    max_backups: 10
-    compress: true
+  host: localhost
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 10
+  min_idle_conns: 5
+  max_retries: 3
+  dial_timeout: 5
+
+ollama:
+  enabled: true
+  api_endpoint: http://localhost:11434
+  model: llama2
+  timeout: 30
+  max_retries: 3
+
 features:
+  enabled: true
+  config_path: "./config/features.yaml"
+  monitoring_enabled: true
+  ai_maturity_enabled: true
+  default_phase: "phase1"
+  auto_degradation_enabled: true
+  metrics_retention_hours: 168
+  alerting:
     enabled: true
-    config_path: "config/features.yaml"
-    monitoring_enabled: true
-    ai_maturity_enabled: true
-    default_phase: "phase_one"
-    auto_degradation_enabled: true
-    metrics_retention_hours: 168  # 7 days
-    alerting:
-        enabled: true
-        webhook_url: ""
-        slack_channel: "#alerts"
-        email_recipients: []
-        alert_thresholds:
-            error_rate: 0.05
-            latency_p99: 1000
-            ai_accuracy_drop: 0.1
+    webhook_url: ""
+    slack_channel: ""
+    email_recipients: []
+    alert_thresholds:
+      error_rate: 0.05
+      response_time: 1000
+
+# 新增配置
+channel:
+  health_check_interval: 60
+  max_retries: 3
+  retry_interval: 5
+  timeout: 30
+  plugins:
+    dingtalk:
+      enabled: true
+    wechat:
+      enabled: true
+    email:
+      enabled: true
+    webhook:
+      enabled: true
+    slack:
+      enabled: true
+
+cluster:
+  default_sync_interval: 30
+  default_health_check_interval: 10
+  max_concurrent_syncs: 5
+  sync_timeout: 60
+
+gateway:
+  enable_convergence: true
+  enable_suppression: true
+  enable_smart_routing: false  # 第二阶段功能
+  convergence_window: 300
+  max_alerts_per_window: 10
+  processing_timeout: 30
+  direct_mode_enabled: true    # 第一阶段启用直通模式
+  advanced_features:
+    ml_routing: false          # 第二阶段功能
+    auto_escalation: false     # 第二阶段功能
+
+analysis:
+  enabled: true
+  async_mode: true
+  max_concurrent_tasks: 10
+  task_queue_size: 100
+  analysis_timeout: 600
+  max_retries: 3
+  retry_interval: 5
+  result_ttl: 86400
+  providers:
+    dify:
+      enabled: true
+      base_url: "https://api.dify.ai"
+      api_key: "your-dify-api-key"
+      app_token: "your-app-token"
+    n8n:
+      enabled: true
+      base_url: "http://localhost:5678"
+      webhook_path: "/webhook"
+    ollama:
+      enabled: true
+      model: "llama2"
