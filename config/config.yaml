@@ -1,7 +1,43 @@
 server:
     port: 8080
     mode: debug
-    jwt_secret: your-jwt-secret-key
+    jwt_secret: your-jwt-secret-key-change-in-production
+    read_timeout: 30
+    write_timeout: 30
+    idle_timeout: 60
+
+gateway:
+    rate_limit:
+        enabled: true
+        rps: 100
+        burst: 200
+    auth:
+        enabled: true
+        skip_paths:
+            - "/api/v1/health"
+            - "/api/v1/auth/login"
+            - "/api/v1/auth/register"
+        token_expiry: 24
+        refresh_expiry: 168
+    cors:
+        enabled: true
+        allow_origins:
+            - "*"
+        allow_methods:
+            - "GET"
+            - "POST"
+            - "PUT"
+            - "DELETE"
+            - "OPTIONS"
+        allow_headers:
+            - "Content-Type"
+            - "Authorization"
+            - "X-Request-ID"
+            - "X-CSRF-Token"
+        expose_headers:
+            - "Content-Length"
+            - "X-Request-ID"
+        allow_credentials: true
 database:
     driver: mysql
     host: localhost

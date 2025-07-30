@@ -3,13 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"alert_agent/internal/config"
+	"alert_agent/internal/gateway"
 	"alert_agent/internal/model"
 	"alert_agent/internal/pkg/database"
 	"alert_agent/internal/pkg/logger"
@@ -19,7 +17,6 @@ import (
 	"alert_agent/internal/router"
 	"alert_agent/internal/service"
 
-	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
@@ -113,18 +110,14 @@ func main() {
 	// 创建工作器
 	worker := queue.NewWorker(redisQueue, ollamaService)
 
-	// 创建Gin引擎
-	engine := gin.Default()
-
-	// 注册路由
-	router.RegisterRoutes(engine)
-
-	// 创建HTTP服务器
-	cfg := config.GetConfig()
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler: engine,
-	}
+	// 创建API网关
+	gateway := gateway.NewGateway()
+	
+	// 设置中间件
+	gateway.SetupMiddleware()
+	
+	// 设置路由
+	gateway.SetupRoutes(router.RegisterRoutes)
 
 	// 启动工作器
 	workerCtx, workerCancel := context.WithCancel(context.Background())
@@ -134,29 +127,17 @@ func main() {
 		}
 	}()
 
-	// 启动HTTP服务器
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.L.Fatal("Failed to start server", zap.Error(err))
-		}
-	}()
+	// 启动API网关
+	if err := gateway.Start(); err != nil {
+		logger.L.Fatal("Failed to start API Gateway", zap.Error(err))
+	}
 
-	// 等待中断信号
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	// 优雅关闭
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// 等待关闭信号并优雅关闭
+	gateway.WaitForShutdown()
 
 	// 停止工作器
 	workerCancel()
 
 	// 停止配置文件监听
 	config.StopWatcher()
-
-	if err := srv.Shutdown(ctx); err != nil {
-		logger.L.Fatal("Failed to shutdown server", zap.Error(err))
-	}
 }

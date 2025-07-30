@@ -1,13 +1,17 @@
 module alert_agent
 
-go 1.21
+go 1.23.0
+
+toolchain go1.23.11
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gin-gonic/gin v1.10.0
+	github.com/golang-jwt/jwt/v5 v5.2.3
+	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.7.3
-	github.com/sirupsen/logrus v1.9.3
 	go.uber.org/zap v1.21.0
+	golang.org/x/time v0.12.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.5.1
 	gorm.io/gorm v1.25.4
