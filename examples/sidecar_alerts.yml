@@ -1,0 +1,94 @@
+# Sidecar 监控告警规则
+groups:
+  - name: sidecar_alerts
+    interval: 30s
+    rules:
+      # Sidecar 健康状态告警
+      - alert: SidecarDown
+        expr: up{job=~".*-sidecar"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: sidecar
+        annotations:
+          summary: "Sidecar {{ $labels.job }} is down"
+          description: "Sidecar {{ $labels.job }} on {{ $labels.instance }} has been down for more than 1 minute"
+
+      # Sidecar 同步失败告警
+      - alert: SidecarSyncFailed
+        expr: increase(error_count_total{job=~".*-sidecar"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          service: sidecar
+        annotations:
+          summary: "Sidecar {{ $labels.job }} sync failures detected"
+          description: "Sidecar {{ $labels.job }} on {{ $labels.instance }} has {{ $value }} sync failures in the last 5 minutes"
+
+      # Sidecar 同步延迟告警
+      - alert: SidecarSyncDelay
+        expr: (time() - last_sync_timestamp{job=~".*-sidecar"}) > 300
+        for: 5m
+        labels:
+          severity: warning
+          service: sidecar
+        annotations:
+          summary: "Sidecar {{ $labels.job }} sync delay"
+          description: "Sidecar {{ $labels.job }} on {{ $labels.instance }} hasn't synced for {{ $value }} seconds"
+
+      # Sidecar 成功率低告警
+      - alert: SidecarLowSuccessRate
+        expr: sync_success_rate{job=~".*-sidecar"} < 0.8
+        for: 10m
+        labels:
+          severity: warning
+          service: sidecar
+        annotations:
+          summary: "Sidecar {{ $labels.job }} low success rate"
+          description: "Sidecar {{ $labels.job }} on {{ $labels.instance }} has a success rate of {{ $value | humanizePercentage }}"
+
+      # Sidecar 重启频繁告警
+      - alert: SidecarFrequentRestarts
+        expr: increase(uptime_seconds{job=~".*-sidecar"}[1h]) < 3600
+        for: 5m
+        labels:
+          severity: warning
+          service: sidecar
+        annotations:
+          summary: "Sidecar {{ $labels.job }} frequent restarts"
+          description: "Sidecar {{ $labels.job }} on {{ $labels.instance }} has been restarting frequently"
+
+  - name: target_system_alerts
+    interval: 30s
+    rules:
+      # 目标系统不可达告警
+      - alert: TargetSystemDown
+        expr: up{job=~"prometheus|alertmanager"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: monitoring
+        annotations:
+          summary: "Target system {{ $labels.job }} is down"
+          description: "Target system {{ $labels.job }} on {{ $labels.instance }} has been down for more than 2 minutes"
+
+      # 配置重载失败告警
+      - alert: ConfigReloadFailed
+        expr: prometheus_config_last_reload_successful{job="prometheus"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: prometheus
+        annotations:
+          summary: "Prometheus config reload failed"
+          description: "Prometheus on {{ $labels.instance }} failed to reload configuration"
+
+      - alert: AlertmanagerConfigReloadFailed
+        expr: alertmanager_config_last_reload_successful{job="alertmanager"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: alertmanager
+        annotations:
+          summary: "Alertmanager config reload failed"
+          description: "Alertmanager on {{ $labels.instance }} failed to reload configuration"

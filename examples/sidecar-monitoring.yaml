@@ -1,0 +1,112 @@
+# Sidecar 监控配置示例
+# 包含Prometheus监控和Grafana仪表板
+
+version: '3.8'
+services:
+  # AlertAgent 主服务
+  alertagent:
+    image: alertagent:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=mysql
+      - REDIS_HOST=redis
+
+  # Prometheus 监控目标
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus-config.yml:/etc/prometheus/prometheus.yml
+      - prometheus-rules:/etc/prometheus/rules
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+
+  # Alertmanager
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "9093:9093"
+    volumes:
+      - alertmanager-config:/etc/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--web.enable-lifecycle'
+
+  # Prometheus Sidecar
+  prometheus-sidecar:
+    build:
+      context: .
+      dockerfile: Dockerfile.sidecar
+    depends_on:
+      - alertagent
+      - prometheus
+    volumes:
+      - prometheus-rules:/etc/prometheus/rules
+    environment:
+      - LOG_LEVEL=debug
+    ports:
+      - "8081:8081"  # 健康检查端口
+    command:
+      - "--endpoint=http://alertagent:8080"
+      - "--cluster-id=prometheus-cluster"
+      - "--type=prometheus"
+      - "--config-path=/etc/prometheus/rules/alertagent.yml"
+      - "--reload-url=http://prometheus:9090/-/reload"
+      - "--sync-interval=30s"
+      - "--health-port=8081"
+
+  # Alertmanager Sidecar
+  alertmanager-sidecar:
+    build:
+      context: .
+      dockerfile: Dockerfile.sidecar
+    depends_on:
+      - alertagent
+      - alertmanager
+    volumes:
+      - alertmanager-config:/etc/alertmanager
+    environment:
+      - LOG_LEVEL=debug
+    ports:
+      - "8082:8081"  # 健康检查端口
+    command:
+      - "--endpoint=http://alertagent:8080"
+      - "--cluster-id=alertmanager-cluster"
+      - "--type=alertmanager"
+      - "--config-path=/etc/alertmanager/alertmanager.yml"
+      - "--reload-url=http://alertmanager:9093/-/reload"
+      - "--sync-interval=30s"
+      - "--health-port=8081"
+
+  # 监控 Prometheus (用于监控Sidecar)
+  monitoring-prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring-prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+
+  # Grafana 仪表板
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+
+volumes:
+  prometheus-rules:
+  alertmanager-config:
+  grafana-data:

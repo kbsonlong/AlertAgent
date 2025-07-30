@@ -1,124 +1,138 @@
 package v1
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"alert_agent/internal/model"
-	"alert_agent/internal/pkg/database"
+	"alert_agent/internal/pkg/logger"
 	"alert_agent/internal/pkg/queue"
-	"alert_agent/internal/pkg/types"
+	"alert_agent/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
-// AsyncAlertHandler 异步告警处理器
-type AsyncAlertHandler struct {
-	queue queue.Queue
+// AsyncAlertAPI 异步告警API
+type AsyncAlertAPI struct {
+	alertService *service.AlertService
+	taskService  *service.TaskService
 }
 
-// NewAsyncAlertHandler 创建异步告警处理器
-func NewAsyncAlertHandler(queue queue.Queue) *AsyncAlertHandler {
-	return &AsyncAlertHandler{
-		queue: queue,
+// NewAsyncAlertAPI 创建异步告警API实例
+func NewAsyncAlertAPI(alertService *service.AlertService, taskService *service.TaskService) *AsyncAlertAPI {
+	return &AsyncAlertAPI{
+		alertService: alertService,
+		taskService:  taskService,
 	}
 }
 
-// RegisterRoutes 注册路由
-func (h *AsyncAlertHandler) RegisterRoutes(r *gin.RouterGroup) {
-	// 注册异步分析路由
-	r.POST("/:id/async/analyze", h.AsyncAnalyzeAlert)
-	r.GET("/async/result/:task_id", h.GetAnalysisResult)
+// CreateAsyncAlert 创建异步告警
+func (api *AsyncAlertAPI) CreateAsyncAlert(c *gin.Context) {
+	var alert model.Alert
+	if err := c.ShouldBindJSON(&alert); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "无效的请求参数: " + err.Error(),
+			"data": nil,
+		})
+		return
+	}
+
+	// 创建告警（会自动触发异步分析和通知）
+	if err := api.alertService.CreateAlert(c.Request.Context(), &alert); err != nil {
+		logger.L.Error("Failed to create async alert",
+			zap.Error(err),
+			zap.String("alert_name", alert.Name),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "创建告警失败: " + err.Error(),
+			"data": nil,
+		})
+		return
+	}
+
+	// 立即返回告警创建结果，分析将异步进行
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "告警创建成功，正在异步分析中",
+		"data": gin.H{
+			"alert_id": alert.ID,
+			"status":   "created",
+			"analysis_status": "pending",
+		},
+	})
 }
 
-// AsyncAnalyzeAlert 异步分析告警
-// @Summary Asynchronously analyze alert using AI
-// @Description Submit alert for asynchronous analysis using AI service
-// @Tags alerts
-// @Accept json
-// @Produce json
-// @Param id path int true "Alert ID"
-// @Success 200 {object} response.Response{data=map[string]string}
-// @Router /api/v1/alerts/{id}/async-analyze [post]
-func (h *AsyncAlertHandler) AsyncAnalyzeAlert(c *gin.Context) {
-	id := c.Param("id")
-	alertID, err := strconv.Atoi(id)
+// GetAlertAnalysisStatus 获取告警分析状态
+func (api *AsyncAlertAPI) GetAlertAnalysisStatus(c *gin.Context) {
+	alertIDStr := c.Param("id")
+	alertID, err := strconv.ParseUint(alertIDStr, 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
 			"msg":  "无效的告警ID",
-			"data": err.Error(),
+			"data": nil,
 		})
 		return
 	}
 
-	// 首先从MySQL查询告警信息和分析结果
-	var alert model.Alert
-	if err := database.DB.First(&alert, alertID).Error; err != nil {
+	// 获取告警信息
+	alert, err := api.alertService.GetAlert(c.Request.Context(), uint(alertID))
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code": 404,
 			"msg":  "告警不存在",
-			"data": err.Error(),
+			"data": nil,
 		})
 		return
 	}
 
-	// 检查是否已有分析结果
-	if alert.Analysis != "" {
-		// 已有分析结果，直接返回
-		c.JSON(http.StatusOK, gin.H{
-			"code": 200,
-			"msg":  "分析结果已存在",
-			"data": gin.H{
-				"task_id": alert.ID,
-				"status":  "completed",
-				"result":  alert.Analysis,
-				"message": "Analysis completed successfully",
-			},
+	// 构建响应数据
+	response := gin.H{
+		"alert_id": alert.ID,
+		"status":   alert.Status,
+		"analysis": alert.Analysis,
+	}
+
+	// 判断分析状态
+	if alert.Analysis == "" {
+		response["analysis_status"] = "pending"
+	} else {
+		response["analysis_status"] = "completed"
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "success",
+		"data": response,
+	})
+}
+
+// TriggerManualAnalysis 手动触发告警分析
+func (api *AsyncAlertAPI) TriggerManualAnalysis(c *gin.Context) {
+	alertIDStr := c.Param("id")
+	alertID, err := strconv.ParseUint(alertIDStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "无效的告警ID",
+			"data": nil,
 		})
 		return
 	}
 
-	// 检查是否已在队列中处理
-	queueResult, err := h.queue.GetResult(c.Request.Context(), uint(alertID))
-	if err == nil && queueResult != nil {
-		// 队列中已有结果，返回状态
-		c.JSON(http.StatusOK, gin.H{
-			"code": 200,
-			"msg":  "分析任务已在处理中",
-			"data": gin.H{
-				"task_id": alert.ID,
-				"status":  "processing",
-			},
-		})
-		return
-	}
-
-	// 创建新的分析任务
-	task := &types.AlertTask{
-		ID:        uint(alertID),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-		Name:      alert.Title,
-		Level:     alert.Level,
-		Source:    alert.Source,
-		Content:   alert.Content,
-		RuleID:    alert.RuleID,
-		GroupID:   alert.GroupID,
-	}
-
-	// 将分析任务加入队列
-	if err := h.queue.Push(c.Request.Context(), task); err != nil {
-		zap.L().Error("enqueue analysis task failed",
+	// 触发手动分析
+	if err := api.alertService.TriggerManualAnalysis(c.Request.Context(), uint(alertID)); err != nil {
+		logger.L.Error("Failed to trigger manual analysis",
 			zap.Error(err),
-			zap.Uint("alert_id", alert.ID),
+			zap.Uint64("alert_id", alertID),
 		)
-
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
-			"msg":  "加入分析队列失败，请稍后重试",
+			"msg":  "触发分析失败: " + err.Error(),
 			"data": nil,
 		})
 		return
@@ -126,89 +140,299 @@ func (h *AsyncAlertHandler) AsyncAnalyzeAlert(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
-		"msg":  "分析任务已加入队列，请稍后查看结果",
+		"msg":  "分析任务已提交",
 		"data": gin.H{
-			"task_id":     alert.ID,
-			"submit_time": time.Now().Format("2006-01-02 15:04:05"),
-			"status":      "processing",
+			"alert_id": alertID,
+			"status":   "analysis_triggered",
 		},
 	})
 }
 
-// GetAnalysisResult 获取分析结果
-// @Summary Get analysis result
-// @Description Get the analysis result for a specific alert
-// @Tags alerts
-// @Accept json
-// @Produce json
-// @Param task_id path int true "Task ID"
-// @Success 200 {object} response.Response{data=map[string]interface{}}
-// @Router /api/v1/alerts/async/result/{task_id} [get]
-func (h *AsyncAlertHandler) GetAnalysisResult(c *gin.Context) {
-	taskID, err := strconv.ParseUint(c.Param("task_id"), 10, 32)
+// GetTaskStatus 获取任务状态
+func (api *AsyncAlertAPI) GetTaskStatus(c *gin.Context) {
+	taskID := c.Param("task_id")
+	if taskID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "任务ID不能为空",
+			"data": nil,
+		})
+		return
+	}
+
+	// 获取任务状态
+	task, err := api.taskService.GetTaskStatus(c.Request.Context(), taskID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"code": 404,
+			"msg":  "任务不存在",
+			"data": err.Error(),
+		})
+		return
+	}
+
+	if task == nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"code": 404,
+			"msg":  "任务不存在",
+			"data": nil,
+		})
+		return
+	}
+
+	// 构建响应数据
+	response := gin.H{
+		"task_id":     task.ID,
+		"type":        string(task.Type),
+		"status":      string(task.Status),
+		"priority":    int(task.Priority),
+		"retry":       task.Retry,
+		"max_retry":   task.MaxRetry,
+		"created_at":  task.CreatedAt,
+		"updated_at":  task.UpdatedAt,
+		"error_msg":   task.ErrorMsg,
+	}
+
+	if task.StartedAt != nil {
+		response["started_at"] = *task.StartedAt
+	}
+	if task.CompletedAt != nil {
+		response["completed_at"] = *task.CompletedAt
+		response["duration"] = task.GetDuration().String()
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "success",
+		"data": response,
+	})
+}
+
+// GetQueueStats 获取队列统计信息
+func (api *AsyncAlertAPI) GetQueueStats(c *gin.Context) {
+	queueName := c.Query("queue")
+	if queueName == "" {
+		// 获取所有队列指标
+		metrics, err := api.taskService.GetAllQueueMetrics(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code": 500,
+				"msg":  "获取队列指标失败: " + err.Error(),
+				"data": nil,
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"code": 200,
+			"msg":  "success",
+			"data": metrics,
+		})
+		return
+	}
+
+	// 获取指定队列统计
+	stats, err := api.taskService.GetQueueStats(c.Request.Context(), queueName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "获取队列统计失败: " + err.Error(),
+			"data": nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "success",
+		"data": stats,
+	})
+}
+
+// RetryFailedTasks 重试失败的任务
+func (api *AsyncAlertAPI) RetryFailedTasks(c *gin.Context) {
+	alertIDStr := c.Param("id")
+	alertID, err := strconv.ParseUint(alertIDStr, 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": 400,
-			"msg":  "无效的任务ID",
-			"data": err.Error(),
+			"msg":  "无效的告警ID",
+			"data": nil,
 		})
 		return
 	}
 
-	// 首先从MySQL查询告警信息和分析结果
-	var alert model.Alert
-	if err := database.DB.First(&alert, taskID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code": 404,
-			"msg":  "告警不存在",
-			"data": err.Error(),
+	// 重试失败的任务
+	if err := api.alertService.RetryFailedTasks(c.Request.Context(), uint(alertID)); err != nil {
+		logger.L.Error("Failed to retry failed tasks",
+			zap.Error(err),
+			zap.Uint64("alert_id", alertID),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "重试任务失败: " + err.Error(),
+			"data": nil,
 		})
 		return
 	}
 
-	// 如果MySQL中已有分析结果，直接返回
-	if alert.Analysis != "" {
-		c.JSON(http.StatusOK, gin.H{
-			"code": 200,
-			"msg":  "获取分析结果成功",
-			"data": gin.H{
-				"status":  "completed",
-				"result":  alert.Analysis,
-				"message": "Analysis completed successfully",
-			},
-		})
-		return
-	}
-
-	// 如果MySQL中没有结果，从Redis队列查询状态
-	result, err := h.queue.GetResult(c.Request.Context(), uint(taskID))
-	if err != nil {
-		// 队列中也没有，说明任务未提交
-		c.JSON(http.StatusNotFound, gin.H{
-			"code": 404,
-			"msg":  "分析任务不存在，请先提交分析任务",
-			"data": gin.H{
-				"status": "not_found",
-			},
-		})
-		return
-	}
-
-	if result == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"code": 200,
-			"msg":  "分析任务处理中",
-			"data": gin.H{
-				"status": "processing",
-			},
-		})
-		return
-	}
-
-	// 返回队列中的处理状态
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
-		"msg":  "获取分析状态成功",
-		"data": result,
+		"msg":  "重试任务已提交",
+		"data": gin.H{
+			"alert_id": alertID,
+			"status":   "retry_triggered",
+		},
+	})
+}
+
+// PublishCustomTask 发布自定义任务
+func (api *AsyncAlertAPI) PublishCustomTask(c *gin.Context) {
+	var req struct {
+		QueueName string                 `json:"queue_name" binding:"required"`
+		Type      string                 `json:"type" binding:"required"`
+		Priority  int                    `json:"priority"`
+		MaxRetry  int                    `json:"max_retry"`
+		Payload   map[string]interface{} `json:"payload" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "无效的请求参数: " + err.Error(),
+			"data": nil,
+		})
+		return
+	}
+
+	// 创建任务
+	task := &queue.Task{
+		Type:     queue.TaskType(req.Type),
+		Priority: queue.TaskPriority(req.Priority),
+		MaxRetry: req.MaxRetry,
+		Payload:  req.Payload,
+	}
+
+	if task.MaxRetry == 0 {
+		task.MaxRetry = 3
+	}
+
+	// 发布任务
+	if err := api.taskService.PublishTask(c.Request.Context(), req.QueueName, task); err != nil {
+		logger.L.Error("Failed to publish custom task",
+			zap.Error(err),
+			zap.String("queue", req.QueueName),
+			zap.String("type", req.Type),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "发布任务失败: " + err.Error(),
+			"data": nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "任务发布成功",
+		"data": gin.H{
+			"task_id":    task.ID,
+			"queue_name": req.QueueName,
+			"type":       req.Type,
+			"status":     "published",
+		},
+	})
+}
+
+// GetSystemHealth 获取系统健康状态
+func (api *AsyncAlertAPI) GetSystemHealth(c *gin.Context) {
+	health, err := api.taskService.GetHealthStatus(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "获取系统健康状态失败: " + err.Error(),
+			"data": nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "success",
+		"data": health,
+	})
+}
+
+// BatchCreateAlerts 批量创建告警
+func (api *AsyncAlertAPI) BatchCreateAlerts(c *gin.Context) {
+	var req struct {
+		Alerts []model.Alert `json:"alerts" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "无效的请求参数: " + err.Error(),
+			"data": nil,
+		})
+		return
+	}
+
+	if len(req.Alerts) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "告警列表不能为空",
+			"data": nil,
+		})
+		return
+	}
+
+	if len(req.Alerts) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "批量创建告警数量不能超过100个",
+			"data": nil,
+		})
+		return
+	}
+
+	// 批量创建告警
+	var results []gin.H
+	var successCount, failCount int
+
+	for i, alert := range req.Alerts {
+		if err := api.alertService.CreateAlert(c.Request.Context(), &alert); err != nil {
+			logger.L.Error("Failed to create alert in batch",
+				zap.Error(err),
+				zap.Int("index", i),
+				zap.String("alert_name", alert.Name),
+			)
+			results = append(results, gin.H{
+				"index":    i,
+				"alert_id": nil,
+				"status":   "failed",
+				"error":    err.Error(),
+			})
+			failCount++
+		} else {
+			results = append(results, gin.H{
+				"index":    i,
+				"alert_id": alert.ID,
+				"status":   "created",
+				"error":    nil,
+			})
+			successCount++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  fmt.Sprintf("批量创建完成，成功: %d, 失败: %d", successCount, failCount),
+		"data": gin.H{
+			"total":        len(req.Alerts),
+			"success_count": successCount,
+			"fail_count":   failCount,
+			"results":      results,
+		},
 	})
 }

@@ -1,0 +1,37 @@
+# Alertmanager Sidecar 配置示例
+# 使用方法: ./sidecar -config-path=/etc/alertmanager/alertmanager.yml -type=alertmanager -cluster-id=cluster-1 -reload-url=http://alertmanager:9093/-/reload
+
+version: '3.8'
+services:
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "9093:9093"
+    volumes:
+      - alertmanager-config:/etc/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+      - '--web.enable-lifecycle'
+
+  alertagent-sidecar:
+    build:
+      context: .
+      dockerfile: Dockerfile.sidecar
+    depends_on:
+      - alertmanager
+    volumes:
+      - alertmanager-config:/etc/alertmanager
+    environment:
+      - LOG_LEVEL=debug
+    command:
+      - "--endpoint=http://alertagent:8080"
+      - "--cluster-id=cluster-1"
+      - "--type=alertmanager"
+      - "--config-path=/etc/alertmanager/alertmanager.yml"
+      - "--reload-url=http://alertmanager:9093/-/reload"
+      - "--sync-interval=30s"
+
+volumes:
+  alertmanager-config:

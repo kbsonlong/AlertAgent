@@ -115,7 +115,7 @@ wait_for_services() {
     log_info "等待 Ollama 启动..."
     timeout=60
     while [ $timeout -gt 0 ]; do
-        if curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+        if curl -s http://10.98.65.131:11434/api/tags >/dev/null 2>&1; then
             log_success "Ollama 已就绪"
             break
         fi

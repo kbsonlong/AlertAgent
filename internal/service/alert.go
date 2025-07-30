@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"alert_agent/internal/model"
+	"alert_agent/internal/pkg/queue"
 
 	goredis "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -25,15 +26,17 @@ const (
 
 // AlertService 告警服务
 type AlertService struct {
-	db    *gorm.DB
-	cache *goredis.Client
+	db           *gorm.DB
+	cache        *goredis.Client
+	taskProducer queue.TaskProducer
 }
 
 // NewAlertService 创建告警服务实例
-func NewAlertService(db *gorm.DB, cache *goredis.Client) *AlertService {
+func NewAlertService(db *gorm.DB, cache *goredis.Client, taskProducer queue.TaskProducer) *AlertService {
 	return &AlertService{
-		db:    db,
-		cache: cache,
+		db:           db,
+		cache:        cache,
+		taskProducer: taskProducer,
 	}
 }
 
@@ -64,9 +67,14 @@ func (s *AlertService) CreateAlert(ctx context.Context, alert *model.Alert) erro
 		return fmt.Errorf("failed to cache alert: %w", err)
 	}
 
+	// 触发异步告警分析
+	if err := s.triggerAsyncAnalysis(ctx, alert); err != nil {
+		return fmt.Errorf("failed to trigger async analysis: %w", err)
+	}
+
 	// 触发告警通知
-	if err := s.triggerNotification(ctx, tx, alert); err != nil {
-		return fmt.Errorf("failed to trigger notification: %w", err)
+	if err := s.triggerAsyncNotification(ctx, alert); err != nil {
+		return fmt.Errorf("failed to trigger async notification: %w", err)
 	}
 
 	// 提交事务
@@ -228,15 +236,15 @@ func (s *AlertService) triggerNotification(ctx context.Context, tx *gorm.DB, ale
 		return fmt.Errorf("failed to get rule: %w", err)
 	}
 
-	// 获取通知模板
+	// TODO: 获取通知模板和通知组 (需要重新设计通知机制)
+	// 暂时使用默认值
 	template := &model.NotifyTemplate{}
-	if err := tx.First(template, "type = ? AND enabled = ?", rule.NotifyType, true).Error; err != nil {
+	if err := tx.First(template, "enabled = ?", true).Error; err != nil {
 		return fmt.Errorf("failed to get template: %w", err)
 	}
 
-	// 获取通知组
 	group := &model.NotifyGroup{}
-	if err := tx.First(group, "name = ? AND enabled = ?", rule.NotifyGroup, true).Error; err != nil {
+	if err := tx.First(group, "enabled = ?", true).Error; err != nil {
 		return fmt.Errorf("failed to get group: %w", err)
 	}
 
@@ -272,6 +280,111 @@ func (s *AlertService) triggerNotification(ctx context.Context, tx *gorm.DB, ale
 func (s *AlertService) renderTemplate(template *model.NotifyTemplate, alert *model.Alert) string {
 	// TODO: 实现模板渲染逻辑
 	return template.Content
+}
+
+// triggerAsyncAnalysis 触发异步告警分析
+func (s *AlertService) triggerAsyncAnalysis(ctx context.Context, alert *model.Alert) error {
+	if s.taskProducer == nil {
+		return nil // 如果没有配置任务生产者，跳过异步分析
+	}
+
+	// 准备告警数据
+	alertData := map[string]interface{}{
+		"id":          alert.ID,
+		"name":        alert.Name,
+		"level":       alert.Level,
+		"source":      alert.Source,
+		"content":     alert.Content,
+		"rule_id":     alert.RuleID,
+		"group_id":    alert.GroupID,
+		"created_at":  alert.CreatedAt,
+		"status":      alert.Status,
+	}
+
+	// 发布AI分析任务
+	err := s.taskProducer.PublishAIAnalysisTask(ctx, fmt.Sprintf("%d", alert.ID), alertData)
+	if err != nil {
+		return fmt.Errorf("failed to publish AI analysis task: %w", err)
+	}
+
+	return nil
+}
+
+// triggerAsyncNotification 触发异步通知
+func (s *AlertService) triggerAsyncNotification(ctx context.Context, alert *model.Alert) error {
+	if s.taskProducer == nil {
+		return s.triggerNotification(ctx, s.db, alert) // 回退到同步通知
+	}
+
+	// 准备通知数据
+	message := map[string]interface{}{
+		"title":      fmt.Sprintf("告警: %s", alert.Name),
+		"content":    alert.Content,
+		"level":      alert.Level,
+		"source":     alert.Source,
+		"created_at": alert.CreatedAt.Format("2006-01-02 15:04:05"),
+		"alert_id":   alert.ID,
+	}
+
+	// 获取通知渠道（这里简化处理，实际应该从配置中获取）
+	channels := []string{"email", "webhook"} // 默认通知渠道
+
+	// 发布通知任务
+	err := s.taskProducer.PublishNotificationTask(ctx, fmt.Sprintf("%d", alert.ID), channels, message)
+	if err != nil {
+		return fmt.Errorf("failed to publish notification task: %w", err)
+	}
+
+	return nil
+}
+
+// GetTaskStatus 获取告警相关任务状态
+func (s *AlertService) GetTaskStatus(ctx context.Context, taskID string) (*queue.Task, error) {
+	if s.taskProducer == nil {
+		return nil, fmt.Errorf("task producer not configured")
+	}
+
+	return s.taskProducer.GetTaskStatus(ctx, taskID)
+}
+
+// TriggerManualAnalysis 手动触发告警分析
+func (s *AlertService) TriggerManualAnalysis(ctx context.Context, alertID uint) error {
+	if s.taskProducer == nil {
+		return fmt.Errorf("task producer not configured")
+	}
+
+	// 获取告警信息
+	alert, err := s.GetAlert(ctx, alertID)
+	if err != nil {
+		return fmt.Errorf("failed to get alert: %w", err)
+	}
+
+	// 触发分析
+	return s.triggerAsyncAnalysis(ctx, alert)
+}
+
+// RetryFailedTasks 重试失败的任务
+func (s *AlertService) RetryFailedTasks(ctx context.Context, alertID uint) error {
+	if s.taskProducer == nil {
+		return fmt.Errorf("task producer not configured")
+	}
+
+	// 获取告警信息
+	alert, err := s.GetAlert(ctx, alertID)
+	if err != nil {
+		return fmt.Errorf("failed to get alert: %w", err)
+	}
+
+	// 重新触发分析和通知
+	if err := s.triggerAsyncAnalysis(ctx, alert); err != nil {
+		return fmt.Errorf("failed to retry analysis: %w", err)
+	}
+
+	if err := s.triggerAsyncNotification(ctx, alert); err != nil {
+		return fmt.Errorf("failed to retry notification: %w", err)
+	}
+
+	return nil
 }
 
 // AlertQuery 告警查询参数

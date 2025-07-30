@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"alert_agent/internal/config"
@@ -81,66 +82,82 @@ func seedRules() error {
 		return nil
 	}
 
-	// 获取默认数据源ID
-	var provider model.Provider
-	if err := DB.First(&provider, "name = ?", "本地Prometheus").Error; err != nil {
-		return fmt.Errorf("failed to find default provider: %w", err)
-	}
-
-	// 创建默认告警规则
-	defaultRules := []model.Rule{
+	// 创建默认告警规则（使用新的Rule模型）
+	defaultRules := []*model.Rule{
 		{
-			Name:          "CPU使用率告警",
-			Description:   "CPU使用率超过90%时触发告警",
-			Level:         "warning",
-			Enabled:       true,
-			ProviderID:    provider.ID,
-			QueryExpr:     "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
-			ConditionExpr: "cpu_usage > 90",
-			NotifyType:    "email",
-			NotifyGroup:   "默认通知组",
-			Template:      "默认邮件模板",
+			ID:         "rule-cpu-usage",
+			Name:       "CPU使用率告警",
+			Expression: "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100) > 90",
+			Duration:   "5m",
+			Severity:   "warning",
+			Version:    "v1.0.0",
+			Status:     "active",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
 		},
 		{
-			Name:          "内存使用率告警",
-			Description:   "内存使用率超过90%时触发告警",
-			Level:         "warning",
-			Enabled:       true,
-			ProviderID:    provider.ID,
-			QueryExpr:     "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
-			ConditionExpr: "memory_usage > 90",
-			NotifyType:    "email",
-			NotifyGroup:   "默认通知组",
-			Template:      "默认邮件模板",
+			ID:         "rule-memory-usage",
+			Name:       "内存使用率告警",
+			Expression: "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90",
+			Duration:   "5m",
+			Severity:   "warning",
+			Version:    "v1.0.0",
+			Status:     "active",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
 		},
 		{
-			Name:          "磁盘使用率告警",
-			Description:   "磁盘使用率超过90%时触发告警",
-			Level:         "critical",
-			Enabled:       true,
-			ProviderID:    provider.ID,
-			QueryExpr:     "(1 - (node_filesystem_avail_bytes{fstype!=\"tmpfs\"} / node_filesystem_size_bytes{fstype!=\"tmpfs\"})) * 100",
-			ConditionExpr: "disk_usage > 90",
-			NotifyType:    "email",
-			NotifyGroup:   "默认通知组",
-			Template:      "默认邮件模板",
+			ID:         "rule-disk-usage",
+			Name:       "磁盘使用率告警",
+			Expression: "(1 - (node_filesystem_avail_bytes{fstype!=\"tmpfs\"} / node_filesystem_size_bytes{fstype!=\"tmpfs\"})) * 100 > 90",
+			Duration:   "5m",
+			Severity:   "critical",
+			Version:    "v1.0.0",
+			Status:     "active",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
 		},
 		{
-			Name:          "服务可用性告警",
-			Description:   "服务不可用时触发告警",
-			Level:         "critical",
-			Enabled:       true,
-			ProviderID:    provider.ID,
-			QueryExpr:     "up",
-			ConditionExpr: "up == 0",
-			NotifyType:    "email",
-			NotifyGroup:   "默认通知组",
-			Template:      "默认邮件模板",
+			ID:         "rule-service-down",
+			Name:       "服务可用性告警",
+			Expression: "up == 0",
+			Duration:   "1m",
+			Severity:   "critical",
+			Version:    "v1.0.0",
+			Status:     "active",
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
 		},
 	}
 
+	// 设置默认标签和注释
 	for _, rule := range defaultRules {
-		if err := DB.Create(&rule).Error; err != nil {
+		// 设置默认标签
+		labels := map[string]string{
+			"team":        "ops",
+			"environment": "production",
+		}
+		if err := rule.SetLabelsMap(labels); err != nil {
+			return fmt.Errorf("failed to set labels for rule %s: %w", rule.Name, err)
+		}
+
+		// 设置默认注释
+		annotations := map[string]string{
+			"summary":     rule.Name,
+			"description": "告警规则: " + rule.Name,
+		}
+		if err := rule.SetAnnotationsMap(annotations); err != nil {
+			return fmt.Errorf("failed to set annotations for rule %s: %w", rule.Name, err)
+		}
+
+		// 设置默认目标
+		targets := []string{"prometheus", "alertmanager"}
+		if err := rule.SetTargetsList(targets); err != nil {
+			return fmt.Errorf("failed to set targets for rule %s: %w", rule.Name, err)
+		}
+
+		// 创建规则
+		if err := DB.Create(rule).Error; err != nil {
 			return fmt.Errorf("failed to create default rule %s: %w", rule.Name, err)
 		}
 	}
@@ -149,69 +166,9 @@ func seedRules() error {
 }
 
 // seedAlerts 插入默认告警示例
+// TODO: 需要更新Alert模型以支持新的Rule ID格式（string类型）
 func seedAlerts() error {
-	// 检查是否已存在默认告警示例
-	var count int64
-	if err := DB.Model(&model.Alert{}).Count(&count).Error; err != nil {
-		return err
-	}
-
-	// 如果已有告警，跳过初始化
-	if count > 0 {
-		return nil
-	}
-
-	// 获取默认规则ID
-	var rule model.Rule
-	if err := DB.First(&rule, "name = ?", "CPU使用率告警").Error; err != nil {
-		return fmt.Errorf("failed to find default rule: %w", err)
-	}
-
-	// 创建默认告警示例
-	defaultAlerts := []model.Alert{
-		{
-			Name:     "CPU使用率过高",
-			Title:    "服务器CPU使用率超过阈值",
-			Level:    "warning",
-			Status:   "new",
-			Source:   "prometheus",
-			Content:  "服务器 server-01 的CPU使用率已达到95%，超过了90%的告警阈值。请及时检查系统负载情况。",
-			Labels:   `{"instance":"server-01","job":"node-exporter","severity":"warning"}`,
-			RuleID:   rule.ID,
-			Severity: "medium",
-		},
-		{
-			Name:     "内存使用率告警",
-			Title:    "服务器内存使用率异常",
-			Level:    "warning",
-			Status:   "acknowledged",
-			Source:   "prometheus",
-			Content:  "服务器 server-02 的内存使用率已达到92%，可能存在内存泄漏或负载过高的情况。",
-			Labels:   `{"instance":"server-02","job":"node-exporter","severity":"warning"}`,
-			RuleID:   rule.ID,
-			Severity: "medium",
-			Handler:  "admin",
-			HandleNote: "已确认告警，正在排查内存使用情况",
-		},
-		{
-			Name:     "磁盘空间不足",
-			Title:    "服务器磁盘空间严重不足",
-			Level:    "critical",
-			Status:   "new",
-			Source:   "prometheus",
-			Content:  "服务器 server-03 的根分区磁盘使用率已达到95%，请立即清理磁盘空间或扩容。",
-			Labels:   `{"instance":"server-03","device":"/dev/sda1","mountpoint":"/","severity":"critical"}`,
-			RuleID:   rule.ID,
-			Severity: "high",
-		},
-	}
-
-	for _, alert := range defaultAlerts {
-		if err := DB.Create(&alert).Error; err != nil {
-			return fmt.Errorf("failed to create default alert %s: %w", alert.Name, err)
-		}
-	}
-
+	// 暂时注释掉，等Alert模型更新后再启用
 	return nil
 }
 
@@ -220,6 +177,7 @@ func autoMigrate() error {
 	if err := DB.AutoMigrate(
 		&model.Alert{},
 		&model.Rule{},
+		&model.RuleDistributionRecord{},
 		&model.NotifyTemplate{},
 		&model.NotifyGroup{},
 		&model.NotifyRecord{},
@@ -229,12 +187,62 @@ func autoMigrate() error {
 		return err
 	}
 
+	// 创建新的规则表索引
+	if err := createRuleIndexes(); err != nil {
+		return fmt.Errorf("failed to create rule indexes: %w", err)
+	}
+
 	// 插入初始化数据
 	if err := seedData(); err != nil {
 		return fmt.Errorf("failed to seed data: %w", err)
 	}
 
 	return nil
+}
+
+// createRuleIndexes 创建规则表索引
+func createRuleIndexes() error {
+	// 为规则表创建必要的索引，使用MySQL兼容的语法
+	indexes := map[string]string{
+		"idx_alert_rules_name":       "CREATE INDEX idx_alert_rules_name ON alert_rules(name)",
+		"idx_alert_rules_status":     "CREATE INDEX idx_alert_rules_status ON alert_rules(status)",
+		"idx_alert_rules_created_at": "CREATE INDEX idx_alert_rules_created_at ON alert_rules(created_at)",
+		"idx_alert_rules_severity":   "CREATE INDEX idx_alert_rules_severity ON alert_rules(severity)",
+	}
+
+	for indexName, indexSQL := range indexes {
+		// 检查索引是否已存在
+		var count int64
+		checkSQL := `SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS 
+					WHERE table_name = 'alert_rules' 
+					AND table_schema = DATABASE() 
+					AND index_name = ?`
+		
+		if err := DB.Raw(checkSQL, indexName).Scan(&count).Error; err != nil {
+			return fmt.Errorf("failed to check index %s: %w", indexName, err)
+		}
+		
+		// 如果索引不存在，则创建
+		if count == 0 {
+			if err := DB.Exec(indexSQL).Error; err != nil {
+				// 忽略索引已存在的错误
+				if !isIndexExistsError(err) {
+					return fmt.Errorf("failed to create index: %s, error: %w", indexSQL, err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// isIndexExistsError 检查是否是索引已存在的错误
+func isIndexExistsError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "Duplicate key name") || strings.Contains(errStr, "already exists")
 }
 
 // seedData 插入初始化数据
@@ -259,10 +267,10 @@ func seedData() error {
 		return err
 	}
 
-	// 检查并插入默认告警示例
-	if err := seedAlerts(); err != nil {
-		return err
-	}
+	// TODO: 检查并插入默认告警示例 (需要更新Alert模型以支持新的Rule ID格式)
+	// if err := seedAlerts(); err != nil {
+	//     return err
+	// }
 
 	return nil
 }

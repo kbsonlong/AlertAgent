@@ -3,6 +3,7 @@ package router
 import (
 	v1 "alert_agent/internal/api/v1"
 	"alert_agent/internal/config"
+	"alert_agent/internal/container"
 	"alert_agent/internal/middleware"
 	"alert_agent/internal/pkg/queue"
 	"alert_agent/internal/pkg/redis"
@@ -13,6 +14,9 @@ import (
 // RegisterRoutes 注册所有路由
 func RegisterRoutes(r *gin.Engine) {
 	cfg := config.GetConfig()
+	
+	// 创建依赖注入容器
+	container := container.NewContainer()
 	
 	// 创建Redis队列
 	redisQueue := queue.NewRedisQueue(redis.Client, "alert:queue")
@@ -35,14 +39,44 @@ func RegisterRoutes(r *gin.Engine) {
 			authenticated.Use(middleware.JWTAuth())
 		}
 
-		// 告警规则管理 - 需要认证
+		// 告警规则管理 - 需要认证 (使用新的RuleAPI)
 		rules := authenticated.Group("/rules")
 		{
-			rules.GET("", v1.ListRules)
-			rules.POST("", middleware.RequireRole("admin", "operator"), v1.CreateRule)
-			rules.GET("/:id", v1.GetRule)
-			rules.PUT("/:id", middleware.RequireRole("admin", "operator"), v1.UpdateRule)
-			rules.DELETE("/:id", middleware.RequireRole("admin"), v1.DeleteRule)
+			rules.GET("", container.RuleAPI.ListRules)
+			rules.POST("", middleware.RequireRole("admin", "operator"), container.RuleAPI.CreateRule)
+			rules.GET("/:id", container.RuleAPI.GetRule)
+			rules.PUT("/:id", middleware.RequireRole("admin", "operator"), container.RuleAPI.UpdateRule)
+			rules.DELETE("/:id", middleware.RequireRole("admin"), container.RuleAPI.DeleteRule)
+			rules.POST("/validate", middleware.RequireRole("admin", "operator"), container.RuleAPI.ValidateRule)
+			
+			// 规则分发相关路由
+			rules.GET("/:id/distribution", container.RuleAPI.GetRuleDistribution)
+			rules.GET("/:id/distribution/:target", container.RuleAPI.GetTargetDistribution)
+			rules.POST("/distribution/summary", container.RuleAPI.GetDistributionSummary)
+			rules.POST("/distribution/retry", middleware.RequireRole("admin", "operator"), container.RuleAPI.RetryDistribution)
+			rules.PUT("/distribution/status", middleware.RequireRole("admin", "operator"), container.RuleAPI.UpdateDistributionStatus)
+			rules.GET("/distribution/retryable", middleware.RequireRole("admin", "operator"), container.RuleAPI.GetRetryableDistributions)
+			rules.POST("/distribution/process-retry", middleware.RequireRole("admin", "operator"), container.RuleAPI.ProcessRetryableDistributions)
+			
+			// 批量操作
+			rules.POST("/batch", middleware.RequireRole("admin", "operator"), container.RuleAPI.BatchRuleOperation)
+			
+			// 版本控制相关路由
+			rules.GET("/:id/versions", container.RuleVersionAPI.GetRuleVersions)
+			rules.GET("/:id/versions/:version", container.RuleVersionAPI.GetRuleVersion)
+			rules.POST("/:id/rollback", middleware.RequireRole("admin", "operator"), container.RuleVersionAPI.RollbackRule)
+			rules.GET("/:id/audit-logs", container.RuleVersionAPI.GetRuleAuditLogs)
+			
+			// 版本对比
+			rules.POST("/versions/compare", container.RuleVersionAPI.CompareRuleVersions)
+			
+			// 带审计的规则操作
+			rules.POST("/audit", middleware.RequireRole("admin", "operator"), container.RuleVersionAPI.CreateRuleWithAudit)
+			rules.PUT("/:id/audit", middleware.RequireRole("admin", "operator"), container.RuleVersionAPI.UpdateRuleWithAudit)
+			rules.DELETE("/:id/audit", middleware.RequireRole("admin"), container.RuleVersionAPI.DeleteRuleWithAudit)
+			
+			// 全局审计日志
+			rules.GET("/audit-logs", middleware.RequireRole("admin"), container.RuleVersionAPI.GetAllAuditLogs)
 		}
 
 		// 告警记录管理 - 需要认证

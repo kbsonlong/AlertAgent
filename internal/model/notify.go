@@ -157,6 +157,53 @@ func isValidNotifyType(typ string) bool {
 	return false
 }
 
+// NotificationPlugin 通知插件配置
+type NotificationPlugin struct {
+	gorm.Model
+	Name        string `gorm:"size:100;not null;uniqueIndex" json:"name"`
+	DisplayName string `gorm:"size:200;not null" json:"display_name"`
+	Version     string `gorm:"size:50;not null" json:"version"`
+	Config      string `gorm:"type:json;not null" json:"config"` // 插件配置JSON
+	Enabled     bool   `gorm:"default:false" json:"enabled"`
+	Priority    int    `gorm:"default:0" json:"priority"` // 发送优先级
+}
+
+// Validate 验证通知插件配置
+func (p *NotificationPlugin) Validate() error {
+	if p.Name == "" {
+		return errors.New("plugin name is required")
+	}
+	if p.DisplayName == "" {
+		return errors.New("plugin display name is required")
+	}
+	if p.Version == "" {
+		return errors.New("plugin version is required")
+	}
+	if p.Config == "" {
+		return errors.New("plugin config is required")
+	}
+	return nil
+}
+
+// GetConfig 获取插件配置
+func (p *NotificationPlugin) GetConfig() (map[string]interface{}, error) {
+	var config map[string]interface{}
+	if err := json.Unmarshal([]byte(p.Config), &config); err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+// SetConfig 设置插件配置
+func (p *NotificationPlugin) SetConfig(config map[string]interface{}) error {
+	data, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+	p.Config = string(data)
+	return nil
+}
+
 // isValidNotifyStatus 验证通知状态
 func isValidNotifyStatus(status string) bool {
 	switch status {

@@ -1,213 +1,234 @@
 package v1
 
 import (
-	"alert_agent/internal/config"
+	"crypto/sha256"
+	"fmt"
+	"net/http"
+	"time"
+
+	"alert_agent/internal/model"
+	"alert_agent/internal/pkg/database"
+	"alert_agent/internal/pkg/logger"
 	"alert_agent/internal/pkg/response"
+	"alert_agent/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
-// ConfigHandler 配置处理器
-type ConfigHandler struct{}
-
-// NewConfigHandler 创建配置处理器实例
-func NewConfigHandler() *ConfigHandler {
-	return &ConfigHandler{}
+// ConfigAPI 配置API处理器
+type ConfigAPI struct {
+	configService *service.ConfigService
 }
 
-// GetConfig 获取当前配置
-// @Summary 获取当前配置
-// @Description 获取系统当前配置信息
-// @Tags 配置管理
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Success 200 {object} response.Response{data=config.Config}
-// @Failure 401 {object} response.ErrorResponse
-// @Failure 500 {object} response.ErrorResponse
-// @Router /api/v1/config [get]
-func (h *ConfigHandler) GetConfig(c *gin.Context) {
-	cfg := config.GetConfig()
-	response.Success(c, cfg)
+// NewConfigAPI 创建配置API处理器
+func NewConfigAPI() *ConfigAPI {
+	return &ConfigAPI{
+		configService: service.NewConfigService(),
+	}
 }
 
-// GetConfigYAML 获取配置的YAML格式
-// @Summary 获取配置YAML
-// @Description 获取系统配置的YAML格式
-// @Tags 配置管理
-// @Accept json
-// @Produce text/yaml
-// @Security BearerAuth
-// @Success 200 {string} string "YAML配置内容"
-// @Failure 401 {object} response.ErrorResponse
-// @Failure 500 {object} response.ErrorResponse
-// @Router /api/v1/config/yaml [get]
-func (h *ConfigHandler) GetConfigYAML(c *gin.Context) {
-	yamlData, err := config.GetConfigAsYAML()
+// GetSyncConfig Sidecar配置拉取接口
+// GET /api/v1/config/sync
+func (c *ConfigAPI) GetSyncConfig(ctx *gin.Context) {
+	clusterID := ctx.Query("cluster_id")
+	configType := ctx.Query("type") // prometheus, alertmanager, vmalert
+
+	if clusterID == "" || configType == "" {
+		response.Error(ctx, http.StatusBadRequest, "cluster_id and type are required")
+		return
+	}
+
+	logger.L.Debug("Fetching sync config",
+		zap.String("cluster_id", clusterID),
+		zap.String("config_type", configType),
+	)
+
+	// 获取配置内容
+	config, err := c.configService.GetConfig(ctx.Request.Context(), clusterID, configType)
 	if err != nil {
-		response.InternalServerError(c, "Failed to get config as YAML", err)
+		logger.L.Error("Failed to get config",
+			zap.String("cluster_id", clusterID),
+			zap.String("config_type", configType),
+			zap.Error(err),
+		)
+		response.Error(ctx, http.StatusInternalServerError, "Failed to get config")
 		return
 	}
 
-	c.Header("Content-Type", "text/yaml")
-	c.String(200, string(yamlData))
-}
+	// 计算配置hash
+	hash := sha256.Sum256([]byte(config))
+	configHash := fmt.Sprintf("%x", hash)
 
-// UpdateConfigRequest 更新配置请求
-type UpdateConfigRequest struct {
-	Config config.Config `json:"config" binding:"required"`
-}
-
-// UpdateConfig 更新配置
-// @Summary 更新配置
-// @Description 更新系统配置
-// @Tags 配置管理
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param request body UpdateConfigRequest true "配置更新请求"
-// @Success 200 {object} response.Response
-// @Failure 400 {object} response.ErrorResponse
-// @Failure 401 {object} response.ErrorResponse
-// @Failure 500 {object} response.ErrorResponse
-// @Router /api/v1/config [put]
-func (h *ConfigHandler) UpdateConfig(c *gin.Context) {
-	var req UpdateConfigRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.ValidationError(c, err)
+	// 检查If-None-Match头，支持条件请求
+	if ifNoneMatch := ctx.GetHeader("If-None-Match"); ifNoneMatch == configHash {
+		ctx.Status(http.StatusNotModified)
 		return
 	}
 
-	if err := config.UpdateConfig(req.Config); err != nil {
-		response.BadRequest(c, "Failed to update config", err)
+	// 设置响应头
+	ctx.Header("X-Config-Hash", configHash)
+	ctx.Header("Content-Type", "application/yaml")
+	ctx.Header("Cache-Control", "no-cache")
+
+	// 返回配置内容
+	ctx.String(http.StatusOK, config)
+
+	logger.L.Debug("Config sent successfully",
+		zap.String("cluster_id", clusterID),
+		zap.String("config_type", configType),
+		zap.String("hash", configHash),
+		zap.Int("size", len(config)),
+	)
+}
+
+// UpdateSyncStatus 更新同步状态接口
+// POST /api/v1/config/sync/status
+func (c *ConfigAPI) UpdateSyncStatus(ctx *gin.Context) {
+	var req struct {
+		ClusterID    string `json:"cluster_id" binding:"required"`
+		ConfigType   string `json:"config_type" binding:"required"`
+		Status       string `json:"status" binding:"required"`
+		SyncTime     int64  `json:"sync_time" binding:"required"`
+		ErrorMessage string `json:"error_message"`
+		ConfigHash   string `json:"config_hash"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "Invalid request format")
 		return
 	}
 
-	response.SuccessWithMessage(c, "Configuration updated successfully", nil)
-}
+	logger.L.Debug("Updating sync status",
+		zap.String("cluster_id", req.ClusterID),
+		zap.String("config_type", req.ConfigType),
+		zap.String("status", req.Status),
+	)
 
-// SaveConfig 保存配置到文件
-// @Summary 保存配置
-// @Description 将当前配置保存到配置文件
-// @Tags 配置管理
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Success 200 {object} response.Response
-// @Failure 401 {object} response.ErrorResponse
-// @Failure 500 {object} response.ErrorResponse
-// @Router /api/v1/config/save [post]
-func (h *ConfigHandler) SaveConfig(c *gin.Context) {
-	if err := config.SaveConfig(); err != nil {
-		response.InternalServerError(c, "Failed to save config", err)
-		return
-	}
+	// 更新同步状态
+	err := c.configService.UpdateSyncStatus(ctx.Request.Context(), &service.SyncStatusUpdate{
+		ClusterID:    req.ClusterID,
+		ConfigType:   req.ConfigType,
+		Status:       req.Status,
+		SyncTime:     time.Unix(req.SyncTime, 0),
+		ErrorMessage: req.ErrorMessage,
+		ConfigHash:   req.ConfigHash,
+	})
 
-	response.SuccessWithMessage(c, "Configuration saved successfully", nil)
-}
-
-// GetConfigValueRequest 获取配置值请求
-type GetConfigValueRequest struct {
-	Path string `json:"path" binding:"required"`
-}
-
-// GetConfigValue 获取指定路径的配置值
-// @Summary 获取配置值
-// @Description 获取指定路径的配置值
-// @Tags 配置管理
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param path query string true "配置路径（点分隔）"
-// @Success 200 {object} response.Response
-// @Failure 400 {object} response.ErrorResponse
-// @Failure 401 {object} response.ErrorResponse
-// @Failure 404 {object} response.ErrorResponse
-// @Router /api/v1/config/value [get]
-func (h *ConfigHandler) GetConfigValue(c *gin.Context) {
-	path := c.Query("path")
-	if path == "" {
-		response.BadRequest(c, "Path parameter is required", nil)
-		return
-	}
-
-	value, err := config.GetConfigValue(path)
 	if err != nil {
-		response.NotFound(c, "Config value not found", err)
+		logger.L.Error("Failed to update sync status",
+			zap.String("cluster_id", req.ClusterID),
+			zap.String("config_type", req.ConfigType),
+			zap.Error(err),
+		)
+		response.Error(ctx, http.StatusInternalServerError, "Failed to update sync status")
 		return
 	}
 
-	response.Success(c, map[string]interface{}{
-		"path":  path,
-		"value": value,
+	response.Success(ctx, gin.H{
+		"message": "Sync status updated successfully",
+	})
+
+	logger.L.Info("Sync status updated",
+		zap.String("cluster_id", req.ClusterID),
+		zap.String("config_type", req.ConfigType),
+		zap.String("status", req.Status),
+	)
+}
+
+// GetSyncStatus 获取同步状态接口
+// GET /api/v1/config/sync/status
+func (c *ConfigAPI) GetSyncStatus(ctx *gin.Context) {
+	clusterID := ctx.Query("cluster_id")
+	configType := ctx.Query("type")
+
+	if clusterID == "" {
+		response.Error(ctx, http.StatusBadRequest, "cluster_id is required")
+		return
+	}
+
+	// 获取同步状态
+	statuses, err := c.configService.GetSyncStatus(ctx.Request.Context(), clusterID, configType)
+	if err != nil {
+		logger.L.Error("Failed to get sync status",
+			zap.String("cluster_id", clusterID),
+			zap.String("config_type", configType),
+			zap.Error(err),
+		)
+		response.Error(ctx, http.StatusInternalServerError, "Failed to get sync status")
+		return
+	}
+
+	response.Success(ctx, gin.H{
+		"statuses": statuses,
 	})
 }
 
-// SetConfigValueRequest 设置配置值请求
-type SetConfigValueRequest struct {
-	Path  string      `json:"path" binding:"required"`
-	Value interface{} `json:"value" binding:"required"`
-}
-
-// SetConfigValue 设置指定路径的配置值
-// @Summary 设置配置值
-// @Description 设置指定路径的配置值
-// @Tags 配置管理
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param request body SetConfigValueRequest true "设置配置值请求"
-// @Success 200 {object} response.Response
-// @Failure 400 {object} response.ErrorResponse
-// @Failure 401 {object} response.ErrorResponse
-// @Router /api/v1/config/value [put]
-func (h *ConfigHandler) SetConfigValue(c *gin.Context) {
-	var req SetConfigValueRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.ValidationError(c, err)
+// ListClusters 列出所有集群
+// GET /api/v1/config/clusters
+func (c *ConfigAPI) ListClusters(ctx *gin.Context) {
+	clusters, err := c.configService.ListClusters(ctx.Request.Context())
+	if err != nil {
+		logger.L.Error("Failed to list clusters", zap.Error(err))
+		response.Error(ctx, http.StatusInternalServerError, "Failed to list clusters")
 		return
 	}
 
-	if err := config.SetConfigValue(req.Path, req.Value); err != nil {
-		response.BadRequest(c, "Failed to set config value", err)
+	response.Success(ctx, gin.H{
+		"clusters": clusters,
+	})
+}
+
+// TriggerSync 触发配置同步
+// POST /api/v1/config/sync/trigger
+func (c *ConfigAPI) TriggerSync(ctx *gin.Context) {
+	var req struct {
+		ClusterID  string `json:"cluster_id" binding:"required"`
+		ConfigType string `json:"config_type"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "Invalid request format")
 		return
 	}
 
-	response.SuccessWithMessage(c, "Configuration value updated successfully", nil)
-}
-
-// ResetConfig 重置配置为默认值
-// @Summary 重置配置
-// @Description 将配置重置为默认值
-// @Tags 配置管理
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Success 200 {object} response.Response
-// @Failure 401 {object} response.ErrorResponse
-// @Failure 500 {object} response.ErrorResponse
-// @Router /api/v1/config/reset [post]
-func (h *ConfigHandler) ResetConfig(c *gin.Context) {
-	if err := config.ResetToDefaults(); err != nil {
-		response.InternalServerError(c, "Failed to reset config", err)
+	// 触发同步（这里可以通过消息队列或其他方式通知Sidecar）
+	err := c.configService.TriggerSync(ctx.Request.Context(), req.ClusterID, req.ConfigType)
+	if err != nil {
+		logger.L.Error("Failed to trigger sync",
+			zap.String("cluster_id", req.ClusterID),
+			zap.String("config_type", req.ConfigType),
+			zap.Error(err),
+		)
+		response.Error(ctx, http.StatusInternalServerError, "Failed to trigger sync")
 		return
 	}
 
-	response.SuccessWithMessage(c, "Configuration reset to defaults successfully", nil)
+	response.Success(ctx, gin.H{
+		"message": "Sync triggered successfully",
+	})
+
+	logger.L.Info("Sync triggered",
+		zap.String("cluster_id", req.ClusterID),
+		zap.String("config_type", req.ConfigType),
+	)
 }
 
-// RegisterConfigRoutes 注册配置管理路由
-func RegisterConfigRoutes(r *gin.RouterGroup, requireAdmin gin.HandlerFunc) {
-	configHandler := NewConfigHandler()
+// RegisterConfigRoutes 注册配置相关路由
+func RegisterConfigRoutes(r *gin.RouterGroup, authMiddleware gin.HandlerFunc) {
+	configAPI := NewConfigAPI()
 	
-	configGroup := r.Group("/config")
+	config := r.Group("/config")
+	config.Use(authMiddleware)
 	{
-		configGroup.GET("", requireAdmin, configHandler.GetConfig)
-		configGroup.GET("/yaml", requireAdmin, configHandler.GetConfigYAML)
-		configGroup.PUT("", requireAdmin, configHandler.UpdateConfig)
-		configGroup.POST("/save", requireAdmin, configHandler.SaveConfig)
-		configGroup.GET("/value", requireAdmin, configHandler.GetConfigValue)
-		configGroup.PUT("/value", requireAdmin, configHandler.SetConfigValue)
-		configGroup.POST("/reset", requireAdmin, configHandler.ResetConfig)
+		// Sidecar配置同步接口
+		config.GET("/sync", configAPI.GetSyncConfig)
+		config.POST("/sync/status", configAPI.UpdateSyncStatus)
+		config.GET("/sync/status", configAPI.GetSyncStatus)
+		config.POST("/sync/trigger", configAPI.TriggerSync)
+		
+		// 集群管理
+		config.GET("/clusters", configAPI.ListClusters)
 	}
 }

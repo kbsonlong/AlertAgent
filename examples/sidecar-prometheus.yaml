@@ -1,0 +1,40 @@
+# Prometheus Sidecar 配置示例
+# 使用方法: ./sidecar -config-path=/etc/prometheus/rules.yml -type=prometheus -cluster-id=cluster-1 -reload-url=http://prometheus:9090/-/reload
+
+version: '3.8'
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-rules:/etc/prometheus/rules
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+
+  alertagent-sidecar:
+    build:
+      context: .
+      dockerfile: Dockerfile.sidecar
+    depends_on:
+      - prometheus
+    volumes:
+      - prometheus-rules:/etc/prometheus/rules
+    environment:
+      - LOG_LEVEL=debug
+    command:
+      - "--endpoint=http://alertagent:8080"
+      - "--cluster-id=cluster-1"
+      - "--type=prometheus"
+      - "--config-path=/etc/prometheus/rules/alertagent.yml"
+      - "--reload-url=http://prometheus:9090/-/reload"
+      - "--sync-interval=30s"
+
+volumes:
+  prometheus-rules:

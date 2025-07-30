@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"alert_agent/internal/model"
@@ -12,11 +13,24 @@ import (
 	"alert_agent/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 var (
 	log = logger.L
 )
+
+// AlertAPI 告警API
+type AlertAPI struct {
+	alertService *service.AlertService
+}
+
+// NewAlertAPI 创建告警API实例
+func NewAlertAPI(alertService *service.AlertService) *AlertAPI {
+	return &AlertAPI{
+		alertService: alertService,
+	}
+}
 
 // ListAlerts 获取告警列表
 func ListAlerts(c *gin.Context) {
@@ -48,7 +62,7 @@ func ListAlerts(c *gin.Context) {
 	c.Data(http.StatusOK, "application/json; charset=utf-8", data)
 }
 
-// CreateAlert 创建告警
+// CreateAlert 创建告警（同步版本，保持向后兼容）
 func CreateAlert(c *gin.Context) {
 	var alert model.Alert
 	if err := c.ShouldBindJSON(&alert); err != nil {
@@ -60,7 +74,7 @@ func CreateAlert(c *gin.Context) {
 		return
 	}
 
-	// 暂时跳过 Ollama 分析
+	// 暂时跳过 Ollama 分析，保持原有行为
 	alert.Analysis = ""
 	alert.Status = "active"
 
@@ -69,6 +83,39 @@ func CreateAlert(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 500,
 			"msg":  "创建告警失败: " + result.Error.Error(),
+			"data": nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "success",
+		"data": alert.ToResponse(),
+	})
+}
+
+// CreateAlertWithService 使用服务创建告警（新版本，支持异步处理）
+func (api *AlertAPI) CreateAlertWithService(c *gin.Context) {
+	var alert model.Alert
+	if err := c.ShouldBindJSON(&alert); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "无效的请求参数: " + err.Error(),
+			"data": nil,
+		})
+		return
+	}
+
+	// 使用服务创建告警（会触发异步分析）
+	if err := api.alertService.CreateAlert(c.Request.Context(), &alert); err != nil {
+		logger.L.Error("Failed to create alert with service",
+			zap.Error(err),
+			zap.String("alert_name", alert.Name),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "创建告警失败: " + err.Error(),
 			"data": nil,
 		})
 		return
@@ -91,6 +138,49 @@ func GetAlert(c *gin.Context) {
 			"code": 404,
 			"msg":  "告警不存在",
 			"data": result.Error.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "success",
+		"data": alert.ToResponse(),
+	})
+}
+
+// GetAlertWithService 使用服务获取告警（支持缓存）
+func (api *AlertAPI) GetAlertWithService(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "无效的告警ID",
+			"data": nil,
+		})
+		return
+	}
+
+	alert, err := api.alertService.GetAlert(c.Request.Context(), uint(id))
+	if err != nil {
+		if err == service.ErrAlertNotFound {
+			c.JSON(http.StatusNotFound, gin.H{
+				"code": 404,
+				"msg":  "告警不存在",
+				"data": nil,
+			})
+			return
+		}
+
+		logger.L.Error("Failed to get alert with service",
+			zap.Error(err),
+			zap.Uint64("alert_id", id),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "获取告警失败: " + err.Error(),
+			"data": nil,
 		})
 		return
 	}
@@ -188,6 +278,73 @@ func HandleAlert(c *gin.Context) {
 		"code": 200,
 		"msg":  "success",
 		"data": nil,
+	})
+}
+
+// HandleAlertWithService 使用服务处理告警
+func (api *AlertAPI) HandleAlertWithService(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "无效的告警ID",
+			"data": nil,
+		})
+		return
+	}
+
+	var req struct {
+		Handler string `json:"handler" binding:"required"`
+		Note    string `json:"note" binding:"required"`
+		Status  string `json:"status"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "无效的请求参数: " + err.Error(),
+			"data": nil,
+		})
+		return
+	}
+
+	// 默认状态为已处理
+	if req.Status == "" {
+		req.Status = model.AlertStatusResolved
+	}
+
+	// 更新告警状态
+	if err := api.alertService.UpdateAlertStatus(c.Request.Context(), uint(id), req.Status, req.Handler, req.Note); err != nil {
+		if err == service.ErrAlertNotFound {
+			c.JSON(http.StatusNotFound, gin.H{
+				"code": 404,
+				"msg":  "告警不存在",
+				"data": nil,
+			})
+			return
+		}
+
+		logger.L.Error("Failed to handle alert with service",
+			zap.Error(err),
+			zap.Uint64("alert_id", id),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "处理告警失败: " + err.Error(),
+			"data": nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "success",
+		"data": gin.H{
+			"alert_id": id,
+			"status":   req.Status,
+			"handler":  req.Handler,
+		},
 	})
 }
 
