@@ -100,6 +100,15 @@ const routes: RouteRecordRaw[] = [
           title: '系统设置',
           icon: 'setting'
         }
+      },
+      {
+        path: 'config-sync',
+        name: 'ConfigSyncMonitor',
+        component: () => import('@/views/ConfigSyncMonitor.vue'),
+        meta: {
+          title: '配置同步监控',
+          icon: 'sync'
+        }
       }
     ]
   }

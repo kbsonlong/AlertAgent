@@ -499,7 +499,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   ReloadOutlined,
@@ -1208,8 +1208,8 @@ const getAlertSeverityColor = (severity: string): string => {
   return colorMap[severity] || 'default'
 }
 
-// 优先级颜色（用于建议）
-const getPriorityColor = (priority: string): string => {
+// 告警优先级颜色（用于建议）
+const getAlertPriorityColor = (priority: string): string => {
   const colorMap: Record<string, string> = {
     'low': 'green',
     'medium': 'orange',

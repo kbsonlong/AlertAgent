@@ -34,32 +34,73 @@ func NewAlertAPI(alertService *service.AlertService) *AlertAPI {
 
 // ListAlerts 获取告警列表
 func ListAlerts(c *gin.Context) {
-	var alerts []model.Alert
-	result := database.DB.Find(&alerts)
-	if result.Error != nil {
-		c.Header("Content-Type", "application/json; charset=utf-8")
-		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"获取告警列表失败","data":"%s"}`, result.Error.Error())))
+	// 获取分页参数
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 10
+	}
+
+	// 获取筛选参数
+	status := c.Query("status")
+	severity := c.Query("severity")
+	search := c.Query("search")
+
+	// 构建查询
+	query := database.DB.Model(&model.Alert{})
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if severity != "" {
+		query = query.Where("severity = ?", severity)
+	}
+	if search != "" {
+		query = query.Where("name LIKE ? OR title LIKE ? OR content LIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%")
+	}
+
+	// 获取总数
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "获取告警总数失败",
+			"data": err.Error(),
+		})
 		return
 	}
 
-	var resp []*model.AlertResponse
-	for i := range alerts {
-		resp = append(resp, alerts[i].ToResponse())
+	// 获取分页数据
+	var alerts []model.Alert
+	offset := (page - 1) * pageSize
+	if err := query.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&alerts).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "获取告警列表失败",
+			"data": err.Error(),
+		})
+		return
 	}
 
-	data, err := json.Marshal(gin.H{
+	// 转换为响应格式
+	var items []*model.AlertResponse
+	for i := range alerts {
+		items = append(items, alerts[i].ToResponse())
+	}
+
+	// 返回分页数据
+	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
 		"msg":  "success",
-		"data": resp,
+		"data": gin.H{
+			"items": items,
+			"total": total,
+			"page":  page,
+			"page_size": pageSize,
+		},
 	})
-	if err != nil {
-		c.Header("Content-Type", "application/json; charset=utf-8")
-		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"序列化数据失败","data":"%s"}`, err.Error())))
-		return
-	}
-
-	c.Header("Content-Type", "application/json; charset=utf-8")
-	c.Data(http.StatusOK, "application/json; charset=utf-8", data)
 }
 
 // CreateAlert 创建告警（同步版本，保持向后兼容）

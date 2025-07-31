@@ -72,7 +72,8 @@ func (t *NotifyTemplate) SetVariables(vars []string) {
 type NotifyGroup struct {
 	gorm.Model
 	Name        string `gorm:"size:100;not null;uniqueIndex" json:"name"`
-	Description string `gorm:"type:text" json:"description,omitempty"`
+	Description string `gorm:"type:text;not null" json:"description"`
+	Contacts    string `gorm:"type:json;not null" json:"contacts"`
 	Members     string `gorm:"type:text" json:"members"`
 	Channels    string `gorm:"type:text" json:"channels"`
 	Enabled     bool   `gorm:"default:true" json:"enabled"`

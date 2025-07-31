@@ -78,6 +78,13 @@
           </a-menu-item>
         </a-sub-menu>
         
+        <a-menu-item key="config-sync">
+          <template #icon>
+            <SyncOutlined />
+          </template>
+          配置同步监控
+        </a-menu-item>
+        
         <a-menu-item key="settings">
           <template #icon>
             <SettingOutlined />
@@ -157,7 +164,8 @@ import {
   DownOutlined,
   LogoutOutlined,
   TeamOutlined,
-  SafetyOutlined
+  SafetyOutlined,
+  SyncOutlined
 } from '@ant-design/icons-vue'
 
 const router = useRouter()
@@ -176,6 +184,7 @@ const routeMap: Record<string, string> = {
   'users': 'UserList',
   'roles': 'RoleList',
   'permissions': 'PermissionList',
+  'config-sync': 'ConfigSyncMonitor',
   'settings': 'Settings'
 }
 
@@ -189,6 +198,7 @@ const reverseRouteMap: Record<string, string> = {
   'UserList': 'users',
   'RoleList': 'roles',
   'PermissionList': 'permissions',
+  'ConfigSyncMonitor': 'config-sync',
   'Settings': 'settings'
 }
 
