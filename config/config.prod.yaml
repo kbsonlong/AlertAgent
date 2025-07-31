@@ -1,0 +1,110 @@
+# AlertAgent 生产环境配置文件
+
+server:
+    port: 8080
+    mode: release                    # 生产模式
+    jwt_secret: ${JWT_SECRET}        # 从环境变量获取
+    read_timeout: 30
+    write_timeout: 30
+    idle_timeout: 60
+
+gateway:
+    rate_limit:
+        enabled: true
+        rps: 1000                    # 生产环境提高限流
+        burst: 2000
+    auth:
+        enabled: true
+        skip_paths:
+            - "/api/v1/health"
+            - "/api/v1/metrics"      # 监控端点
+        token_expiry: 8              # 生产环境缩短token有效期
+        refresh_expiry: 72
+    cors:
+        enabled: true
+        allow_origins:
+            - "https://alertagent.example.com"  # 生产域名
+            - "https://admin.alertagent.example.com"
+        allow_methods:
+            - "GET"
+            - "POST"
+            - "PUT"
+            - "DELETE"
+            - "OPTIONS"
+        allow_headers:
+            - "Content-Type"
+            - "Authorization"
+            - "X-Request-ID"
+            - "X-CSRF-Token"
+        expose_headers:
+            - "Content-Length"
+            - "X-Request-ID"
+        allow_credentials: true
+
+database:
+    driver: mysql
+    host: ${DB_HOST:-mysql}
+    port: ${DB_PORT:-3306}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    dbname: ${DB_NAME}
+    charset: utf8mb4
+    max_idle_conns: 20               # 生产环境增加连接池
+    max_open_conns: 200
+    conn_max_lifetime: 3600          # 连接最大生命周期(秒)
+    parse_time: true
+    loc: Local
+
+ollama:
+    enabled: true
+    api_endpoint: ${OLLAMA_ENDPOINT:-http://ollama:11434}
+    model: llama3:latest
+    timeout: 60                      # 生产环境增加超时时间
+    max_retries: 5
+    
+redis:
+    host: ${REDIS_HOST:-redis}
+    port: ${REDIS_PORT:-6379}
+    password: ${REDIS_PASSWORD}
+    db: 0
+    pool_size: 200                   # 生产环境增加连接池
+    min_idle_conns: 20
+    max_retries: 5
+    dial_timeout: 10
+    read_timeout: 5
+    write_timeout: 5
+    pool_timeout: 10
+
+log:
+    level: info                      # 生产环境使用info级别
+    filename: logs/alert_agent.log
+    max_size: 500                    # 增加日志文件大小
+    max_age: 30                      # 增加日志保留天数
+    max_backups: 50                  # 增加备份文件数
+    compress: true
+
+# 监控配置
+monitoring:
+    enabled: true
+    metrics_path: "/api/v1/metrics"
+    health_path: "/api/v1/health"
+    
+# 性能配置
+performance:
+    worker_pool_size: 100
+    queue_buffer_size: 10000
+    batch_size: 100
+    
+# 安全配置
+security:
+    enable_https: true
+    tls_cert_file: "/etc/ssl/certs/alertagent.crt"
+    tls_key_file: "/etc/ssl/private/alertagent.key"
+    enable_csrf: true
+    csrf_token_length: 32
+    
+# 缓存配置
+cache:
+    default_ttl: 3600               # 默认缓存1小时
+    max_entries: 100000             # 最大缓存条目数
+    cleanup_interval: 600           # 清理间隔10分钟

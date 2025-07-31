@@ -101,17 +101,20 @@ func (s *TaskService) StopWorker(workerName string) error {
 
 // registerHandlers 注册任务处理器
 func (s *TaskService) registerHandlers(worker *queue.Worker) {
+	// TODO: 修复循环依赖问题后重新启用处理器注册
 	// 注册AI分析处理器
-	aiHandler := queue.NewAIAnalysisHandler(NewOllamaService())
-	worker.RegisterHandler(aiHandler)
+	// aiHandler := worker.NewAIAnalysisHandler(NewOllamaService())
+	// worker.RegisterHandler(aiHandler)
 	
 	// 注册通知处理器
-	notificationHandler := queue.NewNotificationHandler()
-	worker.RegisterHandler(notificationHandler)
+	// notificationHandler := worker.NewNotificationHandler()
+	// worker.RegisterHandler(notificationHandler)
 	
 	// 注册配置同步处理器
-	configSyncHandler := queue.NewConfigSyncHandler()
-	worker.RegisterHandler(configSyncHandler)
+	// configSyncHandler := worker.NewConfigSyncHandler()
+	// worker.RegisterHandler(configSyncHandler)
+	
+	logger.L.Info("Task handlers registration skipped due to import cycle issues")
 }
 
 // PublishTask 发布任务

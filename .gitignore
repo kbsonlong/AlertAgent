@@ -1,3 +1,5 @@
 node_modules/*
 ServiceDiscovery/*
 bin/*
+*/node_modules/*
+web/node_modules/*

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"alert_agent/internal/config"
 	"alert_agent/internal/gateway"
@@ -13,15 +12,15 @@ import (
 	"alert_agent/internal/pkg/logger"
 	"alert_agent/internal/pkg/queue"
 	"alert_agent/internal/pkg/redis"
-	"alert_agent/internal/pkg/types"
 	"alert_agent/internal/router"
 	"alert_agent/internal/service"
+	"alert_agent/internal/worker"
 
 	"go.uber.org/zap"
 )
 
 // processUnanalyzedAlerts 处理未分析的告警
-func processUnanalyzedAlerts(ctx context.Context, redisQueue *queue.RedisQueue) error {
+func processUnanalyzedAlerts(ctx context.Context, messageQueue queue.MessageQueue) error {
 	var alerts []model.Alert
 	logger.L.Debug("Processing unanalyzed alerts...")
 	// 获取未分析的告警
@@ -38,25 +37,33 @@ func processUnanalyzedAlerts(ctx context.Context, redisQueue *queue.RedisQueue) 
 		zap.Int("count", len(alerts)),
 	)
 
-	// 创建任务列表
-	tasks := make([]*types.AlertTask, len(alerts))
-	for i, alert := range alerts {
+	// 创建任务生产者
+	producer := queue.NewTaskProducer(messageQueue)
+
+	// 为每个告警创建AI分析任务
+	for _, alert := range alerts {
 		logger.L.Debug("Processing alert",
 			zap.Uint("id", alert.ID),
 		)
-		tasks[i] = &types.AlertTask{
-			ID:        alert.ID,
-			CreatedAt: time.Now(),
+		
+		alertData := map[string]interface{}{
+			"title":   alert.Title,
+			"level":   alert.Level,
+			"source":  alert.Source,
+			"content": alert.Content,
+		}
+		
+		if err := producer.PublishAIAnalysisTask(ctx, fmt.Sprintf("%d", alert.ID), alertData); err != nil {
+			logger.L.Error("Failed to publish AI analysis task",
+				zap.Uint("alert_id", alert.ID),
+				zap.Error(err),
+			)
+			continue
 		}
 	}
 
-	// 批量推送任务到队列
-	if err := redisQueue.PushBatch(ctx, tasks); err != nil {
-		return fmt.Errorf("failed to push tasks to queue: %w", err)
-	}
-
 	logger.L.Info("Successfully pushed tasks to queue",
-		zap.Int("count", len(tasks)),
+		zap.Int("count", len(alerts)),
 	)
 
 	return nil
@@ -96,7 +103,7 @@ func main() {
 	}
 
 	// 创建Redis队列
-	redisQueue := queue.NewRedisQueue(redis.Client, "alert:queue")
+	redisQueue := queue.NewRedisMessageQueue(redis.Client, "alert:queue")
 
 	// 处理未分析的告警
 	ctx := context.Background()
@@ -107,8 +114,23 @@ func main() {
 	// 创建Ollama服务
 	ollamaService := service.NewOllamaService()
 
+	// 创建队列监控器
+	monitor := queue.NewQueueMonitor(redisQueue, redis.Client, "alert:queue")
+
 	// 创建工作器
-	worker := queue.NewWorker(redisQueue, ollamaService)
+	queueWorker := queue.NewWorker(redisQueue, monitor, 2)
+
+	// 注册任务处理器
+	aiHandler := worker.NewAIAnalysisHandler(ollamaService)
+	queueWorker.RegisterHandler(aiHandler)
+	
+	notificationHandler := worker.NewNotificationHandler()
+	queueWorker.RegisterHandler(notificationHandler)
+	
+	configSyncHandler := worker.NewConfigSyncHandler()
+	queueWorker.RegisterHandler(configSyncHandler)
+
+	logger.L.Info("AlertAgent Core initialized successfully")
 
 	// 创建API网关
 	gateway := gateway.NewGateway()
@@ -121,8 +143,15 @@ func main() {
 
 	// 启动工作器
 	workerCtx, workerCancel := context.WithCancel(context.Background())
+	queueNames := []string{
+		string(queue.TaskTypeAIAnalysis),
+		string(queue.TaskTypeNotification),
+		string(queue.TaskTypeConfigSync),
+	}
+	
 	go func() {
-		if err := worker.Start(workerCtx); err != nil {
+		logger.L.Info("Starting queue worker...")
+		if err := queueWorker.Start(workerCtx, queueNames); err != nil {
 			logger.L.Error("Worker failed", zap.Error(err))
 		}
 	}()

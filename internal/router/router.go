@@ -5,8 +5,6 @@ import (
 	"alert_agent/internal/config"
 	"alert_agent/internal/container"
 	"alert_agent/internal/middleware"
-	"alert_agent/internal/pkg/queue"
-	"alert_agent/internal/pkg/redis"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,12 +15,6 @@ func RegisterRoutes(r *gin.Engine) {
 	
 	// 创建依赖注入容器
 	container := container.NewContainer()
-	
-	// 创建Redis队列
-	redisQueue := queue.NewRedisQueue(redis.Client, "alert:queue")
-
-	// 创建异步告警处理器
-	asyncAlertHandler := v1.NewAsyncAlertHandler(redisQueue)
 
 	// API v1
 	apiV1 := r.Group("/api/v1")
@@ -91,8 +83,7 @@ func RegisterRoutes(r *gin.Engine) {
 			alerts.POST("/:id/analyze", v1.AnalyzeAlert)
 			alerts.POST("/:id/convert-to-knowledge", middleware.RequireRole("admin", "operator"), v1.ConvertAlertToKnowledge)
 
-			// 异步分析告警
-			asyncAlertHandler.RegisterRoutes(alerts)
+			// 异步分析告警路由已集成到告警路由中
 		}
 
 		// 通知模板管理 - 需要认证
@@ -144,6 +135,48 @@ func RegisterRoutes(r *gin.Engine) {
 			providers.PUT("/:id", middleware.RequireRole("admin"), v1.UpdateProvider)
 			providers.DELETE("/:id", middleware.RequireRole("admin"), v1.DeleteProvider)
 			providers.POST("/test", middleware.RequireRole("admin", "operator"), v1.TestProvider)
+		}
+
+		// 队列管理 - 需要认证
+		queues := authenticated.Group("/queues")
+		{
+			// 队列指标
+			queues.GET("/metrics", container.QueueAPI.GetAllQueueMetrics)
+			queues.GET("/:queue_name/metrics", container.QueueAPI.GetQueueMetrics)
+			queues.GET("/task-metrics/:task_type", container.QueueAPI.GetTaskMetrics)
+			
+			// 任务管理
+			queues.GET("/tasks/:task_id", container.QueueAPI.GetTaskStatus)
+			queues.GET("/tasks", container.QueueAPI.ListTasks)
+			queues.POST("/tasks/:task_id/retry", middleware.RequireRole("admin", "operator"), container.QueueAPI.RetryTask)
+			queues.POST("/tasks/:task_id/skip", middleware.RequireRole("admin", "operator"), container.QueueAPI.SkipTask)
+			queues.POST("/tasks/:task_id/cancel", middleware.RequireRole("admin", "operator"), container.QueueAPI.CancelTask)
+			
+			// 批量任务操作
+			queues.POST("/tasks/batch/retry", middleware.RequireRole("admin", "operator"), container.QueueAPI.BatchRetryTasks)
+			queues.POST("/tasks/batch/skip", middleware.RequireRole("admin", "operator"), container.QueueAPI.BatchSkipTasks)
+			
+			// 任务日志和历史
+			queues.GET("/tasks/:task_id/logs", container.QueueAPI.GetTaskLogs)
+			queues.GET("/tasks/:task_id/history", container.QueueAPI.GetTaskHistory)
+			
+			// 任务导出
+			queues.GET("/tasks/export", container.QueueAPI.ExportTasks)
+			
+			// 队列健康和维护
+			queues.GET("/health", container.QueueAPI.GetQueueHealth)
+			queues.POST("/:queue_name/cleanup", middleware.RequireRole("admin"), container.QueueAPI.CleanupExpiredTasks)
+			
+			// 队列优化和故障处理
+			queues.POST("/:queue_name/optimize", middleware.RequireRole("admin"), container.QueueAPI.OptimizeQueue)
+			queues.GET("/:queue_name/recommendations", container.QueueAPI.GetQueueRecommendations)
+			queues.POST("/:queue_name/scale", middleware.RequireRole("admin"), container.QueueAPI.ScaleQueue)
+			queues.POST("/:queue_name/pause", middleware.RequireRole("admin"), container.QueueAPI.PauseQueue)
+			queues.POST("/:queue_name/resume", middleware.RequireRole("admin"), container.QueueAPI.ResumeQueue)
+			
+			// 队列告警
+			queues.GET("/alerts", container.QueueAPI.GetQueueAlerts)
+			queues.POST("/alerts/:alert_id/acknowledge", middleware.RequireRole("admin", "operator"), container.QueueAPI.AcknowledgeAlert)
 		}
 	}
 }

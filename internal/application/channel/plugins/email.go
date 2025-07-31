@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/smtp"
-	"strconv"
 	"strings"
 	"time"
 )

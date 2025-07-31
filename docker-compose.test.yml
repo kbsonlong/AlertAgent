@@ -1,0 +1,164 @@
+version: '3.8'
+
+services:
+  # MySQL测试数据库
+  mysql-test:
+    image: mysql:8.0
+    container_name: alertagent-mysql-test
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: alertagent_test
+      MYSQL_USER: testuser
+      MYSQL_PASSWORD: testpass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_test_data:/var/lib/mysql
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - test-network
+
+  # Redis测试缓存
+  redis-test:
+    image: redis:7.0-alpine
+    container_name: alertagent-redis-test
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_test_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # MySQL性能测试数据库
+  mysql-perf:
+    image: mysql:8.0
+    container_name: alertagent-mysql-perf
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: alertagent_perf_test
+      MYSQL_USER: perfuser
+      MYSQL_PASSWORD: perfpass
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_perf_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password --innodb-buffer-pool-size=512M --max-connections=200
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - test-network
+
+  # Redis性能测试缓存
+  redis-perf:
+    image: redis:7.0-alpine
+    container_name: alertagent-redis-perf
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_perf_data:/data
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # 模拟Prometheus服务
+  prometheus-mock:
+    image: prom/prometheus:latest
+    container_name: alertagent-prometheus-mock
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./examples/monitoring-prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - test-network
+
+  # 模拟Alertmanager服务
+  alertmanager-mock:
+    image: prom/alertmanager:latest
+    container_name: alertagent-alertmanager-mock
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./examples/sidecar-alertmanager.yaml:/etc/alertmanager/alertmanager.yml
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    networks:
+      - test-network
+
+  # 测试用的钉钉Webhook模拟服务
+  dingtalk-mock:
+    image: httpd:2.4-alpine
+    container_name: alertagent-dingtalk-mock
+    ports:
+      - "8081:80"
+    volumes:
+      - ./tests/mocks/dingtalk:/usr/local/apache2/htdocs/
+    networks:
+      - test-network
+
+  # 测试用的邮件服务模拟
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: alertagent-mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - test-network
+
+  # Jaeger链路追踪 (用于性能测试)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: alertagent-jaeger
+    ports:
+      - "16686:16686"  # Web UI
+      - "14268:14268"  # HTTP collector
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    networks:
+      - test-network
+
+volumes:
+  mysql_test_data:
+    driver: local
+  redis_test_data:
+    driver: local
+  mysql_perf_data:
+    driver: local
+  redis_perf_data:
+    driver: local
+
+networks:
+  test-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

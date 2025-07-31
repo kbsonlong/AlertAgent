@@ -1,0 +1,398 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "AlertAgent 系统监控",
+    "tags": ["alertagent", "monitoring"],
+    "style": "dark",
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "系统概览",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"alertagent-core\"}",
+            "legendFormat": "Core服务状态",
+            "refId": "A"
+          },
+          {
+            "expr": "up{job=\"alertagent-worker\"}",
+            "legendFormat": "Worker服务状态",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            },
+            "mappings": [
+              {
+                "options": {
+                  "0": {
+                    "text": "离线"
+                  },
+                  "1": {
+                    "text": "在线"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "HTTP请求速率",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(alertagent_http_requests_total[5m])",
+            "legendFormat": "{{method}} {{path}}",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "请求/秒",
+            "min": 0
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 4
+        }
+      },
+      {
+        "id": 3,
+        "title": "HTTP响应时间",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(alertagent_http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "50%分位",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(alertagent_http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "95%分位",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(alertagent_http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "99%分位",
+            "refId": "C"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "秒",
+            "min": 0
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 4
+        }
+      },
+      {
+        "id": 4,
+        "title": "错误率",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(alertagent_http_requests_total{status=~\"4..\"}[5m])",
+            "legendFormat": "4xx错误",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(alertagent_http_requests_total{status=~\"5..\"}[5m])",
+            "legendFormat": "5xx错误",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "错误/秒",
+            "min": 0
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 12
+        }
+      },
+      {
+        "id": 5,
+        "title": "任务队列状态",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "alertagent_queue_size",
+            "legendFormat": "{{queue_name}}",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "任务数",
+            "min": 0
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 12
+        }
+      },
+      {
+        "id": 6,
+        "title": "Worker任务处理速率",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(alertagent_task_total[5m])",
+            "legendFormat": "{{worker_type}} - 总计",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(alertagent_task_success_total[5m])",
+            "legendFormat": "{{worker_type}} - 成功",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(alertagent_task_failures_total[5m])",
+            "legendFormat": "{{worker_type}} - 失败",
+            "refId": "C"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "任务/秒",
+            "min": 0
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 20
+        }
+      },
+      {
+        "id": 7,
+        "title": "内存使用情况",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "container_memory_working_set_bytes{pod=~\"alertagent-.*\"} / 1024 / 1024",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "MB",
+            "min": 0
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 20
+        }
+      },
+      {
+        "id": 8,
+        "title": "CPU使用情况",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{pod=~\"alertagent-.*\"}[5m]) * 100",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "%",
+            "min": 0,
+            "max": 100
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 28
+        }
+      },
+      {
+        "id": 9,
+        "title": "数据库连接数",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "mysql_global_status_threads_connected",
+            "legendFormat": "MySQL连接数",
+            "refId": "A"
+          },
+          {
+            "expr": "redis_connected_clients",
+            "legendFormat": "Redis连接数",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "连接数",
+            "min": 0
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 28
+        }
+      },
+      {
+        "id": 10,
+        "title": "告警处理统计",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "increase(alertagent_alerts_processed_total[1h])",
+            "legendFormat": "1小时处理数",
+            "refId": "A"
+          },
+          {
+            "expr": "increase(alertagent_alerts_processed_total[24h])",
+            "legendFormat": "24小时处理数",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 12,
+          "x": 0,
+          "y": 36
+        }
+      },
+      {
+        "id": 11,
+        "title": "AI分析成功率",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(alertagent_ai_analysis_success_total[5m]) / rate(alertagent_ai_analysis_total[5m]) * 100",
+            "legendFormat": "成功率",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 80
+                },
+                {
+                  "color": "green",
+                  "value": 95
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 12,
+          "x": 12,
+          "y": 36
+        }
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "instance",
+          "type": "query",
+          "query": "label_values(up{job=\"alertagent-core\"}, instance)",
+          "refresh": 1,
+          "includeAll": true,
+          "allValue": ".*"
+        },
+        {
+          "name": "worker_type",
+          "type": "query",
+          "query": "label_values(up{job=\"alertagent-worker\"}, worker_type)",
+          "refresh": 1,
+          "includeAll": true,
+          "allValue": ".*"
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "部署事件",
+          "datasource": "Prometheus",
+          "expr": "changes(alertagent_build_info[5m]) > 0",
+          "titleFormat": "部署",
+          "textFormat": "版本: {{version}}"
+        }
+      ]
+    }
+  }
+}

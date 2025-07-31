@@ -1,0 +1,594 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # 每天凌晨2点运行完整测试套件
+    - cron: '0 2 * * *'
+
+env:
+  GO_VERSION: '1.23'
+  NODE_VERSION: '20'
+  MYSQL_VERSION: '8.0'
+  REDIS_VERSION: '7.0'
+
+jobs:
+  # 代码质量检查
+  code-quality:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run go vet
+      run: go vet ./...
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+        args: --timeout=5m
+
+    - name: Check go mod tidy
+      run: |
+        go mod tidy
+        git diff --exit-code go.mod go.sum
+
+  # 单元测试
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: code-quality
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run unit tests
+      run: |
+        go test -v -race -coverprofile=coverage.out -covermode=atomic ./internal/...
+        go tool cover -html=coverage.out -o coverage.html
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: coverage.html
+
+  # 集成测试
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: alertagent_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:${{ env.REDIS_VERSION }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Wait for services
+      run: |
+        timeout 60 bash -c 'until mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ppassword; do sleep 1; done'
+        timeout 60 bash -c 'until redis-cli -h 127.0.0.1 -p 6379 ping; do sleep 1; done'
+
+    - name: Run integration tests
+      env:
+        TEST_DB_HOST: 127.0.0.1
+        TEST_DB_PORT: 3306
+        TEST_DB_USER: root
+        TEST_DB_PASSWORD: password
+        TEST_DB_NAME: alertagent_test
+        TEST_REDIS_HOST: 127.0.0.1
+        TEST_REDIS_PORT: 6379
+      run: |
+        go test -v -tags=integration ./tests/integration/... -timeout=30m
+
+    - name: Upload integration test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: integration-test-results
+        path: tests/integration/results/
+
+  # 性能测试
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    if: github.event_name == 'schedule' || contains(github.event.head_commit.message, '[perf-test]')
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: alertagent_perf_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:${{ env.REDIS_VERSION }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Wait for services
+      run: |
+        timeout 60 bash -c 'until mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ppassword; do sleep 1; done'
+        timeout 60 bash -c 'until redis-cli -h 127.0.0.1 -p 6379 ping; do sleep 1; done'
+
+    - name: Run performance tests
+      env:
+        PERF_TEST_DB_HOST: 127.0.0.1
+        PERF_TEST_DB_PORT: 3306
+        PERF_TEST_DB_USER: root
+        PERF_TEST_DB_PASSWORD: password
+        PERF_TEST_DB_NAME: alertagent_perf_test
+        PERF_TEST_REDIS_HOST: 127.0.0.1
+        PERF_TEST_REDIS_PORT: 6379
+      run: |
+        go test -v -tags=performance ./tests/performance/... -timeout=60m -run="TestHighConcurrencyAlertProcessing|TestConfigSyncPerformance|TestSystemResourceMonitoring"
+
+    - name: Generate performance report
+      run: |
+        mkdir -p reports
+        go run scripts/generate_perf_report.go > reports/performance_report.md
+
+    - name: Upload performance report
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-report
+        path: reports/
+
+    - name: Comment performance results on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const report = fs.readFileSync('reports/performance_report.md', 'utf8');
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## Performance Test Results\n\n${report}`
+          });
+
+  # 前端测试
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    needs: code-quality
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: web/package-lock.json
+
+    - name: Install dependencies
+      working-directory: web
+      run: npm ci
+
+    - name: Run linting
+      working-directory: web
+      run: npm run lint
+
+    - name: Run type checking
+      working-directory: web
+      run: npm run type-check
+
+    - name: Run unit tests
+      working-directory: web
+      run: npm run test:unit
+
+    - name: Run e2e tests
+      working-directory: web
+      run: npm run test:e2e
+
+    - name: Build frontend
+      working-directory: web
+      run: npm run build
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: frontend-build
+        path: web/dist/
+
+  # 构建和打包
+  build:
+    name: Build and Package
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, frontend-tests]
+    strategy:
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+        exclude:
+          - os: windows
+            arch: arm64
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Download frontend build
+      uses: actions/download-artifact@v3
+      with:
+        name: frontend-build
+        path: web/dist/
+
+    - name: Build binaries
+      env:
+        GOOS: ${{ matrix.os }}
+        GOARCH: ${{ matrix.arch }}
+      run: |
+        mkdir -p bin
+        go build -ldflags="-s -w" -o bin/alertagent-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} cmd/main.go
+        go build -ldflags="-s -w" -o bin/alertagent-worker-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} cmd/worker/main.go
+        go build -ldflags="-s -w" -o bin/alertagent-sidecar-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} cmd/sidecar/main.go
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: binaries-${{ matrix.os }}-${{ matrix.arch }}
+        path: bin/
+
+  # Docker构建
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Download linux-amd64 binaries
+      uses: actions/download-artifact@v3
+      with:
+        name: binaries-linux-amd64
+        path: bin/
+
+    - name: Build and push Docker images
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: |
+          alertagent/core:latest
+          alertagent/core:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push Worker Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: Dockerfile.worker
+        platforms: linux/amd64,linux/arm64
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: |
+          alertagent/worker:latest
+          alertagent/worker:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push Sidecar Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: Dockerfile.sidecar
+        platforms: linux/amd64,linux/arm64
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: |
+          alertagent/sidecar:latest
+          alertagent/sidecar:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # 安全扫描
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: docker-build
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'alertagent/core:${{ github.sha }}'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Run gosec security scanner
+      uses: securecodewarrior/github-action-gosec@master
+      with:
+        args: '-fmt sarif -out gosec-results.sarif ./...'
+
+    - name: Upload gosec scan results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'gosec-results.sarif'
+
+  # 部署到测试环境
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [docker-build, security-scan]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment: staging
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+
+    - name: Deploy to staging
+      run: |
+        export KUBECONFIG=kubeconfig
+        kubectl set image deployment/alertagent-core alertagent-core=alertagent/core:${{ github.sha }} -n alertagent-staging
+        kubectl set image deployment/alertagent-worker alertagent-worker=alertagent/worker:${{ github.sha }} -n alertagent-staging
+        kubectl rollout status deployment/alertagent-core -n alertagent-staging
+        kubectl rollout status deployment/alertagent-worker -n alertagent-staging
+
+    - name: Run smoke tests
+      run: |
+        export KUBECONFIG=kubeconfig
+        kubectl run smoke-test --image=curlimages/curl --rm -i --restart=Never -- \
+          curl -f http://alertagent-core.alertagent-staging.svc.cluster.local:8080/health
+
+  # 部署到生产环境
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+
+    - name: Deploy to production
+      run: |
+        export KUBECONFIG=kubeconfig
+        kubectl set image deployment/alertagent-core alertagent-core=alertagent/core:${{ github.sha }} -n alertagent-production
+        kubectl set image deployment/alertagent-worker alertagent-worker=alertagent/worker:${{ github.sha }} -n alertagent-production
+        kubectl rollout status deployment/alertagent-core -n alertagent-production
+        kubectl rollout status deployment/alertagent-worker -n alertagent-production
+
+    - name: Run production smoke tests
+      run: |
+        export KUBECONFIG=kubeconfig
+        kubectl run production-smoke-test --image=curlimages/curl --rm -i --restart=Never -- \
+          curl -f http://alertagent-core.alertagent-production.svc.cluster.local:8080/health
+
+    - name: Create GitHub release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+
+  # 测试报告汇总
+  test-report:
+    name: Test Report Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, performance-tests, frontend-tests]
+    if: always()
+    steps:
+    - name: Download all test artifacts
+      uses: actions/download-artifact@v3
+
+    - name: Generate test summary
+      run: |
+        echo "# Test Summary" > test_summary.md
+        echo "" >> test_summary.md
+        echo "## Unit Tests" >> test_summary.md
+        if [ -f coverage-report/coverage.html ]; then
+          echo "✅ Unit tests passed with coverage report available" >> test_summary.md
+        else
+          echo "❌ Unit tests failed or coverage report missing" >> test_summary.md
+        fi
+        echo "" >> test_summary.md
+        echo "## Integration Tests" >> test_summary.md
+        if [ -d integration-test-results ]; then
+          echo "✅ Integration tests completed" >> test_summary.md
+        else
+          echo "❌ Integration tests failed or results missing" >> test_summary.md
+        fi
+        echo "" >> test_summary.md
+        echo "## Performance Tests" >> test_summary.md
+        if [ -f performance-report/performance_report.md ]; then
+          echo "✅ Performance tests completed" >> test_summary.md
+          cat performance-report/performance_report.md >> test_summary.md
+        else
+          echo "⏭️ Performance tests skipped or failed" >> test_summary.md
+        fi
+
+    - name: Upload test summary
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-summary
+        path: test_summary.md
+
+    - name: Comment test summary on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const summary = fs.readFileSync('test_summary.md', 'utf8');
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: summary
+          });

@@ -25,13 +25,13 @@ type PluginManagerService struct {
 
 // NewPluginManagerService 创建插件管理服务
 func NewPluginManagerService() *PluginManagerService {
-	pluginManager := plugins.NewPluginManager(logger.GetLogger())
+	pluginManager := plugins.NewPluginManager(logger.L)
 	
 	return &PluginManagerService{
 		pluginManager: pluginManager,
 		registry:      pluginManager.GetRegistry(),
-		db:            database.GetDB(),
-		logger:        logger.GetLogger(),
+		db:            database.DB,
+		logger:        logger.L,
 	}
 }
 
@@ -181,7 +181,7 @@ func (pms *PluginManagerService) savePluginConfigToDB(ctx context.Context, name 
 		Config:      string(configJSON),
 		Enabled:     config.Enabled,
 		Priority:    config.Priority,
-		UpdatedAt:   time.Now(),
+		// UpdatedAt is handled automatically by gorm.Model
 	}
 
 	// 使用 UPSERT 操作

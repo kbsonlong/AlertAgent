@@ -398,7 +398,7 @@ func (w *WorkerInstance) registerHandlers() error {
 	// 根据Worker类型注册相应的处理器
 	switch w.config.Type {
 	case "ai-analysis":
-		aiHandler := NewAIAnalysisHandler(service.NewDifyService(), service.NewOllamaService())
+		aiHandler := NewAIAnalysisHandler(service.NewOllamaService())
 		w.handlers[aiHandler.Type()] = aiHandler
 		
 	case "notification":
@@ -411,7 +411,7 @@ func (w *WorkerInstance) registerHandlers() error {
 		
 	case "general":
 		// 注册通用处理器
-		aiHandler := NewAIAnalysisHandler(service.NewDifyService(), service.NewOllamaService())
+		aiHandler := NewAIAnalysisHandler(service.NewOllamaService())
 		w.handlers[aiHandler.Type()] = aiHandler
 		
 		notificationHandler := NewNotificationHandler()
@@ -422,7 +422,7 @@ func (w *WorkerInstance) registerHandlers() error {
 		
 	default:
 		// 默认注册所有处理器
-		aiHandler := NewAIAnalysisHandler(service.NewDifyService(), service.NewOllamaService())
+		aiHandler := NewAIAnalysisHandler(service.NewOllamaService())
 		w.handlers[aiHandler.Type()] = aiHandler
 		
 		notificationHandler := NewNotificationHandler()

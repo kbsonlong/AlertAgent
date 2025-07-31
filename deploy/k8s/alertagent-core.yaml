@@ -1,0 +1,209 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertagent-core
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: core
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertagent
+      app.kubernetes.io/component: core
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alertagent
+        app.kubernetes.io/component: core
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/api/v1/metrics"
+    spec:
+      serviceAccountName: alertagent
+      containers:
+      - name: alertagent-core
+        image: alertagent-core:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: CONFIG_PATH
+          value: "/app/config/config.yaml"
+        - name: DB_HOST
+          value: "alertagent-mysql"
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_USER
+          value: "alertagent"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: mysql-password
+        - name: DB_NAME
+          value: "alert_agent"
+        - name: REDIS_HOST
+          value: "alertagent-redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: redis-password
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: jwt-secret
+        - name: OLLAMA_ENDPOINT
+          value: "http://alertagent-ollama:11434"
+        - name: SERVER_MODE
+          value: "release"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+        - name: logs
+          mountPath: /app/logs
+        - name: health-check-script
+          mountPath: /app/scripts
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
+      volumes:
+      - name: config
+        configMap:
+          name: alertagent-config
+      - name: logs
+        emptyDir: {}
+      - name: health-check-script
+        configMap:
+          name: alertagent-scripts
+          defaultMode: 0755
+      initContainers:
+      - name: wait-for-mysql
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "等待MySQL服务启动..."
+          until nc -z alertagent-mysql 3306; do
+            echo "MySQL未就绪，等待中..."
+            sleep 2
+          done
+          echo "MySQL服务已就绪"
+      - name: wait-for-redis
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "等待Redis服务启动..."
+          until nc -z alertagent-redis 6379; do
+            echo "Redis未就绪，等待中..."
+            sleep 2
+          done
+          echo "Redis服务已就绪"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertagent-core
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: core
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: core
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alertagent
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: alertagent
+  name: alertagent-role
+  labels:
+    app.kubernetes.io/name: alertagent
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: alertagent-rolebinding
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+subjects:
+- kind: ServiceAccount
+  name: alertagent
+  namespace: alertagent
+roleRef:
+  kind: Role
+  name: alertagent-role
+  apiGroup: rbac.authorization.k8s.io

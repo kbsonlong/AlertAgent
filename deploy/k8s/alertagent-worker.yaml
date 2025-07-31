@@ -1,0 +1,486 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertagent-worker-ai
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/worker-type: ai-analysis
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertagent
+      app.kubernetes.io/component: worker
+      app.kubernetes.io/worker-type: ai-analysis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alertagent
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/worker-type: ai-analysis
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: alertagent
+      containers:
+      - name: alertagent-worker
+        image: alertagent-worker:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        command:
+        - ./alertagent-worker
+        args:
+        - -name
+        - ai-worker-$(HOSTNAME)
+        - -type
+        - ai-analysis
+        - -concurrency
+        - "3"
+        - -health-port
+        - "8081"
+        env:
+        - name: HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: CONFIG_PATH
+          value: "/app/config/config.yaml"
+        - name: DB_HOST
+          value: "alertagent-mysql"
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_USER
+          value: "alertagent"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: mysql-password
+        - name: DB_NAME
+          value: "alert_agent"
+        - name: REDIS_HOST
+          value: "alertagent-redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: redis-password
+        - name: OLLAMA_ENDPOINT
+          value: "http://alertagent-ollama:11434"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+        - name: logs
+          mountPath: /app/logs
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: config
+        configMap:
+          name: alertagent-config
+      - name: logs
+        emptyDir: {}
+      initContainers:
+      - name: wait-for-core
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "等待AlertAgent Core服务启动..."
+          until nc -z alertagent-core 8080; do
+            echo "Core服务未就绪，等待中..."
+            sleep 2
+          done
+          echo "Core服务已就绪"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertagent-worker-notification
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/worker-type: notification
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertagent
+      app.kubernetes.io/component: worker
+      app.kubernetes.io/worker-type: notification
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alertagent
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/worker-type: notification
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: alertagent
+      containers:
+      - name: alertagent-worker
+        image: alertagent-worker:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        command:
+        - ./alertagent-worker
+        args:
+        - -name
+        - notification-worker-$(HOSTNAME)
+        - -type
+        - notification
+        - -concurrency
+        - "5"
+        - -health-port
+        - "8081"
+        env:
+        - name: HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: CONFIG_PATH
+          value: "/app/config/config.yaml"
+        - name: DB_HOST
+          value: "alertagent-mysql"
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_USER
+          value: "alertagent"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: mysql-password
+        - name: DB_NAME
+          value: "alert_agent"
+        - name: REDIS_HOST
+          value: "alertagent-redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: redis-password
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+        - name: logs
+          mountPath: /app/logs
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: config
+        configMap:
+          name: alertagent-config
+      - name: logs
+        emptyDir: {}
+      initContainers:
+      - name: wait-for-core
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "等待AlertAgent Core服务启动..."
+          until nc -z alertagent-core 8080; do
+            echo "Core服务未就绪，等待中..."
+            sleep 2
+          done
+          echo "Core服务已就绪"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertagent-worker-config
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/worker-type: config-sync
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertagent
+      app.kubernetes.io/component: worker
+      app.kubernetes.io/worker-type: config-sync
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alertagent
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/worker-type: config-sync
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: alertagent
+      containers:
+      - name: alertagent-worker
+        image: alertagent-worker:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        command:
+        - ./alertagent-worker
+        args:
+        - -name
+        - config-worker-$(HOSTNAME)
+        - -type
+        - config-sync
+        - -concurrency
+        - "2"
+        - -health-port
+        - "8081"
+        env:
+        - name: HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: CONFIG_PATH
+          value: "/app/config/config.yaml"
+        - name: DB_HOST
+          value: "alertagent-mysql"
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_USER
+          value: "alertagent"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: mysql-password
+        - name: DB_NAME
+          value: "alert_agent"
+        - name: REDIS_HOST
+          value: "alertagent-redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: alertagent-secrets
+              key: redis-password
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+        - name: logs
+          mountPath: /app/logs
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: config
+        configMap:
+          name: alertagent-config
+      - name: logs
+        emptyDir: {}
+      initContainers:
+      - name: wait-for-core
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "等待AlertAgent Core服务启动..."
+          until nc -z alertagent-core 8080; do
+            echo "Core服务未就绪，等待中..."
+            sleep 2
+          done
+          echo "Core服务已就绪"
+
+---
+# HorizontalPodAutoscaler for AI Worker
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: alertagent-worker-ai-hpa
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/worker-type: ai-analysis
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: alertagent-worker-ai
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+
+---
+# HorizontalPodAutoscaler for Notification Worker
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: alertagent-worker-notification-hpa
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/worker-type: notification
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: alertagent-worker-notification
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60

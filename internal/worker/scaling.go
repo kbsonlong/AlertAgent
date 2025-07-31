@@ -599,3 +599,26 @@ func (s *WorkerScaler) UpdateScalingPolicy(workerType string, policy *ScalingPol
 		zap.Int("max_instances", policy.MaxInstances),
 	)
 }
+
+// getDefaultQueues 根据worker类型返回默认队列
+func getDefaultQueues(workerType string) []string {
+	switch workerType {
+	case "ai-analysis":
+		return []string{string(queue.TaskTypeAIAnalysis)}
+	case "notification":
+		return []string{string(queue.TaskTypeNotification)}
+	case "config-sync":
+		return []string{string(queue.TaskTypeConfigSync)}
+	case "general":
+		return []string{
+			string(queue.TaskTypeRuleUpdate),
+			string(queue.TaskTypeHealthCheck),
+		}
+	default:
+		return []string{
+			string(queue.TaskTypeAIAnalysis),
+			string(queue.TaskTypeNotification),
+			string(queue.TaskTypeConfigSync),
+		}
+	}
+}

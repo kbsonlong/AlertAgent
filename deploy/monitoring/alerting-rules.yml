@@ -1,0 +1,297 @@
+# AlertAgent Prometheus 告警规则
+
+groups:
+  # AlertAgent 核心服务告警
+  - name: alertagent.core
+    interval: 30s
+    rules:
+      - alert: AlertAgentCoreDown
+        expr: up{job="alertagent-core"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: alertagent-core
+        annotations:
+          summary: "AlertAgent Core服务不可用"
+          description: "AlertAgent Core服务 {{ $labels.instance }} 已经停止运行超过1分钟"
+          runbook_url: "https://docs.alertagent.com/runbooks/core-down"
+
+      - alert: AlertAgentCoreHighErrorRate
+        expr: rate(alertagent_http_requests_total{status=~"5.."}[5m]) / rate(alertagent_http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: alertagent-core
+        annotations:
+          summary: "AlertAgent Core错误率过高"
+          description: "AlertAgent Core服务 {{ $labels.instance }} 的错误率为 {{ $value | humanizePercentage }}，超过5%"
+
+      - alert: AlertAgentCoreHighLatency
+        expr: histogram_quantile(0.95, rate(alertagent_http_request_duration_seconds_bucket[5m])) > 2
+        for: 3m
+        labels:
+          severity: warning
+          service: alertagent-core
+        annotations:
+          summary: "AlertAgent Core响应延迟过高"
+          description: "AlertAgent Core服务 {{ $labels.instance }} 的95%分位延迟为 {{ $value }}s，超过2秒"
+
+      - alert: AlertAgentCoreHighMemoryUsage
+        expr: (container_memory_working_set_bytes{pod=~"alertagent-core-.*"} / container_spec_memory_limit_bytes) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: alertagent-core
+        annotations:
+          summary: "AlertAgent Core内存使用率过高"
+          description: "AlertAgent Core Pod {{ $labels.pod }} 内存使用率为 {{ $value | humanizePercentage }}，超过80%"
+
+      - alert: AlertAgentCoreCPUUsage
+        expr: rate(container_cpu_usage_seconds_total{pod=~"alertagent-core-.*"}[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: alertagent-core
+        annotations:
+          summary: "AlertAgent Core CPU使用率过高"
+          description: "AlertAgent Core Pod {{ $labels.pod }} CPU使用率为 {{ $value | humanizePercentage }}，超过80%"
+
+  # AlertAgent Worker告警
+  - name: alertagent.worker
+    interval: 30s
+    rules:
+      - alert: AlertAgentWorkerDown
+        expr: up{job="alertagent-worker"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: alertagent-worker
+        annotations:
+          summary: "AlertAgent Worker服务不可用"
+          description: "AlertAgent Worker {{ $labels.worker_type }} 服务 {{ $labels.instance }} 已经停止运行超过2分钟"
+
+      - alert: AlertAgentWorkerQueueBacklog
+        expr: alertagent_queue_size > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: alertagent-worker
+        annotations:
+          summary: "AlertAgent Worker队列积压"
+          description: "AlertAgent Worker队列 {{ $labels.queue_name }} 积压任务数为 {{ $value }}，超过1000个"
+
+      - alert: AlertAgentWorkerHighFailureRate
+        expr: rate(alertagent_task_failures_total[5m]) / rate(alertagent_task_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          service: alertagent-worker
+        annotations:
+          summary: "AlertAgent Worker任务失败率过高"
+          description: "AlertAgent Worker {{ $labels.worker_type }} 任务失败率为 {{ $value | humanizePercentage }}，超过10%"
+
+      - alert: AlertAgentWorkerSlowProcessing
+        expr: rate(alertagent_task_duration_seconds_sum[5m]) / rate(alertagent_task_duration_seconds_count[5m]) > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: alertagent-worker
+        annotations:
+          summary: "AlertAgent Worker处理速度过慢"
+          description: "AlertAgent Worker {{ $labels.worker_type }} 平均处理时间为 {{ $value }}s，超过30秒"
+
+  # 数据库告警
+  - name: alertagent.database
+    interval: 30s
+    rules:
+      - alert: MySQLDown
+        expr: mysql_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: mysql
+        annotations:
+          summary: "MySQL数据库不可用"
+          description: "MySQL数据库 {{ $labels.instance }} 已经停止运行超过1分钟"
+
+      - alert: MySQLHighConnections
+        expr: mysql_global_status_threads_connected / mysql_global_variables_max_connections > 0.8
+        for: 2m
+        labels:
+          severity: warning
+          service: mysql
+        annotations:
+          summary: "MySQL连接数过高"
+          description: "MySQL数据库 {{ $labels.instance }} 连接使用率为 {{ $value | humanizePercentage }}，超过80%"
+
+      - alert: MySQLSlowQueries
+        expr: rate(mysql_global_status_slow_queries[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          service: mysql
+        annotations:
+          summary: "MySQL慢查询过多"
+          description: "MySQL数据库 {{ $labels.instance }} 慢查询速率为 {{ $value }}/s"
+
+      - alert: MySQLReplicationLag
+        expr: mysql_slave_lag_seconds > 30
+        for: 1m
+        labels:
+          severity: warning
+          service: mysql
+        annotations:
+          summary: "MySQL主从复制延迟"
+          description: "MySQL从库 {{ $labels.instance }} 复制延迟为 {{ $value }}s，超过30秒"
+
+  # Redis告警
+  - name: alertagent.redis
+    interval: 30s
+    rules:
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis服务不可用"
+          description: "Redis服务 {{ $labels.instance }} 已经停止运行超过1分钟"
+
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.8
+        for: 2m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis内存使用率过高"
+          description: "Redis服务 {{ $labels.instance }} 内存使用率为 {{ $value | humanizePercentage }}，超过80%"
+
+      - alert: RedisHighConnections
+        expr: redis_connected_clients > 100
+        for: 2m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis连接数过高"
+          description: "Redis服务 {{ $labels.instance }} 连接数为 {{ $value }}，超过100个"
+
+      - alert: RedisKeyspaceHitRateLow
+        expr: rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) < 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis缓存命中率过低"
+          description: "Redis服务 {{ $labels.instance }} 缓存命中率为 {{ $value | humanizePercentage }}，低于80%"
+
+  # Kubernetes集群告警
+  - name: alertagent.kubernetes
+    interval: 30s
+    rules:
+      - alert: KubernetesPodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: kubernetes
+        annotations:
+          summary: "Kubernetes Pod频繁重启"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} 在过去15分钟内重启了 {{ $value }} 次"
+
+      - alert: KubernetesPodNotReady
+        expr: kube_pod_status_ready{condition="false"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          service: kubernetes
+        annotations:
+          summary: "Kubernetes Pod未就绪"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} 已经未就绪超过5分钟"
+
+      - alert: KubernetesNodeNotReady
+        expr: kube_node_status_ready{condition="false"} == 1
+        for: 2m
+        labels:
+          severity: critical
+          service: kubernetes
+        annotations:
+          summary: "Kubernetes节点未就绪"
+          description: "节点 {{ $labels.node }} 已经未就绪超过2分钟"
+
+      - alert: KubernetesNodeHighCPU
+        expr: (1 - rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: kubernetes
+        annotations:
+          summary: "Kubernetes节点CPU使用率过高"
+          description: "节点 {{ $labels.instance }} CPU使用率为 {{ $value | humanizePercentage }}，超过80%"
+
+      - alert: KubernetesNodeHighMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: kubernetes
+        annotations:
+          summary: "Kubernetes节点内存使用率过高"
+          description: "节点 {{ $labels.instance }} 内存使用率为 {{ $value | humanizePercentage }}，超过80%"
+
+      - alert: KubernetesNodeDiskSpaceLow
+        expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes)) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: kubernetes
+        annotations:
+          summary: "Kubernetes节点磁盘空间不足"
+          description: "节点 {{ $labels.instance }} 磁盘 {{ $labels.mountpoint }} 使用率为 {{ $value | humanizePercentage }}，超过80%"
+
+  # 业务指标告警
+  - name: alertagent.business
+    interval: 60s
+    rules:
+      - alert: AlertProcessingDelayed
+        expr: alertagent_alert_processing_duration_seconds > 300
+        for: 2m
+        labels:
+          severity: warning
+          service: alertagent-business
+        annotations:
+          summary: "告警处理延迟过高"
+          description: "告警处理时间为 {{ $value }}s，超过5分钟"
+
+      - alert: AIAnalysisFailureRate
+        expr: rate(alertagent_ai_analysis_failures_total[10m]) / rate(alertagent_ai_analysis_total[10m]) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          service: alertagent-business
+        annotations:
+          summary: "AI分析失败率过高"
+          description: "AI分析失败率为 {{ $value | humanizePercentage }}，超过20%"
+
+      - alert: NotificationDeliveryFailure
+        expr: rate(alertagent_notification_failures_total[10m]) / rate(alertagent_notification_total[10m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          service: alertagent-business
+        annotations:
+          summary: "通知发送失败率过高"
+          description: "通知发送失败率为 {{ $value | humanizePercentage }}，超过10%"
+
+      - alert: ConfigSyncFailure
+        expr: alertagent_config_sync_failures_total > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: alertagent-business
+        annotations:
+          summary: "配置同步失败"
+          description: "配置同步到 {{ $labels.target }} 失败，失败次数: {{ $value }}"

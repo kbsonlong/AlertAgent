@@ -10,30 +10,31 @@ import (
 	"sync"
 	"time"
 
-	"alert_agent/internal/config"
 	"alert_agent/internal/model"
 	"alert_agent/internal/pkg/logger"
 
 	"go.uber.org/zap"
 )
 
+// DifyConfig Dify配置 (local copy to avoid circular dependency)
+type DifyConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	APIEndpoint string `yaml:"api_endpoint"`
+	APIKey      string `yaml:"api_key"`
+	Model       string `yaml:"model"`
+	Timeout     int    `yaml:"timeout"`
+	MaxRetries  int    `yaml:"max_retries"`
+}
+
 // DifyService Dify AI服务
 type DifyService struct {
-	config     *config.DifyConfig
+	config     *DifyConfig
 	client     *http.Client
 	logger     *zap.Logger
 	mutex      sync.RWMutex
 }
 
-// DifyConfig Dify配置
-type DifyConfig struct {
-	Enabled    bool   `yaml:"enabled"`
-	APIUrl     string `yaml:"api_url"`
-	APIKey     string `yaml:"api_key"`
-	Timeout    int    `yaml:"timeout"`
-	AgentID    string `yaml:"agent_id"`
-	Model      string `yaml:"model"`
-}
+
 
 // DifyChatRequest Dify聊天请求
 type DifyChatRequest struct {
@@ -74,16 +75,16 @@ type DifyWorkflowResponse struct {
 // NewDifyService 创建Dify服务
 func NewDifyService() *DifyService {
 	// 从全局配置获取Dify配置
-	cfg := config.GetConfig()
+	// cfg := config.GetConfig()
 	
 	// 创建默认Dify配置（如果配置文件中没有）
 	difyConfig := &DifyConfig{
-		Enabled: false,
-		APIUrl:  "http://localhost:5001",
-		APIKey:  "",
-		Timeout: 30,
-		AgentID: "",
-		Model:   "gpt-3.5-turbo",
+		Enabled:     false,
+		APIEndpoint: "http://localhost:5001",
+		APIKey:      "",
+		Timeout:     30,
+		Model:       "gpt-3.5-turbo",
+		MaxRetries:  3,
 	}
 
 	// 如果配置中有Dify配置，使用配置的值
@@ -117,8 +118,8 @@ func (s *DifyService) UpdateConfig(newConfig *DifyConfig) {
 
 	s.logger.Info("Dify configuration updated",
 		zap.Bool("enabled", newConfig.Enabled),
-		zap.String("api_url", newConfig.APIUrl),
-		zap.String("agent_id", newConfig.AgentID),
+		zap.String("api_endpoint", newConfig.APIEndpoint),
+		zap.String("model", newConfig.Model),
 		zap.Int("timeout", newConfig.Timeout))
 }
 
@@ -325,7 +326,7 @@ func (s *DifyService) callChatAPI(ctx context.Context, query string, inputs map[
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/v1/chat-messages", currentConfig.APIUrl)
+	url := fmt.Sprintf("%s/v1/chat-messages", currentConfig.APIEndpoint)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -372,7 +373,7 @@ func (s *DifyService) callWorkflowAPI(ctx context.Context, inputs map[string]int
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/v1/workflows/run", currentConfig.APIUrl)
+	url := fmt.Sprintf("%s/v1/workflows/run", currentConfig.APIEndpoint)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)

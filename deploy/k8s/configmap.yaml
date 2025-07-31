@@ -1,0 +1,170 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertagent-config
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: config
+data:
+  config.yaml: |
+    server:
+        port: 8080
+        mode: release
+        jwt_secret: ${JWT_SECRET}
+        read_timeout: 30
+        write_timeout: 30
+        idle_timeout: 60
+
+    gateway:
+        rate_limit:
+            enabled: true
+            rps: 1000
+            burst: 2000
+        auth:
+            enabled: true
+            skip_paths:
+                - "/api/v1/health"
+                - "/api/v1/metrics"
+            token_expiry: 8
+            refresh_expiry: 72
+        cors:
+            enabled: true
+            allow_origins:
+                - "*"
+            allow_methods:
+                - "GET"
+                - "POST"
+                - "PUT"
+                - "DELETE"
+                - "OPTIONS"
+            allow_headers:
+                - "Content-Type"
+                - "Authorization"
+                - "X-Request-ID"
+                - "X-CSRF-Token"
+            expose_headers:
+                - "Content-Length"
+                - "X-Request-ID"
+            allow_credentials: true
+
+    database:
+        driver: mysql
+        host: alertagent-mysql
+        port: 3306
+        username: ${DB_USER}
+        password: ${DB_PASSWORD}
+        dbname: ${DB_NAME}
+        charset: utf8mb4
+        max_idle_conns: 20
+        max_open_conns: 200
+        conn_max_lifetime: 3600
+        parse_time: true
+        loc: Local
+
+    ollama:
+        enabled: true
+        api_endpoint: http://alertagent-ollama:11434
+        model: llama3:latest
+        timeout: 60
+        max_retries: 5
+        
+    redis:
+        host: alertagent-redis
+        port: 6379
+        password: ${REDIS_PASSWORD}
+        db: 0
+        pool_size: 200
+        min_idle_conns: 20
+        max_retries: 5
+        dial_timeout: 10
+        read_timeout: 5
+        write_timeout: 5
+        pool_timeout: 10
+
+    log:
+        level: info
+        filename: logs/alert_agent.log
+        max_size: 500
+        max_age: 30
+        max_backups: 50
+        compress: true
+
+    monitoring:
+        enabled: true
+        metrics_path: "/api/v1/metrics"
+        health_path: "/api/v1/health"
+        
+    performance:
+        worker_pool_size: 100
+        queue_buffer_size: 10000
+        batch_size: 100
+        
+    security:
+        enable_https: false
+        enable_csrf: true
+        csrf_token_length: 32
+        
+    cache:
+        default_ttl: 3600
+        max_entries: 100000
+        cleanup_interval: 600
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertagent-scripts
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: scripts
+data:
+  health-check.sh: |
+    #!/bin/bash
+    set -e
+    HEALTH_CHECK_URL=${HEALTH_CHECK_URL:-"http://localhost:8080/api/v1/health"}
+    TIMEOUT=${TIMEOUT:-10}
+    MAX_RETRIES=${MAX_RETRIES:-3}
+    
+    log_info() {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1"
+    }
+    
+    log_error() {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >&2
+    }
+    
+    check_health() {
+        local url=$1
+        local timeout=$2
+        
+        if curl -f -s --max-time "$timeout" "$url" > /dev/null 2>&1; then
+            return 0
+        else
+            return 1
+        fi
+    }
+    
+    main() {
+        local retry_count=0
+        
+        while [ $retry_count -lt $MAX_RETRIES ]; do
+            if check_health "$HEALTH_CHECK_URL" "$TIMEOUT"; then
+                log_info "健康检查通过: $HEALTH_CHECK_URL"
+                exit 0
+            else
+                retry_count=$((retry_count + 1))
+                log_error "健康检查失败 (尝试 $retry_count/$MAX_RETRIES): $HEALTH_CHECK_URL"
+                
+                if [ $retry_count -lt $MAX_RETRIES ]; then
+                    sleep 2
+                fi
+            fi
+        done
+        
+        log_error "健康检查最终失败，已达到最大重试次数"
+        exit 1
+    }
+    
+    main "$@"

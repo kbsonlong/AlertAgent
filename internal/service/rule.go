@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -350,13 +351,12 @@ func (s *ruleService) CreateRuleWithAudit(ctx context.Context, req *model.Create
 			ID:         uuid.New().String(),
 			RuleID:     rule.ID,
 			Action:     "create",
-			OldVersion: "",
-			NewVersion: rule.Version,
+			Changes:    fmt.Sprintf(`{"action":"create","new_version":"%s"}`, rule.Version),
 			UserID:     userID,
 			UserName:   userName,
 			IPAddress:  ipAddress,
 			UserAgent:  userAgent,
-			Note:       "Rule created",
+			Reason:     "Rule created",
 			CreatedAt:  time.Now(),
 		}
 
@@ -367,7 +367,9 @@ func (s *ruleService) CreateRuleWithAudit(ctx context.Context, req *model.Create
 			"severity":    rule.Severity,
 		}
 
-		if err := auditLog.SetChangesMap(changes); err == nil {
+		// Set changes as JSON string
+		if changesJSON, err := json.Marshal(changes); err == nil {
+			auditLog.Changes = string(changesJSON)
 			if auditErr := s.versionService.CreateAuditLog(ctx, auditLog); auditErr != nil {
 				fmt.Printf("Failed to create audit log: %v\n", auditErr)
 			}
@@ -403,19 +405,20 @@ func (s *ruleService) UpdateRuleWithAudit(ctx context.Context, id string, req *m
 			ID:         uuid.New().String(),
 			RuleID:     updatedRule.ID,
 			Action:     "update",
-			OldVersion: oldRule.Version,
-			NewVersion: updatedRule.Version,
+			Changes:    fmt.Sprintf(`{"action":"update","old_version":"%s","new_version":"%s"}`, oldRule.Version, updatedRule.Version),
 			UserID:     userID,
 			UserName:   userName,
 			IPAddress:  ipAddress,
 			UserAgent:  userAgent,
-			Note:       "Rule updated",
+			Reason:     "Rule updated",
 			CreatedAt:  time.Now(),
 		}
 
 		// 记录变更详情
 		changes := s.buildChangeMap(oldRule, updatedRule, req)
-		if err := auditLog.SetChangesMap(changes); err == nil {
+		// Set changes as JSON string
+		if changesJSON, err := json.Marshal(changes); err == nil {
+			auditLog.Changes = string(changesJSON)
 			if auditErr := s.versionService.CreateAuditLog(ctx, auditLog); auditErr != nil {
 				fmt.Printf("Failed to create audit log: %v\n", auditErr)
 			}
@@ -445,13 +448,12 @@ func (s *ruleService) DeleteRuleWithAudit(ctx context.Context, id string, userID
 			ID:         uuid.New().String(),
 			RuleID:     rule.ID,
 			Action:     "delete",
-			OldVersion: rule.Version,
-			NewVersion: "",
+			Changes:    fmt.Sprintf(`{"action":"delete","old_version":"%s"}`, rule.Version),
 			UserID:     userID,
 			UserName:   userName,
 			IPAddress:  ipAddress,
 			UserAgent:  userAgent,
-			Note:       "Rule deleted",
+			Reason:     "Rule deleted",
 			CreatedAt:  time.Now(),
 		}
 
@@ -463,7 +465,9 @@ func (s *ruleService) DeleteRuleWithAudit(ctx context.Context, id string, userID
 			},
 		}
 
-		if err := auditLog.SetChangesMap(changes); err == nil {
+		// Set changes as JSON string
+		if changesJSON, err := json.Marshal(changes); err == nil {
+			auditLog.Changes = string(changesJSON)
 			if auditErr := s.versionService.CreateAuditLog(ctx, auditLog); auditErr != nil {
 				fmt.Printf("Failed to create audit log: %v\n", auditErr)
 			}

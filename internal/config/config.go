@@ -84,6 +84,14 @@ type Config struct {
 		MaxBackups int    `yaml:"max_backups"`
 		Compress   bool   `yaml:"compress"`
 	} `yaml:"log"`
+	Dify struct {
+		Enabled     bool   `yaml:"enabled"`
+		APIEndpoint string `yaml:"api_endpoint"`
+		APIKey      string `yaml:"api_key"`
+		Model       string `yaml:"model"`
+		Timeout     int    `yaml:"timeout"`
+		MaxRetries  int    `yaml:"max_retries"`
+	} `yaml:"dify"`
 }
 
 // DefaultConfig 返回默认配置
@@ -228,6 +236,16 @@ func DefaultConfig() Config {
 type OllamaConfig struct {
 	Enabled     bool   `yaml:"enabled"`
 	APIEndpoint string `yaml:"api_endpoint"`
+	Model       string `yaml:"model"`
+	Timeout     int    `yaml:"timeout"`
+	MaxRetries  int    `yaml:"max_retries"`
+}
+
+// DifyConfig Dify配置
+type DifyConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	APIEndpoint string `yaml:"api_endpoint"`
+	APIKey      string `yaml:"api_key"`
 	Model       string `yaml:"model"`
 	Timeout     int    `yaml:"timeout"`
 	MaxRetries  int    `yaml:"max_retries"`

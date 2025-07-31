@@ -15,20 +15,19 @@ import (
 	"alert_agent/internal/pkg/logger"
 	"alert_agent/internal/pkg/queue"
 	"alert_agent/internal/pkg/redis"
-	"alert_agent/internal/service"
 	"alert_agent/internal/worker"
 
 	"go.uber.org/zap"
 )
 
 var (
-	workerName   = flag.String("name", "", "Worker名称")
-	workerType   = flag.String("type", "general", "Worker类型 (ai-analysis, notification, config-sync, general)")
-	concurrency  = flag.Int("concurrency", 2, "并发数")
-	queues       = flag.String("queues", "", "队列名称，多个用逗号分隔")
-	configPath   = flag.String("config", "config/config.yaml", "配置文件路径")
-	logLevel     = flag.String("log-level", "info", "日志级别")
-	healthPort   = flag.Int("health-port", 8081, "健康检查端口")
+	workerName  = flag.String("name", "", "Worker名称")
+	workerType  = flag.String("type", "general", "Worker类型 (ai-analysis, notification, config-sync, general)")
+	concurrency = flag.Int("concurrency", 2, "并发数")
+	queues      = flag.String("queues", "", "队列名称，多个用逗号分隔")
+	configPath  = flag.String("config", "config/config.yaml", "配置文件路径")
+	logLevel    = flag.String("log-level", "info", "日志级别")
+	healthPort  = flag.Int("health-port", 8081, "健康检查端口")
 )
 
 func main() {
@@ -55,7 +54,6 @@ func main() {
 	)
 
 	// 加载配置
-	config.SetConfigPath(*configPath)
 	if err := config.Load(); err != nil {
 		logger.L.Fatal("Failed to load config", zap.Error(err))
 	}

@@ -10,10 +10,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/smtp"
+
 	"strings"
 	"time"
 
+	"alert_agent/internal/application/channel/plugins"
 	"alert_agent/internal/pkg/logger"
 
 	"go.uber.org/zap"
@@ -45,7 +46,7 @@ func (e *EmailChannel) ValidateConfig(config map[string]interface{}) error {
 	return nil
 }
 
-func (e *EmailChannel) Send(ctx context.Context, config map[string]interface{}, message *NotificationMessage) error {
+func (e *EmailChannel) Send(ctx context.Context, config map[string]interface{}, message *plugins.NotificationMessage) error {
 	// 这里实现邮件发送逻辑
 	// 暂时返回成功，实际实现需要配置SMTP服务器
 	logger.L.Info("Email notification sent (mock)",
@@ -82,7 +83,7 @@ func (w *WebhookChannel) ValidateConfig(config map[string]interface{}) error {
 	return nil
 }
 
-func (w *WebhookChannel) Send(ctx context.Context, config map[string]interface{}, message *NotificationMessage) error {
+func (w *WebhookChannel) Send(ctx context.Context, config map[string]interface{}, message *plugins.NotificationMessage) error {
 	// 从配置中获取URL和其他参数
 	url, _ := config["url"].(string)
 	method, _ := config["method"].(string)
@@ -95,8 +96,7 @@ func (w *WebhookChannel) Send(ctx context.Context, config map[string]interface{}
 		"alert_id":  message.AlertID,
 		"title":     message.Title,
 		"content":   message.Content,
-		"level":     message.Level,
-		"source":    message.Source,
+		"level":     message.Severity,
 		"timestamp": message.Timestamp.Unix(),
 		"labels":    message.Labels,
 		"extra":     message.Extra,
@@ -175,7 +175,7 @@ func (d *DingTalkChannel) ValidateConfig(config map[string]interface{}) error {
 	return nil
 }
 
-func (d *DingTalkChannel) Send(ctx context.Context, config map[string]interface{}, message *NotificationMessage) error {
+func (d *DingTalkChannel) Send(ctx context.Context, config map[string]interface{}, message *plugins.NotificationMessage) error {
 	webhookURL, _ := config["webhook_url"].(string)
 	secret, _ := config["secret"].(string)
 	atMobiles, _ := config["at_mobiles"].([]interface{})
@@ -254,13 +254,12 @@ func (d *DingTalkChannel) Send(ctx context.Context, config map[string]interface{
 	return nil
 }
 
-func (d *DingTalkChannel) formatMessage(message *NotificationMessage) string {
+func (d *DingTalkChannel) formatMessage(message *plugins.NotificationMessage) string {
 	var builder strings.Builder
 
 	builder.WriteString(fmt.Sprintf("## %s\n\n", message.Title))
-	builder.WriteString(fmt.Sprintf("**告警级别**: %s\n\n", message.Level))
+	builder.WriteString(fmt.Sprintf("**告警级别**: %s\n\n", message.Severity))
 	builder.WriteString(fmt.Sprintf("**告警时间**: %s\n\n", message.Timestamp.Format("2006-01-02 15:04:05")))
-	builder.WriteString(fmt.Sprintf("**告警来源**: %s\n\n", message.Source))
 	builder.WriteString(fmt.Sprintf("**告警内容**: %s\n\n", message.Content))
 
 	if len(message.Labels) > 0 {
@@ -311,7 +310,7 @@ func (w *WeChatChannel) ValidateConfig(config map[string]interface{}) error {
 	return nil
 }
 
-func (w *WeChatChannel) Send(ctx context.Context, config map[string]interface{}, message *NotificationMessage) error {
+func (w *WeChatChannel) Send(ctx context.Context, config map[string]interface{}, message *plugins.NotificationMessage) error {
 	webhookURL, _ := config["webhook_url"].(string)
 
 	// 构建企业微信消息格式
@@ -353,13 +352,12 @@ func (w *WeChatChannel) Send(ctx context.Context, config map[string]interface{},
 	return nil
 }
 
-func (w *WeChatChannel) formatMessage(message *NotificationMessage) string {
+func (w *WeChatChannel) formatMessage(message *plugins.NotificationMessage) string {
 	var builder strings.Builder
 
 	builder.WriteString(fmt.Sprintf("## %s\n", message.Title))
-	builder.WriteString(fmt.Sprintf("**告警级别**: <font color=\"warning\">%s</font>\n", message.Level))
+	builder.WriteString(fmt.Sprintf("**告警级别**: <font color=\"warning\">%s</font>\n", message.Severity))
 	builder.WriteString(fmt.Sprintf("**告警时间**: %s\n", message.Timestamp.Format("2006-01-02 15:04:05")))
-	builder.WriteString(fmt.Sprintf("**告警来源**: %s\n", message.Source))
 	builder.WriteString(fmt.Sprintf("**告警内容**: %s\n", message.Content))
 
 	if len(message.Labels) > 0 {

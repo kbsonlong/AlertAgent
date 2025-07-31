@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"time"
@@ -63,10 +64,8 @@ func (s *ruleVersionService) CreateVersion(ctx context.Context, rule *model.Rule
 		Labels:      rule.Labels,
 		Annotations: rule.Annotations,
 		Targets:     rule.Targets,
-		Status:      rule.Status,
-		ChangeType:  changeType,
-		ChangedBy:   changedBy,
-		ChangeNote:  changeNote,
+		ChangeLog:   fmt.Sprintf("Change type: %s, Changed by: %s, Note: %s", changeType, changedBy, changeNote),
+		CreatedBy:   changedBy,
 		CreatedAt:   time.Now(),
 	}
 
@@ -111,12 +110,12 @@ func (s *ruleVersionService) GetVersionByRuleIDAndVersion(ctx context.Context, r
 // CompareVersions 对比两个版本的差异
 func (s *ruleVersionService) CompareVersions(ctx context.Context, req *model.RuleVersionCompareRequest) (*model.RuleVersionCompareResponse, error) {
 	// 获取两个版本
-	oldVersion, err := s.versionRepo.GetByRuleIDAndVersion(ctx, req.RuleID, req.OldVersion)
+	oldVersion, err := s.versionRepo.GetByID(ctx, req.OldVersionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get old version: %w", err)
 	}
 
-	newVersion, err := s.versionRepo.GetByRuleIDAndVersion(ctx, req.RuleID, req.NewVersion)
+	newVersion, err := s.versionRepo.GetByID(ctx, req.NewVersionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get new version: %w", err)
 	}
@@ -125,10 +124,16 @@ func (s *ruleVersionService) CompareVersions(ctx context.Context, req *model.Rul
 	differences := s.compareRuleVersions(oldVersion, newVersion)
 
 	response := &model.RuleVersionCompareResponse{
-		RuleID:      req.RuleID,
 		OldVersion:  oldVersion,
 		NewVersion:  newVersion,
 		Differences: differences,
+		Summary: struct {
+			TotalChanges int  `json:"total_changes"`
+			HasChanges   bool `json:"has_changes"`
+		}{
+			TotalChanges: len(differences),
+			HasChanges:   len(differences) > 0,
+		},
 	}
 
 	return response, nil
@@ -181,21 +186,20 @@ func (s *ruleVersionService) RollbackRule(ctx context.Context, req *model.RuleRo
 	}
 
 	auditLog := &model.RuleAuditLog{
-		ID:         uuid.New().String(),
-		RuleID:     req.RuleID,
-		Action:     "rollback",
-		OldVersion: oldVersion,
-		NewVersion: restoredRule.Version,
-		UserID:     userID,
-		UserName:   userName,
-		IPAddress:  ipAddress,
-		UserAgent:  userAgent,
-		Note:       req.Note,
-		CreatedAt:  time.Now(),
+		ID:        uuid.New().String(),
+		RuleID:    req.RuleID,
+		Action:    "rollback",
+		UserID:    userID,
+		UserName:  userName,
+		IPAddress: ipAddress,
+		UserAgent: userAgent,
+		Reason:    req.Note,
+		CreatedAt: time.Now(),
 	}
 
-	if err := auditLog.SetChangesMap(changes); err != nil {
-		return nil, fmt.Errorf("failed to set audit log changes: %w", err)
+	// 设置变更详情为JSON字符串
+	if changesJSON, err := json.Marshal(changes); err == nil {
+		auditLog.Changes = string(changesJSON)
 	}
 
 	if err := s.auditLogRepo.Create(ctx, auditLog); err != nil {
@@ -250,7 +254,7 @@ func (s *ruleVersionService) compareRuleVersions(oldVersion, newVersion *model.R
 			Field:    "name",
 			OldValue: oldVersion.Name,
 			NewValue: newVersion.Name,
-			Type:     "modified",
+			Changed:  true,
 		})
 	}
 
@@ -259,7 +263,7 @@ func (s *ruleVersionService) compareRuleVersions(oldVersion, newVersion *model.R
 			Field:    "expression",
 			OldValue: oldVersion.Expression,
 			NewValue: newVersion.Expression,
-			Type:     "modified",
+			Changed:  true,
 		})
 	}
 
@@ -268,7 +272,7 @@ func (s *ruleVersionService) compareRuleVersions(oldVersion, newVersion *model.R
 			Field:    "duration",
 			OldValue: oldVersion.Duration,
 			NewValue: newVersion.Duration,
-			Type:     "modified",
+			Changed:  true,
 		})
 	}
 
@@ -277,7 +281,7 @@ func (s *ruleVersionService) compareRuleVersions(oldVersion, newVersion *model.R
 			Field:    "severity",
 			OldValue: oldVersion.Severity,
 			NewValue: newVersion.Severity,
-			Type:     "modified",
+			Changed:  true,
 		})
 	}
 
@@ -314,7 +318,7 @@ func (s *ruleVersionService) compareStringMaps(fieldPrefix string, oldMap, newMa
 					Field:    fmt.Sprintf("%s.%s", fieldPrefix, key),
 					OldValue: oldValue,
 					NewValue: newValue,
-					Type:     "modified",
+					Changed:  true,
 				})
 			}
 		} else {
@@ -322,7 +326,7 @@ func (s *ruleVersionService) compareStringMaps(fieldPrefix string, oldMap, newMa
 				Field:    fmt.Sprintf("%s.%s", fieldPrefix, key),
 				OldValue: oldValue,
 				NewValue: nil,
-				Type:     "removed",
+				Changed:  true,
 			})
 		}
 	}
@@ -334,7 +338,7 @@ func (s *ruleVersionService) compareStringMaps(fieldPrefix string, oldMap, newMa
 				Field:    fmt.Sprintf("%s.%s", fieldPrefix, key),
 				OldValue: nil,
 				NewValue: newValue,
-				Type:     "added",
+				Changed:  true,
 			})
 		}
 	}
@@ -351,7 +355,7 @@ func (s *ruleVersionService) compareStringSlices(fieldName string, oldSlice, new
 			Field:    fieldName,
 			OldValue: oldSlice,
 			NewValue: newSlice,
-			Type:     "modified",
+			Changed:  true,
 		})
 	}
 

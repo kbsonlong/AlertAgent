@@ -1,9 +1,7 @@
 package sidecar
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -145,16 +143,16 @@ func (a *AlertmanagerIntegration) ValidateConfig(config []byte) error {
 			SMTPFrom      string `yaml:"smtp_from,omitempty"`
 		} `yaml:"global,omitempty"`
 		Route struct {
-			GroupBy        []string `yaml:"group_by,omitempty"`
-			GroupWait      string   `yaml:"group_wait,omitempty"`
-			GroupInterval  string   `yaml:"group_interval,omitempty"`
-			RepeatInterval string   `yaml:"repeat_interval,omitempty"`
-			Receiver       string   `yaml:"receiver"`
+			GroupBy        []string      `yaml:"group_by,omitempty"`
+			GroupWait      string        `yaml:"group_wait,omitempty"`
+			GroupInterval  string        `yaml:"group_interval,omitempty"`
+			RepeatInterval string        `yaml:"repeat_interval,omitempty"`
+			Receiver       string        `yaml:"receiver"`
 			Routes         []interface{} `yaml:"routes,omitempty"`
 		} `yaml:"route"`
 		Receivers []struct {
-			Name         string        `yaml:"name"`
-			EmailConfigs []interface{} `yaml:"email_configs,omitempty"`
+			Name           string        `yaml:"name"`
+			EmailConfigs   []interface{} `yaml:"email_configs,omitempty"`
 			WebhookConfigs []interface{} `yaml:"webhook_configs,omitempty"`
 		} `yaml:"receivers"`
 	}

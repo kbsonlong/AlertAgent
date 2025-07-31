@@ -1,0 +1,292 @@
+# Fluentd 配置文件
+# 用于收集AlertAgent系统日志
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-config
+  namespace: logging
+  labels:
+    app: fluentd
+data:
+  fluent.conf: |
+    # 输入源配置
+    <source>
+      @type tail
+      @id alertagent_core_logs
+      path /var/log/containers/alertagent-core-*.log
+      pos_file /var/log/fluentd-positions/alertagent-core.log.pos
+      tag alertagent.core
+      format json
+      time_key time
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      keep_time_key true
+    </source>
+
+    <source>
+      @type tail
+      @id alertagent_worker_logs
+      path /var/log/containers/alertagent-worker-*.log
+      pos_file /var/log/fluentd-positions/alertagent-worker.log.pos
+      tag alertagent.worker
+      format json
+      time_key time
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      keep_time_key true
+    </source>
+
+    <source>
+      @type tail
+      @id mysql_logs
+      path /var/log/containers/alertagent-mysql-*.log
+      pos_file /var/log/fluentd-positions/mysql.log.pos
+      tag alertagent.mysql
+      format none
+    </source>
+
+    <source>
+      @type tail
+      @id redis_logs
+      path /var/log/containers/alertagent-redis-*.log
+      pos_file /var/log/fluentd-positions/redis.log.pos
+      tag alertagent.redis
+      format none
+    </source>
+
+    # 过滤器配置
+    <filter alertagent.**>
+      @type kubernetes_metadata
+      @id filter_kube_metadata
+      kubernetes_url "#{ENV['FLUENT_FILTER_KUBERNETES_URL'] || 'https://' + ENV.fetch('KUBERNETES_SERVICE_HOST') + ':' + ENV.fetch('KUBERNETES_SERVICE_PORT') + '/api'}"
+      verify_ssl "#{ENV['KUBERNETES_VERIFY_SSL'] || true}"
+      ca_file "#{ENV['KUBERNETES_CA_FILE']}"
+      skip_labels "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_LABELS'] || 'false'}"
+      skip_container_metadata "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_CONTAINER_METADATA'] || 'false'}"
+      skip_master_url "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_MASTER_URL'] || 'false'}"
+      skip_namespace_metadata "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_NAMESPACE_METADATA'] || 'false'}"
+    </filter>
+
+    # 日志解析和增强
+    <filter alertagent.core>
+      @type parser
+      key_name log
+      reserve_data true
+      <parse>
+        @type json
+        time_key timestamp
+        time_format %Y-%m-%dT%H:%M:%S.%NZ
+      </parse>
+    </filter>
+
+    <filter alertagent.worker>
+      @type parser
+      key_name log
+      reserve_data true
+      <parse>
+        @type json
+        time_key timestamp
+        time_format %Y-%m-%dT%H:%M:%S.%NZ
+      </parse>
+    </filter>
+
+    # 添加标签和元数据
+    <filter alertagent.**>
+      @type record_transformer
+      <record>
+        hostname "#{Socket.gethostname}"
+        environment "#{ENV['ENVIRONMENT'] || 'production'}"
+        cluster "#{ENV['CLUSTER_NAME'] || 'alertagent-cluster'}"
+        service_name ${tag_parts[1]}
+      </record>
+    </filter>
+
+    # 错误日志特殊处理
+    <filter alertagent.**>
+      @type grep
+      <regexp>
+        key level
+        pattern ^(ERROR|FATAL|error|fatal)$
+      </regexp>
+      tag error.${tag}
+    </filter>
+
+    # 输出配置 - Elasticsearch
+    <match alertagent.**>
+      @type elasticsearch
+      @id out_es
+      @log_level info
+      include_tag_key true
+      host "#{ENV['FLUENT_ELASTICSEARCH_HOST'] || 'elasticsearch'}"
+      port "#{ENV['FLUENT_ELASTICSEARCH_PORT'] || '9200'}"
+      path "#{ENV['FLUENT_ELASTICSEARCH_PATH'] || ''}"
+      scheme "#{ENV['FLUENT_ELASTICSEARCH_SCHEME'] || 'http'}"
+      ssl_verify "#{ENV['FLUENT_ELASTICSEARCH_SSL_VERIFY'] || 'true'}"
+      ssl_version "#{ENV['FLUENT_ELASTICSEARCH_SSL_VERSION'] || 'TLSv1_2'}"
+      user "#{ENV['FLUENT_ELASTICSEARCH_USER'] || ''}"
+      password "#{ENV['FLUENT_ELASTICSEARCH_PASSWORD'] || ''}"
+      reload_connections "#{ENV['FLUENT_ELASTICSEARCH_RELOAD_CONNECTIONS'] || 'false'}"
+      reconnect_on_error "#{ENV['FLUENT_ELASTICSEARCH_RECONNECT_ON_ERROR'] || 'true'}"
+      reload_on_failure "#{ENV['FLUENT_ELASTICSEARCH_RELOAD_ON_FAILURE'] || 'true'}"
+      log_es_400_reason "#{ENV['FLUENT_ELASTICSEARCH_LOG_ES_400_REASON'] || 'false'}"
+      logstash_prefix "#{ENV['FLUENT_ELASTICSEARCH_LOGSTASH_PREFIX'] || 'alertagent'}"
+      logstash_dateformat "#{ENV['FLUENT_ELASTICSEARCH_LOGSTASH_DATEFORMAT'] || '%Y.%m.%d'}"
+      logstash_format "#{ENV['FLUENT_ELASTICSEARCH_LOGSTASH_FORMAT'] || 'true'}"
+      index_name "#{ENV['FLUENT_ELASTICSEARCH_LOGSTASH_INDEX_NAME'] || 'alertagent'}"
+      type_name "#{ENV['FLUENT_ELASTICSEARCH_LOGSTASH_TYPE_NAME'] || '_doc'}"
+      <buffer>
+        flush_thread_count "#{ENV['FLUENT_ELASTICSEARCH_BUFFER_FLUSH_THREAD_COUNT'] || '8'}"
+        flush_interval "#{ENV['FLUENT_ELASTICSEARCH_BUFFER_FLUSH_INTERVAL'] || '5s'}"
+        chunk_limit_size "#{ENV['FLUENT_ELASTICSEARCH_BUFFER_CHUNK_LIMIT_SIZE'] || '2M'}"
+        queue_limit_length "#{ENV['FLUENT_ELASTICSEARCH_BUFFER_QUEUE_LIMIT_LENGTH'] || '32'}"
+        retry_max_interval "#{ENV['FLUENT_ELASTICSEARCH_BUFFER_RETRY_MAX_INTERVAL'] || '30'}"
+        retry_forever true
+      </buffer>
+    </match>
+
+    # 错误日志单独输出
+    <match error.alertagent.**>
+      @type elasticsearch
+      @id out_es_error
+      @log_level info
+      include_tag_key true
+      host "#{ENV['FLUENT_ELASTICSEARCH_HOST'] || 'elasticsearch'}"
+      port "#{ENV['FLUENT_ELASTICSEARCH_PORT'] || '9200'}"
+      path "#{ENV['FLUENT_ELASTICSEARCH_PATH'] || ''}"
+      scheme "#{ENV['FLUENT_ELASTICSEARCH_SCHEME'] || 'http'}"
+      ssl_verify "#{ENV['FLUENT_ELASTICSEARCH_SSL_VERIFY'] || 'true'}"
+      user "#{ENV['FLUENT_ELASTICSEARCH_USER'] || ''}"
+      password "#{ENV['FLUENT_ELASTICSEARCH_PASSWORD'] || ''}"
+      logstash_prefix "alertagent-error"
+      logstash_dateformat "%Y.%m.%d"
+      logstash_format true
+      index_name "alertagent-error"
+      type_name "_doc"
+      <buffer>
+        flush_thread_count 2
+        flush_interval 5s
+        chunk_limit_size 2M
+        queue_limit_length 8
+        retry_max_interval 30
+        retry_forever true
+      </buffer>
+    </match>
+
+    # 备用输出 - 文件
+    <match **>
+      @type file
+      @id out_file
+      path /var/log/fluent/backup
+      time_slice_format %Y%m%d
+      time_slice_wait 10m
+      time_format %Y%m%dT%H%M%S%z
+      compress gzip
+      utc
+    </match>
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd
+  namespace: logging
+  labels:
+    app: fluentd
+spec:
+  selector:
+    matchLabels:
+      app: fluentd
+  template:
+    metadata:
+      labels:
+        app: fluentd
+    spec:
+      serviceAccountName: fluentd
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      containers:
+      - name: fluentd
+        image: fluent/fluentd-kubernetes-daemonset:v1-debian-elasticsearch
+        env:
+        - name: FLUENT_ELASTICSEARCH_HOST
+          value: "elasticsearch.logging.svc.cluster.local"
+        - name: FLUENT_ELASTICSEARCH_PORT
+          value: "9200"
+        - name: FLUENT_ELASTICSEARCH_SCHEME
+          value: "http"
+        - name: FLUENT_UID
+          value: "0"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: CLUSTER_NAME
+          value: "alertagent-cluster"
+        resources:
+          limits:
+            memory: 512Mi
+            cpu: 200m
+          requests:
+            memory: 256Mi
+            cpu: 100m
+        volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+        - name: fluentd-config
+          mountPath: /fluentd/etc/fluent.conf
+          subPath: fluent.conf
+        - name: fluentd-positions
+          mountPath: /var/log/fluentd-positions
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+      - name: fluentd-config
+        configMap:
+          name: fluentd-config
+      - name: fluentd-positions
+        hostPath:
+          path: /var/log/fluentd-positions
+          type: DirectoryOrCreate
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluentd
+  namespace: logging
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fluentd
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluentd
+roleRef:
+  kind: ClusterRole
+  name: fluentd
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: fluentd
+  namespace: logging

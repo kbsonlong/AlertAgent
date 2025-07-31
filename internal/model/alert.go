@@ -42,10 +42,16 @@ type Alert struct {
 	Handler     string         `json:"handler,omitempty" gorm:"type:varchar(100)"`
 	HandleTime  *time.Time     `json:"-"`
 	HandleNote  string         `json:"handle_note,omitempty" gorm:"type:text"`
-	Analysis    string         `json:"analysis,omitempty" gorm:"type:text"`
-	NotifyTime  *time.Time     `json:"-"`
-	NotifyCount int            `json:"notify_count,omitempty" gorm:"default:0"`
-	Severity    string         `json:"severity" gorm:"type:varchar(20);not null;default:'medium'"`
+	Analysis           string         `json:"analysis,omitempty" gorm:"type:text"`
+	AnalysisStatus     string         `json:"analysis_status" gorm:"type:varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;default:'pending'"`
+	AnalysisResult     string         `json:"analysis_result" gorm:"type:json"`
+	AISummary          string         `json:"ai_summary" gorm:"type:text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"`
+	SimilarAlerts      string         `json:"similar_alerts" gorm:"type:json"`
+	ResolutionSuggestion string       `json:"resolution_suggestion" gorm:"type:text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"`
+	Fingerprint        string         `json:"fingerprint" gorm:"type:varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"`
+	NotifyTime         *time.Time     `json:"-"`
+	NotifyCount        int            `json:"notify_count,omitempty" gorm:"default:0"`
+	Severity           string         `json:"severity" gorm:"type:varchar(20);not null;default:'medium'"`
 }
 
 // Validate 验证告警数据
@@ -107,10 +113,16 @@ type AlertResponse struct {
 	Handler     string `json:"handler,omitempty"`
 	HandleTime  string `json:"handle_time,omitempty"`
 	HandleNote  string `json:"handle_note,omitempty"`
-	Analysis    string `json:"analysis,omitempty"`
-	NotifyTime  string `json:"notify_time,omitempty"`
-	NotifyCount int    `json:"notify_count,omitempty"`
-	Severity    string `json:"severity"`
+	Analysis             string `json:"analysis,omitempty"`
+	AnalysisStatus       string `json:"analysis_status"`
+	AnalysisResult       string `json:"analysis_result,omitempty"`
+	AISummary            string `json:"ai_summary,omitempty"`
+	SimilarAlerts        string `json:"similar_alerts,omitempty"`
+	ResolutionSuggestion string `json:"resolution_suggestion,omitempty"`
+	Fingerprint          string `json:"fingerprint,omitempty"`
+	NotifyTime           string `json:"notify_time,omitempty"`
+	NotifyCount          int    `json:"notify_count,omitempty"`
+	Severity             string `json:"severity"`
 }
 
 // ToResponse 转换为响应格式
@@ -131,9 +143,15 @@ func (a *Alert) ToResponse() *AlertResponse {
 		GroupID:     a.GroupID,
 		Handler:     a.Handler,
 		HandleNote:  a.HandleNote,
-		Analysis:    a.Analysis,
-		NotifyCount: a.NotifyCount,
-		Severity:    a.Severity,
+		Analysis:             a.Analysis,
+		AnalysisStatus:       a.AnalysisStatus,
+		AnalysisResult:       a.AnalysisResult,
+		AISummary:            a.AISummary,
+		SimilarAlerts:        a.SimilarAlerts,
+		ResolutionSuggestion: a.ResolutionSuggestion,
+		Fingerprint:          a.Fingerprint,
+		NotifyCount:          a.NotifyCount,
+		Severity:             a.Severity,
 	}
 	if a.HandleTime != nil {
 		resp.HandleTime = a.HandleTime.Format(time.RFC3339)
@@ -152,6 +170,69 @@ func (a *Alert) MarshalBinary() ([]byte, error) {
 // UnmarshalBinary 实现 encoding.BinaryUnmarshaler 接口
 func (a *Alert) UnmarshalBinary(data []byte) error {
 	return json.Unmarshal(data, a)
+}
+
+// GetAnalysisResultMap 获取分析结果映射
+func (a *Alert) GetAnalysisResultMap() (map[string]interface{}, error) {
+	if a.AnalysisResult == "" {
+		return make(map[string]interface{}), nil
+	}
+	var result map[string]interface{}
+	err := json.Unmarshal([]byte(a.AnalysisResult), &result)
+	return result, err
+}
+
+// SetAnalysisResultMap 设置分析结果映射
+func (a *Alert) SetAnalysisResultMap(result map[string]interface{}) error {
+	if result == nil {
+		a.AnalysisResult = ""
+		return nil
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	a.AnalysisResult = string(data)
+	return nil
+}
+
+// GetSimilarAlertsList 获取相似告警列表
+func (a *Alert) GetSimilarAlertsList() ([]SimilarAlert, error) {
+	if a.SimilarAlerts == "" {
+		return make([]SimilarAlert, 0), nil
+	}
+	var alerts []SimilarAlert
+	err := json.Unmarshal([]byte(a.SimilarAlerts), &alerts)
+	return alerts, err
+}
+
+// SetSimilarAlertsList 设置相似告警列表
+func (a *Alert) SetSimilarAlertsList(alerts []SimilarAlert) error {
+	if alerts == nil {
+		a.SimilarAlerts = ""
+		return nil
+	}
+	data, err := json.Marshal(alerts)
+	if err != nil {
+		return err
+	}
+	a.SimilarAlerts = string(data)
+	return nil
+}
+
+// IsAnalyzed 检查是否已分析
+func (a *Alert) IsAnalyzed() bool {
+	return a.AnalysisStatus == "completed" || a.AnalysisStatus == "analyzed"
+}
+
+// IsAnalyzing 检查是否正在分析
+func (a *Alert) IsAnalyzing() bool {
+	return a.AnalysisStatus == "analyzing" || a.AnalysisStatus == "processing"
+}
+
+// AnalysisFailed 检查分析是否失败
+func (a *Alert) AnalysisFailed() bool {
+	return a.AnalysisStatus == "failed" || a.AnalysisStatus == "error"
 }
 
 // SimilarAlert 相似告警

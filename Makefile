@@ -1,223 +1,396 @@
-# AlertAgent 开发环境管理 Makefile
-# 作者: AlertAgent Team
-# 版本: 1.0.0
+# AlertAgent Makefile
+# 提供统一的构建、测试和部署命令
 
-.PHONY: help dev dev-stop dev-restart docker-dev docker-dev-stop docker-dev-restart clean build test lint deps check install
+# 变量定义
+PROJECT_NAME := alertagent
+VERSION := $(shell git describe --tags --always --dirty)
+BUILD_TIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
+GO_VERSION := $(shell go version | cut -d' ' -f3)
+GIT_COMMIT := $(shell git rev-parse HEAD)
+
+# 构建标志
+LDFLAGS := -ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT) -s -w"
+
+# 目录定义
+BIN_DIR := bin
+DIST_DIR := dist
+COVERAGE_DIR := coverage
+TEST_RESULTS_DIR := test-results
+
+# Go相关变量
+GOOS := $(shell go env GOOS)
+GOARCH := $(shell go env GOARCH)
+
+# Docker相关变量
+DOCKER_REGISTRY := alertagent
+DOCKER_TAG := $(VERSION)
 
 # 默认目标
+.DEFAULT_GOAL := help
+
+# 帮助信息
+.PHONY: help
 help: ## 显示帮助信息
-	@echo "AlertAgent 开发环境管理命令"
-	@echo "============================"
+	@echo "AlertAgent 构建系统"
 	@echo ""
-	@echo "本地开发环境:"
-	@echo "  dev              启动本地开发环境 (MySQL + Redis + Go + React)"
-	@echo "  dev-stop         停止本地开发环境"
-	@echo "  dev-restart      重启本地开发环境"
-	@echo ""
-	@echo "Docker 开发环境:"
-	@echo "  docker-dev       启动 Docker 开发环境"
-	@echo "  docker-dev-stop  停止 Docker 开发环境"
-	@echo "  docker-dev-restart 重启 Docker 开发环境"
-	@echo "  docker-clean     停止并清理所有 Docker 资源"
-	@echo ""
-	@echo "项目管理:"
-	@echo "  deps             安装项目依赖"
-	@echo "  build            构建项目"
-	@echo "  test             运行测试"
-	@echo "  lint             代码检查"
-	@echo "  clean            清理构建文件"
-	@echo "  check            检查开发环境"
-	@echo "  install          安装开发工具"
-	@echo ""
-	@echo "使用示例:"
-	@echo "  make dev         # 启动本地开发环境"
-	@echo "  make docker-dev  # 启动 Docker 开发环境"
-	@echo "  make test        # 运行测试"
+	@echo "可用命令:"
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-# 本地开发环境
-dev: ## 启动本地开发环境
-	@echo "🚀 启动本地开发环境..."
-	@chmod +x scripts/dev-setup.sh
-	@./scripts/dev-setup.sh
+# 清理
+.PHONY: clean
+clean: ## 清理构建产物
+	@echo "清理构建产物..."
+	@rm -rf $(BIN_DIR) $(DIST_DIR) $(COVERAGE_DIR) $(TEST_RESULTS_DIR)
+	@go clean -cache -testcache -modcache
+	@docker system prune -f
 
-dev-stop: ## 停止本地开发环境
-	@echo "🛑 停止本地开发环境..."
-	@chmod +x scripts/dev-stop.sh
-	@./scripts/dev-stop.sh
-
-dev-restart: ## 重启本地开发环境
-	@echo "🔄 重启本地开发环境..."
-	@chmod +x scripts/dev-restart.sh
-	@./scripts/dev-restart.sh
-
-# Docker 开发环境
-docker-dev: ## 启动 Docker 开发环境
-	@echo "🐳 启动 Docker 开发环境..."
-	@chmod +x scripts/docker-dev-setup.sh
-	@./scripts/docker-dev-setup.sh
-
-docker-dev-stop: ## 停止 Docker 开发环境
-	@echo "🐳 停止 Docker 开发环境..."
-	@chmod +x scripts/docker-dev-stop.sh
-	@./scripts/docker-dev-stop.sh
-
-docker-dev-restart: ## 重启 Docker 开发环境
-	@echo "🐳 重启 Docker 开发环境..."
-	@make docker-dev-stop
-	@sleep 2
-	@make docker-dev
-
-docker-clean: ## 停止并清理所有 Docker 资源
-	@echo "🧹 清理 Docker 资源..."
-	@chmod +x scripts/docker-dev-stop.sh
-	@./scripts/docker-dev-stop.sh --cleanup
-
-# 项目管理
-deps: ## 安装项目依赖
-	@echo "📦 安装项目依赖..."
-	@echo "安装 Go 依赖..."
+# 依赖管理
+.PHONY: deps
+deps: ## 下载依赖
+	@echo "下载Go依赖..."
 	@go mod download
 	@go mod tidy
-	@echo "安装前端依赖..."
-	@cd web && npm install
-	@echo "✅ 依赖安装完成"
+	@go mod verify
 
-build: ## 构建项目
-	@echo "🔨 构建项目..."
-	@echo "构建后端..."
-	@go build -o bin/alertagent cmd/main.go
+.PHONY: deps-update
+deps-update: ## 更新依赖
+	@echo "更新Go依赖..."
+	@go get -u ./...
+	@go mod tidy
+
+# 代码质量检查
+.PHONY: lint
+lint: ## 运行代码检查
+	@echo "运行代码检查..."
+	@go vet ./...
+	@golangci-lint run --timeout=5m
+
+.PHONY: fmt
+fmt: ## 格式化代码
+	@echo "格式化代码..."
+	@go fmt ./...
+	@goimports -w .
+
+.PHONY: security
+security: ## 安全扫描
+	@echo "运行安全扫描..."
+	@gosec ./...
+
+# 测试相关
+.PHONY: test
+test: ## 运行所有测试
+	@./scripts/test_automation.sh all -r
+
+.PHONY: test-unit
+test-unit: ## 运行单元测试
+	@./scripts/test_automation.sh unit -c
+
+.PHONY: test-integration
+test-integration: ## 运行集成测试
+	@./scripts/test_automation.sh integration -v
+
+.PHONY: test-performance
+test-performance: ## 运行性能测试
+	@./scripts/test_automation.sh performance -r
+
+.PHONY: test-frontend
+test-frontend: ## 运行前端测试
+	@./scripts/test_automation.sh frontend
+
+.PHONY: test-coverage
+test-coverage: ## 生成测试覆盖率报告
+	@echo "生成测试覆盖率报告..."
+	@mkdir -p $(COVERAGE_DIR)
+	@go test -v -race -coverprofile=$(COVERAGE_DIR)/coverage.out -covermode=atomic ./internal/...
+	@go tool cover -html=$(COVERAGE_DIR)/coverage.out -o $(COVERAGE_DIR)/coverage.html
+	@go tool cover -func=$(COVERAGE_DIR)/coverage.out | tail -1
+
+.PHONY: test-setup
+test-setup: ## 设置测试环境
+	@./scripts/test_automation.sh --setup
+
+.PHONY: test-cleanup
+test-cleanup: ## 清理测试环境
+	@./scripts/test_automation.sh --clean
+
+# 构建相关
+.PHONY: build
+build: deps ## 构建所有二进制文件
+	@echo "构建二进制文件..."
+	@mkdir -p $(BIN_DIR)
+	@go build $(LDFLAGS) -o $(BIN_DIR)/$(PROJECT_NAME) cmd/main.go
+	@go build $(LDFLAGS) -o $(BIN_DIR)/$(PROJECT_NAME)-worker cmd/worker/main.go
+	@go build $(LDFLAGS) -o $(BIN_DIR)/$(PROJECT_NAME)-sidecar cmd/sidecar/main.go
+	@go build $(LDFLAGS) -o $(BIN_DIR)/$(PROJECT_NAME)-migrate cmd/migrate/main.go
+
+.PHONY: build-core
+build-core: deps ## 构建核心服务
+	@echo "构建核心服务..."
+	@mkdir -p $(BIN_DIR)
+	@go build $(LDFLAGS) -o $(BIN_DIR)/$(PROJECT_NAME) cmd/main.go
+
+.PHONY: build-worker
+build-worker: deps ## 构建Worker服务
+	@echo "构建Worker服务..."
+	@mkdir -p $(BIN_DIR)
+	@go build $(LDFLAGS) -o $(BIN_DIR)/$(PROJECT_NAME)-worker cmd/worker/main.go
+
+.PHONY: build-sidecar
+build-sidecar: deps ## 构建Sidecar服务
+	@echo "构建Sidecar服务..."
+	@mkdir -p $(BIN_DIR)
+	@go build $(LDFLAGS) -o $(BIN_DIR)/$(PROJECT_NAME)-sidecar cmd/sidecar/main.go
+
+.PHONY: build-frontend
+build-frontend: ## 构建前端
 	@echo "构建前端..."
-	@cd web && npm run build
-	@echo "✅ 构建完成"
+	@cd web && npm ci && npm run build
 
-test: ## 运行测试
-	@echo "🧪 运行测试..."
-	@echo "运行后端测试..."
-	@go test -v ./...
-	@echo "运行前端测试..."
-	@cd web && npm test
-	@echo "✅ 测试完成"
+# 跨平台构建
+.PHONY: build-all
+build-all: deps ## 构建所有平台的二进制文件
+	@echo "构建所有平台的二进制文件..."
+	@mkdir -p $(DIST_DIR)
+	@for os in linux darwin windows; do \
+		for arch in amd64 arm64; do \
+			if [ "$$os" = "windows" ] && [ "$$arch" = "arm64" ]; then continue; fi; \
+			echo "构建 $$os/$$arch..."; \
+			GOOS=$$os GOARCH=$$arch go build $(LDFLAGS) -o $(DIST_DIR)/$(PROJECT_NAME)-$$os-$$arch cmd/main.go; \
+			GOOS=$$os GOARCH=$$arch go build $(LDFLAGS) -o $(DIST_DIR)/$(PROJECT_NAME)-worker-$$os-$$arch cmd/worker/main.go; \
+			GOOS=$$os GOARCH=$$arch go build $(LDFLAGS) -o $(DIST_DIR)/$(PROJECT_NAME)-sidecar-$$os-$$arch cmd/sidecar/main.go; \
+			if [ "$$os" = "windows" ]; then \
+				mv $(DIST_DIR)/$(PROJECT_NAME)-$$os-$$arch $(DIST_DIR)/$(PROJECT_NAME)-$$os-$$arch.exe; \
+				mv $(DIST_DIR)/$(PROJECT_NAME)-worker-$$os-$$arch $(DIST_DIR)/$(PROJECT_NAME)-worker-$$os-$$arch.exe; \
+				mv $(DIST_DIR)/$(PROJECT_NAME)-sidecar-$$os-$$arch $(DIST_DIR)/$(PROJECT_NAME)-sidecar-$$os-$$arch.exe; \
+			fi; \
+		done; \
+	done
 
-lint: ## 代码检查
-	@echo "🔍 代码检查..."
-	@echo "检查 Go 代码..."
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run; \
-	else \
-		echo "⚠️  golangci-lint 未安装，跳过 Go 代码检查"; \
-	fi
-	@echo "检查前端代码..."
-	@cd web && npm run lint
-	@echo "✅ 代码检查完成"
+# Docker相关
+.PHONY: docker-build
+docker-build: ## 构建Docker镜像
+	@echo "构建Docker镜像..."
+	@docker build -t $(DOCKER_REGISTRY)/core:$(DOCKER_TAG) .
+	@docker build -f Dockerfile.worker -t $(DOCKER_REGISTRY)/worker:$(DOCKER_TAG) .
+	@docker build -f Dockerfile.sidecar -t $(DOCKER_REGISTRY)/sidecar:$(DOCKER_TAG) .
 
-clean: ## 清理构建文件
-	@echo "🧹 清理构建文件..."
-	@rm -rf bin/
-	@rm -rf web/dist/
-	@rm -rf logs/
-	@rm -f .backend.pid .frontend.pid
-	@echo "✅ 清理完成"
+.PHONY: docker-push
+docker-push: docker-build ## 推送Docker镜像
+	@echo "推送Docker镜像..."
+	@docker push $(DOCKER_REGISTRY)/core:$(DOCKER_TAG)
+	@docker push $(DOCKER_REGISTRY)/worker:$(DOCKER_TAG)
+	@docker push $(DOCKER_REGISTRY)/sidecar:$(DOCKER_TAG)
 
-check: ## 检查开发环境
-	@echo "🔍 运行详细环境检查..."
-	@chmod +x scripts/check-env.sh
-	@./scripts/check-env.sh
+.PHONY: docker-run
+docker-run: ## 运行Docker容器
+	@echo "运行Docker容器..."
+	@docker-compose up -d
 
-check-simple: ## 简单环境检查
-	@echo "🔍 检查开发环境..."
-	@echo "检查 Go 版本:"
-	@go version || echo "❌ Go 未安装"
-	@echo "检查 Node.js 版本:"
-	@node --version || echo "❌ Node.js 未安装"
-	@echo "检查 npm 版本:"
-	@npm --version || echo "❌ npm 未安装"
-	@echo "检查 MySQL:"
-	@mysql --version || echo "❌ MySQL 未安装"
-	@echo "检查 Redis:"
-	@redis-server --version || echo "❌ Redis 未安装"
-	@echo "检查 Docker:"
-	@docker --version || echo "❌ Docker 未安装"
-	@echo "检查 Docker Compose:"
-	@docker-compose --version || docker compose version || echo "❌ Docker Compose 未安装"
-	@echo "✅ 环境检查完成"
+.PHONY: docker-stop
+docker-stop: ## 停止Docker容器
+	@echo "停止Docker容器..."
+	@docker-compose down
 
-install: ## 安装开发工具
-	@echo "🛠️  安装开发工具..."
-	@echo "安装 golangci-lint..."
-	@if ! command -v golangci-lint >/dev/null 2>&1; then \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.54.2; \
-	else \
-		echo "golangci-lint 已安装"; \
-	fi
-	@echo "安装 air (热重载工具)..."
-	@if ! command -v air >/dev/null 2>&1; then \
-		go install github.com/cosmtrek/air@latest; \
-	else \
-		echo "air 已安装"; \
-	fi
-	@echo "✅ 开发工具安装完成"
+# 开发相关
+.PHONY: dev
+dev: ## 启动开发环境
+	@echo "启动开发环境..."
+	@./scripts/dev-setup.sh
 
-# 快捷命令别名
-start: dev ## 启动开发环境 (dev 的别名)
-stop: dev-stop ## 停止开发环境 (dev-stop 的别名)
-restart: dev-restart ## 重启开发环境 (dev-restart 的别名)
+.PHONY: dev-stop
+dev-stop: ## 停止开发环境
+	@echo "停止开发环境..."
+	@./scripts/dev-stop.sh
 
-# 显示当前状态
-status: ## 显示服务状态
-	@echo "📊 服务状态检查"
-	@echo "================"
-	@echo "检查端口占用情况:"
-	@echo "后端 (8080):"
-	@lsof -i :8080 || echo "  端口 8080 未被占用"
-	@echo "前端 (5173):"
-	@lsof -i :5173 || echo "  端口 5173 未被占用"
-	@echo "MySQL (3306):"
-	@lsof -i :3306 || echo "  端口 3306 未被占用"
-	@echo "Redis (6379):"
-	@lsof -i :6379 || echo "  端口 6379 未被占用"
-	@echo "Ollama (11434):"
-	@lsof -i :11434 || echo "  端口 11434 未被占用"
-	@echo ""
-	@echo "检查 Docker 容器:"
-	@if command -v docker >/dev/null 2>&1; then \
-		docker ps --filter "name=alertagent" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || echo "  没有运行的 AlertAgent 容器"; \
-	else \
-		echo "  Docker 未安装"; \
-	fi
+.PHONY: dev-restart
+dev-restart: dev-stop dev ## 重启开发环境
 
-# 演示和测试
-demo: ## 运行功能演示
-	@echo "🎯 运行功能演示..."
-	@chmod +x scripts/demo.sh
-	@./scripts/demo.sh
+.PHONY: run
+run: build ## 运行应用
+	@echo "运行应用..."
+	@./$(BIN_DIR)/$(PROJECT_NAME)
 
-demo-api: ## 演示 API 功能
-	@echo "🎯 演示 API 功能..."
-	@chmod +x scripts/demo.sh
-	@./scripts/demo.sh --api
+.PHONY: run-worker
+run-worker: build-worker ## 运行Worker
+	@echo "运行Worker..."
+	@./$(BIN_DIR)/$(PROJECT_NAME)-worker
 
-demo-frontend: ## 演示前端功能
-	@echo "🎯 演示前端功能..."
-	@chmod +x scripts/demo.sh
-	@./scripts/demo.sh --frontend
+.PHONY: run-sidecar
+run-sidecar: build-sidecar ## 运行Sidecar
+	@echo "运行Sidecar..."
+	@./$(BIN_DIR)/$(PROJECT_NAME)-sidecar
 
-# 日志查看
+# 数据库相关
+.PHONY: db-migrate
+db-migrate: build ## 运行数据库迁移
+	@echo "运行数据库迁移..."
+	@./$(BIN_DIR)/$(PROJECT_NAME)-migrate
+
+.PHONY: db-setup
+db-setup: ## 设置数据库
+	@echo "设置数据库..."
+	@mysql -h localhost -u root -ppassword < scripts/init.sql
+
+.PHONY: db-reset
+db-reset: ## 重置数据库
+	@echo "重置数据库..."
+	@mysql -h localhost -u root -ppassword -e "DROP DATABASE IF EXISTS alertagent;"
+	@mysql -h localhost -u root -ppassword < scripts/init.sql
+
+# 部署相关
+.PHONY: deploy-staging
+deploy-staging: ## 部署到测试环境
+	@echo "部署到测试环境..."
+	@kubectl apply -f k8s/staging/
+
+.PHONY: deploy-production
+deploy-production: ## 部署到生产环境
+	@echo "部署到生产环境..."
+	@kubectl apply -f k8s/production/
+
+# 监控和日志
+.PHONY: logs
 logs: ## 查看应用日志
-	@echo "📋 查看应用日志"
-	@if [ -f "logs/alert_agent.log" ]; then \
-		tail -f logs/alert_agent.log; \
-	else \
-		echo "日志文件不存在: logs/alert_agent.log"; \
-	fi
+	@echo "查看应用日志..."
+	@docker-compose logs -f
 
-docker-logs: ## 查看 Docker 服务日志
-	@echo "📋 查看 Docker 服务日志"
-	@if [ -f "docker-compose.dev.yml" ]; then \
-		if docker compose version >/dev/null 2>&1; then \
-			docker compose -f docker-compose.dev.yml logs -f; \
-		else \
-			docker-compose -f docker-compose.dev.yml logs -f; \
-		fi; \
-	else \
-		echo "docker-compose.dev.yml 文件不存在"; \
-	fi
+.PHONY: logs-core
+logs-core: ## 查看核心服务日志
+	@echo "查看核心服务日志..."
+	@docker-compose logs -f alertagent-core
+
+.PHONY: logs-worker
+logs-worker: ## 查看Worker日志
+	@echo "查看Worker日志..."
+	@docker-compose logs -f alertagent-worker
+
+# 性能分析
+.PHONY: profile
+profile: ## 运行性能分析
+	@echo "运行性能分析..."
+	@go test -cpuprofile=cpu.prof -memprofile=mem.prof -bench=. ./tests/performance/...
+	@go tool pprof cpu.prof
+	@go tool pprof mem.prof
+
+.PHONY: benchmark
+benchmark: ## 运行基准测试
+	@echo "运行基准测试..."
+	@go test -bench=. -benchmem ./...
+
+# 文档生成
+.PHONY: docs
+docs: ## 生成文档
+	@echo "生成文档..."
+	@godoc -http=:6060
+
+.PHONY: swagger
+swagger: ## 生成API文档
+	@echo "生成API文档..."
+	@swag init -g cmd/main.go
+
+# 发布相关
+.PHONY: release
+release: clean test build-all docker-build ## 创建发布版本
+	@echo "创建发布版本 $(VERSION)..."
+	@mkdir -p $(DIST_DIR)/release
+	@tar -czf $(DIST_DIR)/release/$(PROJECT_NAME)-$(VERSION)-linux-amd64.tar.gz -C $(DIST_DIR) $(PROJECT_NAME)-linux-amd64 $(PROJECT_NAME)-worker-linux-amd64 $(PROJECT_NAME)-sidecar-linux-amd64
+	@tar -czf $(DIST_DIR)/release/$(PROJECT_NAME)-$(VERSION)-darwin-amd64.tar.gz -C $(DIST_DIR) $(PROJECT_NAME)-darwin-amd64 $(PROJECT_NAME)-worker-darwin-amd64 $(PROJECT_NAME)-sidecar-darwin-amd64
+	@zip -j $(DIST_DIR)/release/$(PROJECT_NAME)-$(VERSION)-windows-amd64.zip $(DIST_DIR)/$(PROJECT_NAME)-windows-amd64.exe $(DIST_DIR)/$(PROJECT_NAME)-worker-windows-amd64.exe $(DIST_DIR)/$(PROJECT_NAME)-sidecar-windows-amd64.exe
+
+.PHONY: tag
+tag: ## 创建Git标签
+	@echo "创建Git标签 $(VERSION)..."
+	@git tag -a $(VERSION) -m "Release $(VERSION)"
+	@git push origin $(VERSION)
+
+# CI/CD相关
+.PHONY: ci
+ci: deps lint test build ## CI流水线
+	@echo "CI流水线完成"
+
+.PHONY: cd
+cd: ci docker-build docker-push ## CD流水线
+	@echo "CD流水线完成"
+
+# 质量门禁
+.PHONY: quality-gate
+quality-gate: ## 质量门禁检查
+	@echo "运行质量门禁检查..."
+	@./scripts/quality_gate.sh
+
+# 安装工具
+.PHONY: install-tools
+install-tools: ## 安装开发工具
+	@echo "安装开发工具..."
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+	@go install golang.org/x/tools/cmd/goimports@latest
+	@go install github.com/swaggo/swag/cmd/swag@latest
+
+# 版本信息
+.PHONY: version
+version: ## 显示版本信息
+	@echo "项目: $(PROJECT_NAME)"
+	@echo "版本: $(VERSION)"
+	@echo "构建时间: $(BUILD_TIME)"
+	@echo "Go版本: $(GO_VERSION)"
+	@echo "Git提交: $(GIT_COMMIT)"
+
+# 健康检查
+.PHONY: health
+health: ## 健康检查
+	@echo "运行健康检查..."
+	@curl -f http://localhost:8080/health || echo "服务未运行"
+
+# 备份和恢复
+.PHONY: backup
+backup: ## 备份数据
+	@echo "备份数据..."
+	@./scripts/backup.sh
+
+.PHONY: restore
+restore: ## 恢复数据
+	@echo "恢复数据..."
+	@./scripts/restore.sh
+
+# 监控指标
+.PHONY: metrics
+metrics: ## 查看监控指标
+	@echo "查看监控指标..."
+	@curl -s http://localhost:8080/metrics
+
+# 调试相关
+.PHONY: debug
+debug: ## 调试模式运行
+	@echo "调试模式运行..."
+	@dlv debug cmd/main.go
+
+# 检查依赖更新
+.PHONY: check-updates
+check-updates: ## 检查依赖更新
+	@echo "检查依赖更新..."
+	@go list -u -m all
+
+# 生成模拟数据
+.PHONY: mock-data
+mock-data: ## 生成模拟数据
+	@echo "生成模拟数据..."
+	@./scripts/generate_mock_data.sh
+
+# 压力测试
+.PHONY: stress-test
+stress-test: ## 运行压力测试
+	@echo "运行压力测试..."
+	@./scripts/stress_test.sh
+
+# 确保脚本可执行
+$(shell chmod +x scripts/*.sh)
+
+# 检查必要的工具
+.PHONY: check-tools
+check-tools: ## 检查必要工具
+	@echo "检查必要工具..."
+	@command -v go >/dev/null 2>&1 || { echo "Go未安装"; exit 1; }
+	@command -v docker >/dev/null 2>&1 || { echo "Docker未安装"; exit 1; }
+	@command -v kubectl >/dev/null 2>&1 || { echo "kubectl未安装"; exit 1; }
+	@echo "所有必要工具已安装"

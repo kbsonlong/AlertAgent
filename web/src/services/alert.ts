@@ -1,115 +1,95 @@
-import { request } from '../utils/requests';
-
-// 类型定义
-export interface Alert {
-  id: number;
-  title: string;
-  content: string;
-  status: 'new' | 'acknowledged' | 'resolved';
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  source: string;
-  created_at: string;
-  updated_at: string;
-  analysis?: string;
-}
-
-export interface AlertAnalysis {
-  id: number;
-  alertId: number;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  result?: string;
-  error?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface AnalysisTask {
-  taskId: string;
-}
-
-// 告警相关API服务
+import { get, post, put } from '@/utils/request'
+import type { Alert, AlertAnalysis, AsyncTask, AsyncTaskResult, PaginatedResponse } from '@/types'
 
 /**
  * 获取告警列表
+ * @param params 查询参数
  */
-export const getAlerts = async () => {
-  const response = await request<Alert[]>('/api/v1/alerts', {
-    method: 'GET'
-  });
-  return response.data;
-};
+export const getAlerts = async (params?: {
+  page?: number
+  page_size?: number
+  status?: string
+  level?: string
+  search?: string
+}) => {
+  return get<PaginatedResponse<Alert>>('/api/v1/alerts', params)
+}
 
 /**
  * 获取单个告警详情
  * @param id 告警ID
  */
 export const getAlert = async (id: number) => {
-  const response = await request<Alert>(`/api/v1/alerts/${id}`, {
-    method: 'GET'
-  });
-  return response.data;
-};
+  return get<Alert>(`/api/v1/alerts/${id}`)
+}
 
 /**
  * 更新告警状态
  * @param id 告警ID
- * @param status 状态：acknowledged(已确认) 或 resolved(已解决)
+ * @param data 更新数据
  */
-export const updateAlertStatus = async (id: number, status: 'acknowledged' | 'resolved') => {
-  const response = await request<Alert>(`/api/v1/alerts/${id}`, {
-    method: 'PUT',
-    data: { status }
-  });
-  return response.data;
-};
+export const updateAlert = async (id: number, data: {
+  status?: 'acknowledged' | 'resolved'
+  handler?: string
+  handle_note?: string
+}) => {
+  return put<Alert>(`/api/v1/alerts/${id}`, data)
+}
 
 /**
  * 同步分析告警
  * @param id 告警ID
  */
 export const analyzeAlert = async (id: number) => {
-  return request<AlertAnalysis>(`/api/v1/alerts/${id}/analyze`, {
-    method: 'POST'
-  });
-};
+  return post<AlertAnalysis>(`/api/v1/alerts/${id}/analyze`)
+}
 
 /**
  * 异步分析告警
  * @param id 告警ID
  */
 export const asyncAnalyzeAlert = async (id: number) => {
-  const response = await request<{ task_id: number; submit_time: string }>(`/api/v1/alerts/${id}/async/analyze`, {
-    method: 'POST'
-  });
-  return response.data;
-};
+  return post<AsyncTask>(`/api/v1/alerts/${id}/async/analyze`)
+}
 
 /**
- * 获取分析结果
+ * 获取异步分析结果
  * @param taskId 任务ID
  */
 export const getAnalysisResult = async (taskId: number) => {
-  const response = await request<{ status: string; result?: string; error?: string; message?: string }>(`/api/v1/alerts/async/result/${taskId}`, {
-    method: 'GET'
-  });
-  return response.data;
-};
+  return get<AsyncTaskResult>(`/api/v1/alerts/async/result/${taskId}`)
+}
 
 /**
- * 获取分析状态（兼容旧接口）
- * @param id 告警ID
- */
-export const getAnalysisStatus = async (id: number) => {
-  return getAnalysisResult(id);
-};
-
-/**
- * 转换为知识库
+ * 转换告警为知识库
  * @param id 告警ID
  */
 export const convertToKnowledge = async (id: number) => {
-  const response = await request<{ id: number }>(`/api/v1/alerts/${id}/convert-to-knowledge`, {
-    method: 'POST'
-  });
-  return response.data;
-};
+  return post<{ id: number }>(`/api/v1/alerts/${id}/convert-to-knowledge`)
+}
+
+/**
+ * 批量更新告警状态
+ * @param ids 告警ID数组
+ * @param status 状态
+ */
+export const batchUpdateAlerts = async (ids: number[], status: 'acknowledged' | 'resolved') => {
+  return put<{ updated_count: number }>('/api/v1/alerts/batch', {
+    ids,
+    status
+  })
+}
+
+/**
+ * 获取告警统计信息
+ */
+export const getAlertStats = async () => {
+  return get<{
+    total: number
+    firing: number
+    acknowledged: number
+    resolved: number
+    by_level: Record<string, number>
+    by_source: Record<string, number>
+  }>('/api/v1/alerts/stats')
+}

@@ -56,10 +56,27 @@ func Init() error {
 		return fmt.Errorf("failed to get database instance: %w", err)
 	}
 
-	// 设置连接池
+	// 设置连接池参数
 	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
 	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
 	sqlDB.SetConnMaxLifetime(time.Hour)
+	sqlDB.SetConnMaxIdleTime(30 * time.Minute)
+
+	// 设置MySQL会话级别的优化参数
+	optimizationQueries := []string{
+		"SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO'",
+		"SET SESSION innodb_lock_wait_timeout = 50",
+		"SET SESSION lock_wait_timeout = 30",
+		"SET SESSION autocommit = 1",
+		"SET SESSION innodb_adaptive_hash_index = ON",
+	}
+
+	for _, query := range optimizationQueries {
+		if err := DB.Exec(query).Error; err != nil {
+			// 记录警告但不中断初始化
+			fmt.Printf("Warning: Failed to execute optimization query: %s, error: %v\n", query, err)
+		}
+	}
 
 	// 自动迁移数据库表
 	if err := autoMigrate(); err != nil {
@@ -372,4 +389,192 @@ func seedProviders() error {
 	}
 
 	return nil
+}
+// GetConnectionStats 获取连接池统计信息
+func GetConnectionStats() (map[string]interface{}, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	sqlDB, err := DB.DB()
+	if err != nil {
+		return nil, err
+	}
+
+	stats := sqlDB.Stats()
+	return map[string]interface{}{
+		"max_open_connections":     stats.MaxOpenConnections,
+		"open_connections":         stats.OpenConnections,
+		"in_use":                  stats.InUse,
+		"idle":                    stats.Idle,
+		"wait_count":              stats.WaitCount,
+		"wait_duration":           stats.WaitDuration.String(),
+		"max_idle_closed":         stats.MaxIdleClosed,
+		"max_idle_time_closed":    stats.MaxIdleTimeClosed,
+		"max_lifetime_closed":     stats.MaxLifetimeClosed,
+	}, nil
+}
+
+// OptimizeForHighLoad 为高负载场景优化数据库连接
+func OptimizeForHighLoad() error {
+	if DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	sqlDB, err := DB.DB()
+	if err != nil {
+		return err
+	}
+
+	// 高负载场景的连接池配置
+	sqlDB.SetMaxIdleConns(20)
+	sqlDB.SetMaxOpenConns(200)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(10 * time.Minute)
+
+	// 高负载优化查询
+	optimizationQueries := []string{
+		"SET SESSION innodb_buffer_pool_dump_at_shutdown = ON",
+		"SET SESSION innodb_buffer_pool_load_at_startup = ON",
+		"SET SESSION innodb_adaptive_hash_index = ON",
+		"SET SESSION innodb_change_buffering = all",
+		"SET SESSION innodb_flush_log_at_trx_commit = 2", // 提高写性能，但可能丢失1秒数据
+	}
+
+	for _, query := range optimizationQueries {
+		if err := DB.Exec(query).Error; err != nil {
+			fmt.Printf("Warning: Failed to execute high-load optimization query: %s, error: %v\n", query, err)
+		}
+	}
+
+	fmt.Println("Database optimized for high-load scenarios")
+	return nil
+}
+
+// OptimizeForReadHeavy 为读密集型场景优化数据库连接
+func OptimizeForReadHeavy() error {
+	if DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	sqlDB, err := DB.DB()
+	if err != nil {
+		return err
+	}
+
+	// 读密集型场景的连接池配置
+	sqlDB.SetMaxIdleConns(30)
+	sqlDB.SetMaxOpenConns(150)
+	sqlDB.SetConnMaxLifetime(2 * time.Hour)
+	sqlDB.SetConnMaxIdleTime(time.Hour)
+
+	// 读优化查询
+	optimizationQueries := []string{
+		"SET SESSION innodb_read_ahead_threshold = 0",
+		"SET SESSION read_buffer_size = 2097152",    // 2MB
+		"SET SESSION read_rnd_buffer_size = 8388608", // 8MB
+		"SET SESSION sort_buffer_size = 4194304",     // 4MB
+	}
+
+	for _, query := range optimizationQueries {
+		if err := DB.Exec(query).Error; err != nil {
+			fmt.Printf("Warning: Failed to execute read-heavy optimization query: %s, error: %v\n", query, err)
+		}
+	}
+
+	fmt.Println("Database optimized for read-heavy scenarios")
+	return nil
+}
+
+// AnalyzeTables 分析表以更新统计信息
+func AnalyzeTables() error {
+	if DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	tables := []string{
+		"alerts", "alert_rules", "rule_versions", "rule_distribution_records",
+		"config_sync_status", "config_sync_history", "config_sync_exceptions",
+		"task_queue", "worker_instances", "task_execution_history",
+		"user_notification_configs", "notification_records", "notification_plugins",
+		"knowledges", "providers", "notify_templates", "notify_groups",
+	}
+
+	for _, table := range tables {
+		if err := DB.Exec(fmt.Sprintf("ANALYZE TABLE %s", table)).Error; err != nil {
+			fmt.Printf("Warning: Failed to analyze table %s: %v\n", table, err)
+		}
+	}
+
+	fmt.Println("Table analysis completed")
+	return nil
+}
+
+// OptimizeTables 优化表以回收空间和重建索引
+func OptimizeTables() error {
+	if DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	tables := []string{
+		"alerts", "alert_rules", "config_sync_history", 
+		"task_execution_history", "notification_records",
+	}
+
+	for _, table := range tables {
+		if err := DB.Exec(fmt.Sprintf("OPTIMIZE TABLE %s", table)).Error; err != nil {
+			fmt.Printf("Warning: Failed to optimize table %s: %v\n", table, err)
+		}
+	}
+
+	fmt.Println("Table optimization completed")
+	return nil
+}
+
+// GetTableSizes 获取表大小统计
+func GetTableSizes() ([]map[string]interface{}, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	var results []map[string]interface{}
+	
+	query := `
+		SELECT 
+			table_name,
+			ROUND(((data_length + index_length) / 1024 / 1024), 2) as size_mb,
+			table_rows,
+			ROUND((index_length / 1024 / 1024), 2) as index_size_mb,
+			ROUND((data_length / 1024 / 1024), 2) as data_size_mb
+		FROM information_schema.tables 
+		WHERE table_schema = DATABASE()
+		AND table_type = 'BASE TABLE'
+		ORDER BY (data_length + index_length) DESC
+	`
+
+	rows, err := DB.Raw(query).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tableName string
+		var sizeMB, indexSizeMB, dataSizeMB float64
+		var tableRows int64
+
+		if err := rows.Scan(&tableName, &sizeMB, &tableRows, &indexSizeMB, &dataSizeMB); err != nil {
+			continue
+		}
+
+		results = append(results, map[string]interface{}{
+			"table_name":     tableName,
+			"size_mb":        sizeMB,
+			"table_rows":     tableRows,
+			"index_size_mb":  indexSizeMB,
+			"data_size_mb":   dataSizeMB,
+		})
+	}
+
+	return results, nil
 }

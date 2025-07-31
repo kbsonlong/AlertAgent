@@ -51,7 +51,7 @@ func (api *PluginAPI) GetPluginConfig(c *gin.Context) {
 	
 	config, err := api.pluginService.GetPluginConfig(pluginName)
 	if err != nil {
-		response.Error(c, http.StatusNotFound, err.Error())
+		response.Error(c, http.StatusNotFound, err.Error(), err)
 		return
 	}
 	
@@ -74,14 +74,14 @@ func (api *PluginAPI) SetPluginConfig(c *gin.Context) {
 	
 	var config plugins.PluginConfig
 	if err := c.ShouldBindJSON(&config); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid request body: "+err.Error())
+		response.Error(c, http.StatusBadRequest, "Invalid request body: "+err.Error(), err)
 		return
 	}
 	
 	config.Name = pluginName
 	
 	if err := api.pluginService.ConfigurePlugin(c.Request.Context(), pluginName, &config); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		response.Error(c, http.StatusBadRequest, err.Error(), err)
 		return
 	}
 	
@@ -104,12 +104,12 @@ func (api *PluginAPI) TestPluginConfig(c *gin.Context) {
 	
 	var config map[string]interface{}
 	if err := c.ShouldBindJSON(&config); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid request body: "+err.Error())
+		response.Error(c, http.StatusBadRequest, "Invalid request body: "+err.Error(), err)
 		return
 	}
 	
 	if err := api.pluginService.TestPluginConfig(c.Request.Context(), pluginName, config); err != nil {
-		response.Error(c, http.StatusBadRequest, "Plugin test failed: "+err.Error())
+		response.Error(c, http.StatusBadRequest, "Plugin test failed: "+err.Error(), err)
 		return
 	}
 	
@@ -130,7 +130,7 @@ func (api *PluginAPI) EnablePlugin(c *gin.Context) {
 	pluginName := c.Param("name")
 	
 	if err := api.pluginService.EnablePlugin(c.Request.Context(), pluginName); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		response.Error(c, http.StatusBadRequest, err.Error(), err)
 		return
 	}
 	
@@ -151,7 +151,7 @@ func (api *PluginAPI) DisablePlugin(c *gin.Context) {
 	pluginName := c.Param("name")
 	
 	if err := api.pluginService.DisablePlugin(c.Request.Context(), pluginName); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		response.Error(c, http.StatusBadRequest, err.Error(), err)
 		return
 	}
 	
@@ -173,7 +173,7 @@ func (api *PluginAPI) GetPluginSchema(c *gin.Context) {
 	
 	schema, err := api.pluginService.GetPluginSchema(pluginName)
 	if err != nil {
-		response.Error(c, http.StatusNotFound, err.Error())
+		response.Error(c, http.StatusNotFound, err.Error(), err)
 		return
 	}
 	
@@ -194,7 +194,7 @@ func (api *PluginAPI) HealthCheckPlugin(c *gin.Context) {
 	pluginName := c.Param("name")
 	
 	if err := api.pluginService.HealthCheckPlugin(c.Request.Context(), pluginName); err != nil {
-		response.Error(c, http.StatusBadRequest, "Plugin health check failed: "+err.Error())
+		response.Error(c, http.StatusBadRequest, "Plugin health check failed: "+err.Error(), err)
 		return
 	}
 	
@@ -239,7 +239,7 @@ func (api *PluginAPI) GetPluginStats(c *gin.Context) {
 	
 	stats, err := api.pluginService.GetPluginStats(pluginName)
 	if err != nil {
-		response.Error(c, http.StatusNotFound, err.Error())
+		response.Error(c, http.StatusNotFound, err.Error(), err)
 		return
 	}
 	
@@ -275,13 +275,13 @@ func (api *PluginAPI) SendTestNotification(c *gin.Context) {
 	
 	var message plugins.NotificationMessage
 	if err := c.ShouldBindJSON(&message); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid request body: "+err.Error())
+		response.Error(c, http.StatusBadRequest, "Invalid request body: "+err.Error(), err)
 		return
 	}
 	
 	result, err := api.pluginService.SendNotification(c.Request.Context(), pluginName, &message)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "Failed to send notification: "+err.Error())
+		response.Error(c, http.StatusBadRequest, "Failed to send notification: "+err.Error(), err)
 		return
 	}
 	
@@ -303,7 +303,7 @@ func (api *PluginAPI) GetPluginHealthStatus(c *gin.Context) {
 	
 	status, err := api.pluginService.GetPluginHealthStatus(pluginName)
 	if err != nil {
-		response.Error(c, http.StatusNotFound, err.Error())
+		response.Error(c, http.StatusNotFound, err.Error(), err)
 		return
 	}
 	
@@ -338,7 +338,7 @@ func (api *PluginAPI) GetPluginUsageStats(c *gin.Context) {
 	
 	stats, err := api.pluginService.GetPluginUsageStats(pluginName)
 	if err != nil {
-		response.Error(c, http.StatusNotFound, err.Error())
+		response.Error(c, http.StatusNotFound, err.Error(), err)
 		return
 	}
 	
@@ -374,12 +374,12 @@ func (api *PluginAPI) HotLoadPlugin(c *gin.Context) {
 	}
 	
 	if err := c.ShouldBindJSON(&request); err != nil {
-		response.Error(c, http.StatusBadRequest, "Invalid request body: "+err.Error())
+		response.Error(c, http.StatusBadRequest, "Invalid request body: "+err.Error(), err)
 		return
 	}
 	
 	if err := api.pluginService.HotLoadPlugin(request.PluginPath); err != nil {
-		response.Error(c, http.StatusBadRequest, "Failed to hot load plugin: "+err.Error())
+		response.Error(c, http.StatusBadRequest, "Failed to hot load plugin: "+err.Error(), err)
 		return
 	}
 	
@@ -400,7 +400,7 @@ func (api *PluginAPI) HotUnloadPlugin(c *gin.Context) {
 	pluginName := c.Param("name")
 	
 	if err := api.pluginService.HotUnloadPlugin(pluginName); err != nil {
-		response.Error(c, http.StatusBadRequest, "Failed to hot unload plugin: "+err.Error())
+		response.Error(c, http.StatusBadRequest, "Failed to hot unload plugin: "+err.Error(), err)
 		return
 	}
 	
@@ -421,7 +421,7 @@ func (api *PluginAPI) HotReloadPlugin(c *gin.Context) {
 	pluginName := c.Param("name")
 	
 	if err := api.pluginService.HotReloadPlugin(pluginName); err != nil {
-		response.Error(c, http.StatusBadRequest, "Failed to hot reload plugin: "+err.Error())
+		response.Error(c, http.StatusBadRequest, "Failed to hot reload plugin: "+err.Error(), err)
 		return
 	}
 	

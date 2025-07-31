@@ -232,7 +232,7 @@ func (s *WorkerMonitoringService) evaluateAlertRules(ctx context.Context) {
 	workers := s.manager.ListWorkers()
 	workerMetrics := s.scaler.GetMetrics()
 
-	for ruleName, rule := range rules {
+	for _, rule := range rules {
 		s.evaluateRule(ctx, rule, workers, workerMetrics)
 	}
 }
@@ -673,7 +673,7 @@ func (s *WorkerMonitoringService) generateDashboard() *MonitoringDashboard {
 	overview := &OverviewMetrics{}
 	overview.TotalWorkers = len(workers)
 
-	for name, worker := range workers {
+	for _, worker := range workers {
 		stats, err := worker.GetStats(context.Background())
 		if err != nil {
 			continue

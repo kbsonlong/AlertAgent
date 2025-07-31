@@ -1,0 +1,295 @@
+version: '3.8'
+
+services:
+  # MySQL数据库 - 生产环境
+  mysql:
+    image: mysql:8.0
+    container_name: alertagent-mysql-prod
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-alert_agent}
+      MYSQL_USER: ${MYSQL_USER:-alertagent}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_prod_data:/var/lib/mysql
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./mysql.cnf:/etc/mysql/conf.d/custom.cnf
+    networks:
+      - alertagent-prod-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+  # Redis缓存 - 生产环境
+  redis:
+    image: redis:7-alpine
+    container_name: alertagent-redis-prod
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_prod_data:/data
+    networks:
+      - alertagent-prod-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
+  # AlertAgent Core服务 - 生产环境
+  alertagent-core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: alertagent-core-prod
+    ports:
+      - "8080:8080"
+    environment:
+      - CONFIG_PATH=/app/config/config.yaml
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${MYSQL_USER:-alertagent}
+      - DB_PASSWORD=${MYSQL_PASSWORD}
+      - DB_NAME=${MYSQL_DATABASE:-alert_agent}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - OLLAMA_ENDPOINT=${OLLAMA_ENDPOINT:-http://ollama:11434}
+      - JWT_SECRET=${JWT_SECRET}
+      - SERVER_MODE=release
+    volumes:
+      - ./config/config.prod.yaml:/app/config/config.yaml:ro
+      - alertagent_prod_logs:/app/logs
+    networks:
+      - alertagent-prod-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # AI分析Worker - 生产环境
+  alertagent-worker-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - CONFIG_PATH=/app/config/config.yaml
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${MYSQL_USER:-alertagent}
+      - DB_PASSWORD=${MYSQL_PASSWORD}
+      - DB_NAME=${MYSQL_DATABASE:-alert_agent}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - OLLAMA_ENDPOINT=${OLLAMA_ENDPOINT:-http://ollama:11434}
+    command: [
+      "-name", "ai-worker-${HOSTNAME:-1}",
+      "-type", "ai-analysis",
+      "-concurrency", "${AI_WORKER_CONCURRENCY:-3}",
+      "-health-port", "8081"
+    ]
+    volumes:
+      - ./config/config.prod.yaml:/app/config/config.yaml:ro
+      - alertagent_prod_logs:/app/logs
+    networks:
+      - alertagent-prod-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      alertagent-core:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: always
+    deploy:
+      replicas: ${AI_WORKER_REPLICAS:-2}
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # 通知Worker - 生产环境
+  alertagent-worker-notification:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - CONFIG_PATH=/app/config/config.yaml
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${MYSQL_USER:-alertagent}
+      - DB_PASSWORD=${MYSQL_PASSWORD}
+      - DB_NAME=${MYSQL_DATABASE:-alert_agent}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: [
+      "-name", "notification-worker-${HOSTNAME:-1}",
+      "-type", "notification",
+      "-concurrency", "${NOTIFICATION_WORKER_CONCURRENCY:-5}",
+      "-health-port", "8081"
+    ]
+    volumes:
+      - ./config/config.prod.yaml:/app/config/config.yaml:ro
+      - alertagent_prod_logs:/app/logs
+    networks:
+      - alertagent-prod-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      alertagent-core:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: always
+    deploy:
+      replicas: ${NOTIFICATION_WORKER_REPLICAS:-2}
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # 配置同步Worker - 生产环境
+  alertagent-worker-config:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - CONFIG_PATH=/app/config/config.yaml
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${MYSQL_USER:-alertagent}
+      - DB_PASSWORD=${MYSQL_PASSWORD}
+      - DB_NAME=${MYSQL_DATABASE:-alert_agent}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: [
+      "-name", "config-worker-${HOSTNAME:-1}",
+      "-type", "config-sync",
+      "-concurrency", "${CONFIG_WORKER_CONCURRENCY:-3}",
+      "-health-port", "8081"
+    ]
+    volumes:
+      - ./config/config.prod.yaml:/app/config/config.yaml:ro
+      - alertagent_prod_logs:/app/logs
+    networks:
+      - alertagent-prod-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      alertagent-core:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: always
+    deploy:
+      replicas: ${CONFIG_WORKER_REPLICAS:-1}
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # Nginx反向代理 - 生产环境
+  nginx:
+    image: nginx:alpine
+    container_name: alertagent-nginx-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/ssl:/etc/nginx/ssl:ro
+      - alertagent_prod_logs:/var/log/nginx
+    networks:
+      - alertagent-prod-network
+    depends_on:
+      - alertagent-core
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+volumes:
+  mysql_prod_data:
+    driver: local
+  redis_prod_data:
+    driver: local
+  alertagent_prod_logs:
+    driver: local
+
+networks:
+  alertagent-prod-network:
+    driver: bridge

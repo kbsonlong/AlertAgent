@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"alert_agent/internal/config"
 	"alert_agent/internal/pkg/logger"
 	"alert_agent/internal/sidecar"
 
@@ -20,13 +19,13 @@ func main() {
 	// 命令行参数
 	var (
 		alertAgentEndpoint = flag.String("endpoint", "http://localhost:8080", "AlertAgent API endpoint")
-		clusterID         = flag.String("cluster-id", "", "Cluster ID for this sidecar")
-		configType        = flag.String("type", "", "Config type: prometheus, alertmanager, vmalert")
-		configPath        = flag.String("config-path", "", "Path to write config file")
-		reloadURL         = flag.String("reload-url", "", "URL to trigger reload")
-		syncInterval      = flag.Duration("sync-interval", 30*time.Second, "Config sync interval")
-		healthPort        = flag.Int("health-port", 8081, "Health check port")
-		logLevel          = flag.String("log-level", "info", "Log level")
+		clusterID          = flag.String("cluster-id", "", "Cluster ID for this sidecar")
+		configType         = flag.String("type", "", "Config type: prometheus, alertmanager, vmalert")
+		configPath         = flag.String("config-path", "", "Path to write config file")
+		reloadURL          = flag.String("reload-url", "", "URL to trigger reload")
+		syncInterval       = flag.Duration("sync-interval", 30*time.Second, "Config sync interval")
+		healthPort         = flag.Int("health-port", 8081, "Health check port")
+		logLevel           = flag.String("log-level", "info", "Log level")
 	)
 	flag.Parse()
 
@@ -74,11 +73,11 @@ func main() {
 	// 创建配置同步器
 	syncer := sidecar.NewConfigSyncer(&sidecar.Config{
 		AlertAgentEndpoint: *alertAgentEndpoint,
-		ClusterID:         *clusterID,
-		ConfigType:        *configType,
-		ConfigPath:        *configPath,
-		ReloadURL:         *reloadURL,
-		SyncInterval:      *syncInterval,
+		ClusterID:          *clusterID,
+		ConfigType:         *configType,
+		ConfigPath:         *configPath,
+		ReloadURL:          *reloadURL,
+		SyncInterval:       *syncInterval,
 	})
 
 	// 创建上下文和信号处理

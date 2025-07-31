@@ -1,0 +1,213 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: alertagent-ingress
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: ingress
+  annotations:
+    # Nginx Ingress Controller 配置
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+    
+    # 限流配置
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    
+    # CORS配置
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization, X-Request-ID"
+    
+    # 会话亲和性
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "alertagent-session"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "86400"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "86400"
+    
+    # 健康检查
+    nginx.ingress.kubernetes.io/health-check-path: "/api/v1/health"
+    
+    # 证书管理 (cert-manager)
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - alertagent.example.com
+    - api.alertagent.example.com
+    secretName: alertagent-tls
+  rules:
+  - host: alertagent.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: alertagent-core
+            port:
+              number: 8080
+  - host: api.alertagent.example.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: alertagent-core
+            port:
+              number: 8080
+
+---
+# 内部服务发现 - Headless Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertagent-core-headless
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: core
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: core
+
+---
+# 负载均衡服务
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertagent-lb
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: loadbalancer
+  annotations:
+    # 云服务商负载均衡器配置
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:region:account:certificate/cert-id"
+    
+    # Azure负载均衡器配置
+    service.beta.kubernetes.io/azure-load-balancer-internal: "false"
+    
+    # GCP负载均衡器配置
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: 8080
+    protocol: TCP
+    name: https
+  selector:
+    app.kubernetes.io/name: alertagent
+    app.kubernetes.io/component: core
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+
+---
+# 网络策略 - 安全配置
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertagent-network-policy
+  namespace: alertagent
+  labels:
+    app.kubernetes.io/name: alertagent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alertagent
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # 允许来自Ingress Controller的流量
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+  # 允许同命名空间内的Pod间通信
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: alertagent
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8081
+    - protocol: TCP
+      port: 3306
+    - protocol: TCP
+      port: 6379
+    - protocol: TCP
+      port: 11434
+  # 允许监控系统访问
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8081
+  egress:
+  # 允许DNS解析
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+  # 允许访问外部API
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 443
+  # 允许访问数据库和缓存
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: mysql
+    ports:
+    - protocol: TCP
+      port: 3306
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: redis
+    ports:
+    - protocol: TCP
+      port: 6379

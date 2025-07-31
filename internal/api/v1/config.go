@@ -6,26 +6,25 @@ import (
 	"net/http"
 	"time"
 
-	"alert_agent/internal/model"
-	"alert_agent/internal/pkg/database"
 	"alert_agent/internal/pkg/logger"
 	"alert_agent/internal/pkg/response"
 	"alert_agent/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // ConfigAPI 配置API处理器
 type ConfigAPI struct {
-	configService *service.ConfigService
+	configService  *service.ConfigService
+	monitorService *service.ConfigSyncMonitor
 }
 
 // NewConfigAPI 创建配置API处理器
 func NewConfigAPI() *ConfigAPI {
 	return &ConfigAPI{
-		configService: service.NewConfigService(),
+		configService:  service.NewConfigService(),
+		monitorService: service.NewConfigSyncMonitor(),
 	}
 }
 
@@ -36,7 +35,7 @@ func (c *ConfigAPI) GetSyncConfig(ctx *gin.Context) {
 	configType := ctx.Query("type") // prometheus, alertmanager, vmalert
 
 	if clusterID == "" || configType == "" {
-		response.Error(ctx, http.StatusBadRequest, "cluster_id and type are required")
+		response.Error(ctx, http.StatusBadRequest, "cluster_id and type are required", nil)
 		return
 	}
 
@@ -51,10 +50,10 @@ func (c *ConfigAPI) GetSyncConfig(ctx *gin.Context) {
 		logger.L.Error("Failed to get config",
 			zap.String("cluster_id", clusterID),
 			zap.String("config_type", configType),
-			zap.Error(err),
-		)
-		response.Error(ctx, http.StatusInternalServerError, "Failed to get config")
-		return
+		zap.Error(err),
+	)
+	response.Error(ctx, http.StatusInternalServerError, "Failed to get config", err)
+	return
 	}
 
 	// 计算配置hash
@@ -93,10 +92,12 @@ func (c *ConfigAPI) UpdateSyncStatus(ctx *gin.Context) {
 		SyncTime     int64  `json:"sync_time" binding:"required"`
 		ErrorMessage string `json:"error_message"`
 		ConfigHash   string `json:"config_hash"`
+		ConfigSize   int64  `json:"config_size"`
+		SyncDuration int64  `json:"sync_duration_ms"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "Invalid request format")
+		response.Error(ctx, http.StatusBadRequest, "Invalid request format", err)
 		return
 	}
 
@@ -122,8 +123,30 @@ func (c *ConfigAPI) UpdateSyncStatus(ctx *gin.Context) {
 			zap.String("config_type", req.ConfigType),
 			zap.Error(err),
 		)
-		response.Error(ctx, http.StatusInternalServerError, "Failed to update sync status")
+		response.Error(ctx, http.StatusInternalServerError, "Failed to update sync status", err)
 		return
+	}
+
+	// 记录同步历史用于监控
+	if req.SyncDuration > 0 {
+		err = c.monitorService.RecordSyncHistory(
+			ctx.Request.Context(),
+			req.ClusterID,
+			req.ConfigType,
+			req.ConfigHash,
+			req.ConfigSize,
+			req.Status,
+			req.SyncDuration,
+			req.ErrorMessage,
+		)
+		if err != nil {
+			logger.L.Error("Failed to record sync history",
+				zap.String("cluster_id", req.ClusterID),
+				zap.String("config_type", req.ConfigType),
+				zap.Error(err),
+			)
+			// 不影响主流程，只记录错误
+		}
 	}
 
 	response.Success(ctx, gin.H{
@@ -144,7 +167,7 @@ func (c *ConfigAPI) GetSyncStatus(ctx *gin.Context) {
 	configType := ctx.Query("type")
 
 	if clusterID == "" {
-		response.Error(ctx, http.StatusBadRequest, "cluster_id is required")
+		response.Error(ctx, http.StatusBadRequest, "cluster_id is required", nil)
 		return
 	}
 
@@ -156,7 +179,7 @@ func (c *ConfigAPI) GetSyncStatus(ctx *gin.Context) {
 			zap.String("config_type", configType),
 			zap.Error(err),
 		)
-		response.Error(ctx, http.StatusInternalServerError, "Failed to get sync status")
+		response.Error(ctx, http.StatusInternalServerError, "Failed to get sync status", err)
 		return
 	}
 
@@ -171,7 +194,7 @@ func (c *ConfigAPI) ListClusters(ctx *gin.Context) {
 	clusters, err := c.configService.ListClusters(ctx.Request.Context())
 	if err != nil {
 		logger.L.Error("Failed to list clusters", zap.Error(err))
-		response.Error(ctx, http.StatusInternalServerError, "Failed to list clusters")
+		response.Error(ctx, http.StatusInternalServerError, "Failed to list clusters", err)
 		return
 	}
 
@@ -189,7 +212,7 @@ func (c *ConfigAPI) TriggerSync(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "Invalid request format")
+		response.Error(ctx, http.StatusBadRequest, "Invalid request format", err)
 		return
 	}
 
@@ -201,7 +224,7 @@ func (c *ConfigAPI) TriggerSync(ctx *gin.Context) {
 			zap.String("config_type", req.ConfigType),
 			zap.Error(err),
 		)
-		response.Error(ctx, http.StatusInternalServerError, "Failed to trigger sync")
+		response.Error(ctx, http.StatusInternalServerError, "Failed to trigger sync", err)
 		return
 	}
 

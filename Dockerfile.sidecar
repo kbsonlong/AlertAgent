@@ -1,5 +1,6 @@
+# AlertAgent Sidecar Dockerfile
 # 构建阶段
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 # 设置工作目录
 WORKDIR /app
@@ -17,28 +18,40 @@ RUN go mod download
 COPY . .
 
 # 构建sidecar二进制文件
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o sidecar cmd/sidecar/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o alertagent-sidecar cmd/sidecar/main.go
 
 # 运行阶段
 FROM alpine:latest
 
 # 安装ca证书和时区数据
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata curl
+
+# 创建非root用户
+RUN addgroup -g 1001 -S alertagent && \
+    adduser -u 1001 -S alertagent -G alertagent
 
 # 设置工作目录
-WORKDIR /root/
+WORKDIR /app
 
 # 从构建阶段复制二进制文件
-COPY --from=builder /app/sidecar .
+COPY --from=builder /app/alertagent-sidecar .
 
 # 创建配置目录
-RUN mkdir -p /etc/alertagent
+RUN mkdir -p /etc/alertagent /app/logs && \
+    chown -R alertagent:alertagent /app /etc/alertagent
+
+# 切换到非root用户
+USER alertagent
 
 # 设置时区
 ENV TZ=Asia/Shanghai
 
-# 暴露健康检查端口（如果需要）
+# 暴露健康检查端口
 EXPOSE 8081
 
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8081/health || exit 1
+
 # 运行sidecar
-ENTRYPOINT ["./sidecar"]
+ENTRYPOINT ["./alertagent-sidecar"]
