@@ -389,3 +389,87 @@ func FindSimilarAlerts(c *gin.Context) {
 		"similar_alerts": similarAlerts,
 	})
 }
+
+// GetAlertStats 获取告警统计信息
+func GetAlertStats(c *gin.Context) {
+	var stats struct {
+		Total        int64                  `json:"total"`
+		Firing       int64                  `json:"firing"`
+		Acknowledged int64                  `json:"acknowledged"`
+		Resolved     int64                  `json:"resolved"`
+		ByLevel      map[string]int64       `json:"by_level"`
+		BySource     map[string]int64       `json:"by_source"`
+	}
+
+	// 初始化统计数据
+	stats.ByLevel = make(map[string]int64)
+	stats.BySource = make(map[string]int64)
+
+	// 获取总数
+	if err := database.DB.Model(&model.Alert{}).Count(&stats.Total).Error; err != nil {
+		c.Header("Content-Type", "application/json; charset=utf-8")
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"获取告警统计失败","data":"%s"}`, err.Error())))
+		return
+	}
+
+	// 获取各状态统计
+	if err := database.DB.Model(&model.Alert{}).Where("status = ?", "firing").Count(&stats.Firing).Error; err != nil {
+		c.Header("Content-Type", "application/json; charset=utf-8")
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"获取告警统计失败","data":"%s"}`, err.Error())))
+		return
+	}
+
+	if err := database.DB.Model(&model.Alert{}).Where("status = ?", "acknowledged").Count(&stats.Acknowledged).Error; err != nil {
+		c.Header("Content-Type", "application/json; charset=utf-8")
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"获取告警统计失败","data":"%s"}`, err.Error())))
+		return
+	}
+
+	if err := database.DB.Model(&model.Alert{}).Where("status = ?", "resolved").Count(&stats.Resolved).Error; err != nil {
+		c.Header("Content-Type", "application/json; charset=utf-8")
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"获取告警统计失败","data":"%s"}`, err.Error())))
+		return
+	}
+
+	// 获取按级别统计
+	var levelStats []struct {
+		Level string `json:"level"`
+		Count int64  `json:"count"`
+	}
+	if err := database.DB.Model(&model.Alert{}).Select("level, count(*) as count").Group("level").Scan(&levelStats).Error; err != nil {
+		c.Header("Content-Type", "application/json; charset=utf-8")
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"获取告警统计失败","data":"%s"}`, err.Error())))
+		return
+	}
+	for _, stat := range levelStats {
+		stats.ByLevel[stat.Level] = stat.Count
+	}
+
+	// 获取按来源统计
+	var sourceStats []struct {
+		Source string `json:"source"`
+		Count  int64  `json:"count"`
+	}
+	if err := database.DB.Model(&model.Alert{}).Select("source, count(*) as count").Group("source").Scan(&sourceStats).Error; err != nil {
+		c.Header("Content-Type", "application/json; charset=utf-8")
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"获取告警统计失败","data":"%s"}`, err.Error())))
+		return
+	}
+	for _, stat := range sourceStats {
+		stats.BySource[stat.Source] = stat.Count
+	}
+
+	data, err := json.Marshal(gin.H{
+		"code": 200,
+		"msg":  "获取告警统计成功",
+		"data": stats,
+	})
+	if err != nil {
+		c.Header("Content-Type", "application/json; charset=utf-8")
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(fmt.Sprintf(`{"code":500,"msg":"序列化响应失败","data":"%s"}`, err.Error())))
+		return
+	}
+
+	c.Header("Content-Type", "application/json; charset=utf-8")
+	c.Data(http.StatusOK, "application/json; charset=utf-8", data)
+}

@@ -582,7 +582,6 @@ import NotificationGroupDetail from '@/components/NotificationGroupDetail.vue'
 import NotificationGroupForm from '@/components/NotificationGroupForm.vue'
 import NotificationTemplateDetail from '@/components/NotificationTemplateDetail.vue'
 import NotificationTemplateForm from '@/components/NotificationTemplateForm.vue'
-import NotificationTemplatePreview from '@/components/NotificationTemplatePreview.vue'
 
 const ACard = Card
 const ARow = Row

@@ -173,10 +173,19 @@ export interface NotificationTemplate {
   created_at: string
   updated_at: string
   name: string
-  type: 'email' | 'webhook' | 'slack' | 'dingtalk'
-  subject?: string
-  content: string
+  type: 'email' | 'webhook' | 'slack' | 'dingtalk' | 'wechat'
+  description?: string
   enabled: boolean
+  template: {
+    subject?: string
+    body?: string
+    content?: string
+    text?: string
+    format?: string
+    msgType?: string
+    title?: string
+    blocks?: string
+  }
 }
 
 // 系统设置类型

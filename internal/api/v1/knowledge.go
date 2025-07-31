@@ -3,6 +3,7 @@ package v1
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"alert_agent/internal/model"
 	"alert_agent/internal/pkg/database"
@@ -259,5 +260,67 @@ func ConvertAlertToKnowledge(c *gin.Context) {
 		"code": 200,
 		"msg":  "success",
 		"data": knowledge,
+	})
+}
+
+// GetKnowledgeCategories 获取知识库分类列表
+func GetKnowledgeCategories(c *gin.Context) {
+	var categories []string
+	result := database.DB.Model(&model.Knowledge{}).Distinct("category").Pluck("category", &categories)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "获取分类列表失败",
+			"data": result.Error.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "success",
+		"data": categories,
+	})
+}
+
+// GetKnowledgeTags 获取知识库标签列表
+func GetKnowledgeTags(c *gin.Context) {
+	// 获取所有标签字符串
+	var tagStrings []string
+	result := database.DB.Model(&model.Knowledge{}).Where("tags != '' AND tags IS NOT NULL").Pluck("tags", &tagStrings)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "获取标签列表失败",
+			"data": result.Error.Error(),
+		})
+		return
+	}
+
+	// 解析标签字符串，去重
+	tagSet := make(map[string]bool)
+	for _, tagString := range tagStrings {
+		if tagString != "" {
+			// 按逗号分割标签
+			tags := strings.Split(tagString, ",")
+			for _, tag := range tags {
+				tag = strings.TrimSpace(tag)
+				if tag != "" {
+					tagSet[tag] = true
+				}
+			}
+		}
+	}
+
+	// 转换为数组
+	var tags []string
+	for tag := range tagSet {
+		tags = append(tags, tag)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "success",
+		"data": tags,
 	})
 }

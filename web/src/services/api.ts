@@ -22,7 +22,7 @@ const apiClient: AxiosInstance = axios.create({
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     // 从localStorage获取token
-    const token = localStorage.getItem('auth_token')
+    const token = localStorage.getItem('token')
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -41,7 +41,7 @@ apiClient.interceptors.response.use(
   (error) => {
     // 处理401未授权错误
     if (error.response?.status === 401) {
-      localStorage.removeItem('auth_token')
+      localStorage.removeItem('token')
       localStorage.removeItem('user_info')
       // 重定向到登录页
       window.location.href = '/login'

@@ -75,6 +75,7 @@ func RegisterRoutes(r *gin.Engine) {
 		alerts := authenticated.Group("/alerts")
 		{
 			alerts.GET("", v1.ListAlerts)
+			alerts.GET("/stats", v1.GetAlertStats)
 			alerts.POST("", middleware.RequireRole("admin", "operator"), v1.CreateAlert)
 			alerts.GET("/:id", v1.GetAlert)
 			alerts.PUT("/:id", middleware.RequireRole("admin", "operator"), v1.UpdateAlert)
@@ -121,6 +122,8 @@ func RegisterRoutes(r *gin.Engine) {
 		{
 			knowledge.GET("", v1.ListKnowledge)
 			knowledge.POST("", middleware.RequireRole("admin", "operator"), v1.CreateKnowledge)
+			knowledge.GET("/categories", v1.GetKnowledgeCategories)
+			knowledge.GET("/tags", v1.GetKnowledgeTags)
 			knowledge.GET("/:id", v1.GetKnowledge)
 			knowledge.PUT("/:id", middleware.RequireRole("admin", "operator"), v1.UpdateKnowledge)
 			knowledge.DELETE("/:id", middleware.RequireRole("admin"), v1.DeleteKnowledge)

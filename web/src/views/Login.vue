@@ -62,6 +62,7 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { UserOutlined, LockOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores'
+import { UserService } from '@/services/userService'
 import type { Rule } from 'ant-design-vue/es/form'
 
 const router = useRouter()
@@ -91,28 +92,29 @@ const rules: Record<string, Rule[]> = {
 const handleLogin = async (values: any) => {
   loading.value = true
   try {
-    // 这里应该调用实际的登录API
-    // 暂时模拟登录成功
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    // 模拟设置用户信息和token
-    userStore.setToken('mock-token-' + Date.now())
-    userStore.setUser({
-      id: 1,
+    // 调用真实的登录API
+    const response = await UserService.login({
       username: values.username,
-      email: values.username + '@example.com',
-      role: 'admin',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      password: values.password,
+      remember_me: values.remember
     })
     
-    message.success('登录成功')
-    
-    // 跳转到首页
-    router.push('/')
-  } catch (error) {
+    if (response.code === 200 && response.data) {
+      // 设置用户信息和token
+      userStore.setToken(response.data.access_token)
+      userStore.setUser(response.data.user)
+      
+      message.success('登录成功')
+      
+      // 跳转到首页
+      router.push('/')
+    } else {
+      message.error(response.message || '登录失败')
+    }
+  } catch (error: any) {
     console.error('登录失败:', error)
-    message.error('登录失败，请检查用户名和密码')
+    const errorMessage = error?.response?.data?.message || error?.message || '登录失败，请检查用户名和密码'
+    message.error(errorMessage)
   } finally {
     loading.value = false
   }

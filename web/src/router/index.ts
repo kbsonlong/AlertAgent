@@ -14,15 +14,30 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
-    redirect: '/knowledge'
-  },
-  {
-    path: '/',
     component: () => import('@/components/MainLayout.vue'),
+    redirect: '/alerts',
     meta: {
       requiresAuth: true
     },
     children: [
+      {
+        path: 'alerts',
+        name: 'AlertList',
+        component: () => import('@/views/AlertList.vue'),
+        meta: {
+          title: '告警管理',
+          icon: 'alert'
+        }
+      },
+      {
+        path: 'rules',
+        name: 'RuleList',
+        component: () => import('@/views/RuleList.vue'),
+        meta: {
+          title: '规则管理',
+          icon: 'rule'
+        }
+      },
       {
         path: 'knowledge',
         name: 'KnowledgeList',
@@ -30,6 +45,15 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '知识库',
           icon: 'book'
+        }
+      },
+      {
+        path: 'notifications',
+        name: 'NotificationList',
+        component: () => import('@/views/NotificationList.vue'),
+        meta: {
+          title: '渠道管理',
+          icon: 'notification'
         }
       },
       {
@@ -42,9 +66,36 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
+        path: 'users',
+        name: 'UserList',
+        component: () => import('@/views/UserList.vue'),
+        meta: {
+          title: '用户管理',
+          icon: 'user'
+        }
+      },
+      {
+        path: 'roles',
+        name: 'RoleList',
+        component: () => import('@/views/RoleList.vue'),
+        meta: {
+          title: '角色管理',
+          icon: 'team'
+        }
+      },
+      {
+        path: 'permissions',
+        name: 'PermissionList',
+        component: () => import('@/views/PermissionList.vue'),
+        meta: {
+          title: '权限管理',
+          icon: 'safety'
+        }
+      },
+      {
         path: 'settings',
         name: 'Settings',
-        component: () => import('@/views/settings/Settings.vue'),
+        component: () => import('@/views/Settings.vue'),
         meta: {
           title: '系统设置',
           icon: 'setting'
@@ -64,11 +115,11 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   // 设置页面标题
   if (to.meta?.title) {
-    document.title = `${to.meta.title} - 告警管理系统`
+    document.title = `${to.meta.title} - AlertAgent`
   }
   
   // 检查是否需要认证
-  const requiresAuth = to.matched.some(record => record.meta?.requiresAuth !== false)
+  const requiresAuth = to.matched.some(record => record.meta?.requiresAuth === true)
   const token = localStorage.getItem('token')
   
   if (requiresAuth && !token) {

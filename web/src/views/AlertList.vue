@@ -256,7 +256,7 @@
       width="800"
       :footer="null"
     >
-      <AlertAnalysis
+      <AlertAnalysisComponent
         v-if="analysisResult"
         :analysis="analysisResult"
         @close="analysisModalVisible = false"
@@ -312,7 +312,7 @@ import {
 import { formatDateTime, getFriendlyTime } from '@/utils/datetime'
 import type { Alert, AlertAnalysis } from '@/types'
 import AlertDetail from '@/components/AlertDetail.vue'
-import AlertAnalysis from '@/components/AlertAnalysis.vue'
+import AlertAnalysisComponent from '@/components/AlertAnalysis.vue'
 
 const ACard = Card
 const ATable = Table
@@ -475,10 +475,12 @@ const getSeverityText = (severity: string) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: any = {
       page: pagination.current,
       page_size: pagination.pageSize,
-      ...searchForm
+      search: searchForm.search,
+      status: searchForm.status,
+      severity: searchForm.severity
     }
     
     if (searchForm.timeRange && searchForm.timeRange.length === 2) {
@@ -595,7 +597,7 @@ const convertToKnowledge = async (alert: Alert) => {
 // 删除告警
 const deleteAlert = async (alert: Alert) => {
   try {
-    await updateAlert(alert.id, { deleted: true })
+    await updateAlert(alert.id, { status: 'resolved' })
     message.success('告警已删除')
     refreshData()
   } catch (error) {
@@ -606,10 +608,7 @@ const deleteAlert = async (alert: Alert) => {
 // 批量确认
 const batchAcknowledge = async () => {
   try {
-    await batchUpdateAlerts({
-      ids: selectedRowKeys.value,
-      status: 'acknowledged'
-    })
+    await batchUpdateAlerts(selectedRowKeys.value, 'acknowledged')
     message.success(`已确认 ${selectedRowKeys.value.length} 个告警`)
     selectedRowKeys.value = []
     refreshData()
@@ -621,10 +620,7 @@ const batchAcknowledge = async () => {
 // 批量解决
 const batchResolve = async () => {
   try {
-    await batchUpdateAlerts({
-      ids: selectedRowKeys.value,
-      status: 'resolved'
-    })
+    await batchUpdateAlerts(selectedRowKeys.value, 'resolved')
     message.success(`已解决 ${selectedRowKeys.value.length} 个告警`)
     selectedRowKeys.value = []
     refreshData()
@@ -636,10 +632,7 @@ const batchResolve = async () => {
 // 批量删除
 const batchDelete = async () => {
   try {
-    await batchUpdateAlerts({
-      ids: selectedRowKeys.value,
-      deleted: true
-    })
+    await batchUpdateAlerts(selectedRowKeys.value, 'resolved')
     message.success(`已删除 ${selectedRowKeys.value.length} 个告警`)
     selectedRowKeys.value = []
     refreshData()

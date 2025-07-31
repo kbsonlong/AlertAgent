@@ -421,10 +421,19 @@ const pagination = reactive({
 
 // 统计数据
 const stats = computed(() => {
+  if (!rules.value || !Array.isArray(rules.value)) {
+    return {
+      total: 0,
+      enabled: 0,
+      disabled: 0,
+      firing: 0
+    }
+  }
+  
   const total = rules.value.length
   const enabled = rules.value.filter(rule => rule.enabled).length
   const disabled = total - enabled
-  const firing = rules.value.filter(rule => rule.firing_count > 0).length
+  const firing = 0 // TODO: 需要从后端API获取触发状态
   
   return {
     total,
@@ -520,8 +529,8 @@ const getSeverityText = (severity: string) => {
 }
 
 // 获取数据源名称
-const getProviderName = (providerId: string) => {
-  const provider = providers.value.find(p => p.id === providerId)
+const getProviderName = (providerId: number | string) => {
+  const provider = providers.value.find(p => p.id === Number(providerId))
   return provider?.name || '未知'
 }
 
@@ -601,21 +610,22 @@ const editRule = (rule: Rule) => {
 // 切换规则状态
 const toggleRule = async (rule: Rule, enabled: boolean) => {
   try {
-    rule.toggling = true
+    // 使用临时变量跟踪加载状态
+    const ruleIndex = rules.value.findIndex(r => r.id === rule.id)
+    if (ruleIndex === -1) return
+    
     await toggleRuleApi(rule.id, enabled)
-    rule.enabled = enabled
+    rules.value[ruleIndex].enabled = enabled
     message.success(`规则已${enabled ? '启用' : '禁用'}`)
   } catch (error) {
     message.error(`${enabled ? '启用' : '禁用'}规则失败`)
-  } finally {
-    rule.toggling = false
   }
 }
 
 // 测试规则
 const testRule = async (rule: Rule) => {
   try {
-    const response = await testRuleApi(rule.id)
+    const response = await testRuleApi(rule.expression)
     testResult.value = response.data
     testModalVisible.value = true
   } catch (error) {
@@ -668,7 +678,7 @@ const deleteRule = (rule: Rule) => {
 const batchEnable = async () => {
   try {
     for (const id of selectedRowKeys.value) {
-      await toggleRuleApi(id, true)
+      await toggleRuleApi(Number(id), true)
     }
     message.success('批量启用成功')
     selectedRowKeys.value = []
@@ -682,7 +692,7 @@ const batchEnable = async () => {
 const batchDisable = async () => {
   try {
     for (const id of selectedRowKeys.value) {
-      await toggleRuleApi(id, false)
+      await toggleRuleApi(Number(id), false)
     }
     message.success('批量禁用成功')
     selectedRowKeys.value = []
@@ -701,7 +711,7 @@ const batchDelete = () => {
     cancelText: '取消',
     onOk: async () => {
       try {
-        await batchDeleteRules(selectedRowKeys.value)
+        await batchDeleteRules(selectedRowKeys.value.map(id => Number(id)))
         message.success('批量删除成功')
         selectedRowKeys.value = []
         loadData()
@@ -721,9 +731,7 @@ const importRules = () => {
     const file = (e.target as HTMLInputElement).files?.[0]
     if (file) {
       try {
-        const formData = new FormData()
-        formData.append('file', file)
-        await importRulesApi(formData)
+        await importRulesApi(file)
         message.success('导入成功')
         loadData()
       } catch (error) {

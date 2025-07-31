@@ -18,11 +18,32 @@
         mode="inline"
         @click="handleMenuClick"
       >
+        <a-menu-item key="alerts">
+          <template #icon>
+            <AlertOutlined />
+          </template>
+          告警管理
+        </a-menu-item>
+        
+        <a-menu-item key="rules">
+          <template #icon>
+            <FileTextOutlined />
+          </template>
+          规则管理
+        </a-menu-item>
+        
         <a-menu-item key="knowledge">
           <template #icon>
             <BookOutlined />
           </template>
           知识库
+        </a-menu-item>
+        
+        <a-menu-item key="notifications">
+          <template #icon>
+            <BellOutlined />
+          </template>
+          渠道管理
         </a-menu-item>
         
         <a-menu-item key="queue-monitor">
@@ -31,6 +52,31 @@
           </template>
           队列监控
         </a-menu-item>
+        
+        <a-sub-menu key="user-management">
+          <template #icon>
+            <TeamOutlined />
+          </template>
+          <template #title>用户权限</template>
+          <a-menu-item key="users">
+            <template #icon>
+              <UserOutlined />
+            </template>
+            用户管理
+          </a-menu-item>
+          <a-menu-item key="roles">
+            <template #icon>
+              <TeamOutlined />
+            </template>
+            角色管理
+          </a-menu-item>
+          <a-menu-item key="permissions">
+            <template #icon>
+              <SafetyOutlined />
+            </template>
+            权限管理
+          </a-menu-item>
+        </a-sub-menu>
         
         <a-menu-item key="settings">
           <template #icon>
@@ -101,12 +147,17 @@ import { useRouter, useRoute } from 'vue-router'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  AlertOutlined,
   BookOutlined,
+  FileTextOutlined,
+  BellOutlined,
   MonitorOutlined,
   SettingOutlined,
   UserOutlined,
   DownOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  TeamOutlined,
+  SafetyOutlined
 } from '@ant-design/icons-vue'
 
 const router = useRouter()
@@ -115,8 +166,39 @@ const route = useRoute()
 // 侧边栏折叠状态
 const collapsed = ref(false)
 
+// 路由名称映射
+const routeMap: Record<string, string> = {
+  'alerts': 'AlertList',
+  'rules': 'RuleList',
+  'knowledge': 'KnowledgeList',
+  'notifications': 'NotificationList',
+  'queue-monitor': 'QueueMonitor',
+  'users': 'UserList',
+  'roles': 'RoleList',
+  'permissions': 'PermissionList',
+  'settings': 'Settings'
+}
+
+// 反向映射：从路由名称到菜单key
+const reverseRouteMap: Record<string, string> = {
+  'AlertList': 'alerts',
+  'RuleList': 'rules',
+  'KnowledgeList': 'knowledge',
+  'NotificationList': 'notifications',
+  'QueueMonitor': 'queue-monitor',
+  'UserList': 'users',
+  'RoleList': 'roles',
+  'PermissionList': 'permissions',
+  'Settings': 'settings'
+}
+
+// 获取当前菜单key
+const getCurrentMenuKey = (routeName: string) => {
+  return reverseRouteMap[routeName] || routeName
+}
+
 // 当前选中的菜单项
-const selectedKeys = ref([route.name as string])
+const selectedKeys = ref([getCurrentMenuKey(route.name as string)])
 
 // 当前页面标题
 const currentTitle = computed(() => {
@@ -126,12 +208,14 @@ const currentTitle = computed(() => {
 // 菜单点击处理
 const handleMenuClick = ({ key }: { key: string }) => {
   selectedKeys.value = [key]
-  router.push({ name: key })
+  
+  const routeName = routeMap[key] || key
+  router.push({ name: routeName })
 }
 
 // 监听路由变化更新选中状态
 router.afterEach((to) => {
-  selectedKeys.value = [to.name as string]
+  selectedKeys.value = [getCurrentMenuKey(to.name as string)]
 })
 </script>
 

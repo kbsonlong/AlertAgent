@@ -63,7 +63,11 @@ export interface Permission {
   resource: string
   action: string
   category: string
+  type: 'system' | 'custom'
+  status: 'active' | 'inactive'
   is_system: boolean
+  created_at: string
+  updated_at: string
 }
 
 // 角色数据类型定义
@@ -92,8 +96,9 @@ export interface LoginRequest {
 
 // 登录响应
 export interface LoginResponse {
-  token: string
+  access_token: string
   refresh_token: string
+  token_type: string
   expires_in: number
   user: User
 }
@@ -503,6 +508,155 @@ export class UserService {
     formData.append('file', file)
     
     return ApiService.post(`${this.BASE_URL}/users/import`, formData)
+  }
+
+  // ==================== 角色管理相关方法 ====================
+
+  /**
+   * 创建角色
+   */
+  static async createRole(data: {
+    name: string
+    code: string
+    description?: string
+    type: 'system' | 'custom'
+    status?: 'active' | 'inactive'
+    permission_ids?: number[]
+  }): Promise<ApiResponse<Role>> {
+    return ApiService.post(`${this.BASE_URL}/roles`, data)
+  }
+
+  /**
+   * 更新角色
+   */
+  static async updateRole(id: number, data: {
+    name?: string
+    code?: string
+    description?: string
+    status?: 'active' | 'inactive'
+    permission_ids?: number[]
+  }): Promise<ApiResponse<Role>> {
+    return ApiService.put(`${this.BASE_URL}/roles/${id}`, data)
+  }
+
+  /**
+   * 删除角色
+   */
+  static async deleteRole(id: number): Promise<ApiResponse<void>> {
+    return ApiService.delete(`${this.BASE_URL}/roles/${id}`)
+  }
+
+  /**
+   * 获取角色详情
+   */
+  static async getRole(id: number): Promise<ApiResponse<Role>> {
+    return ApiService.get(`${this.BASE_URL}/roles/${id}`)
+  }
+
+  /**
+   * 获取角色用户列表
+   */
+  static async getRoleUsers(id: number): Promise<ApiResponse<User[]>> {
+    return ApiService.get(`${this.BASE_URL}/roles/${id}/users`)
+  }
+
+  /**
+   * 为角色分配用户
+   */
+  static async assignUsersToRole(roleId: number, userIds: number[]): Promise<ApiResponse<void>> {
+    return ApiService.post(`${this.BASE_URL}/roles/${roleId}/users`, { user_ids: userIds })
+  }
+
+  /**
+   * 从角色移除用户
+   */
+  static async removeUsersFromRole(roleId: number, userIds: number[]): Promise<ApiResponse<void>> {
+    return ApiService.post(`${this.BASE_URL}/roles/${roleId}/users/remove`, { user_ids: userIds })
+  }
+
+  /**
+   * 批量删除角色
+   */
+  static async batchDeleteRoles(roleIds: number[]): Promise<ApiResponse<{ deleted_count: number }>> {
+    return ApiService.post(`${this.BASE_URL}/roles/batch/delete`, { role_ids: roleIds })
+  }
+
+  // ==================== 权限管理 API ====================
+
+  /**
+   * 创建权限
+   */
+  static async createPermission(data: {
+    name: string
+    code: string
+    description?: string
+    type: 'system' | 'custom'
+    status?: 'active' | 'inactive'
+    resource: string
+    action: string
+  }): Promise<ApiResponse<Permission>> {
+    return ApiService.post(`${this.BASE_URL}/permissions`, data)
+  }
+
+  /**
+   * 更新权限
+   */
+  static async updatePermission(id: number, data: {
+    name?: string
+    code?: string
+    description?: string
+    status?: 'active' | 'inactive'
+    resource?: string
+    action?: string
+  }): Promise<ApiResponse<Permission>> {
+    return ApiService.put(`${this.BASE_URL}/permissions/${id}`, data)
+  }
+
+  /**
+   * 删除权限
+   */
+  static async deletePermission(id: number): Promise<ApiResponse<void>> {
+    return ApiService.delete(`${this.BASE_URL}/permissions/${id}`)
+  }
+
+  /**
+   * 获取权限详情
+   */
+  static async getPermission(id: number): Promise<ApiResponse<Permission>> {
+    return ApiService.get(`${this.BASE_URL}/permissions/${id}`)
+  }
+
+  /**
+   * 获取权限关联角色
+   */
+  static async getPermissionRoles(id: number): Promise<ApiResponse<Role[]>> {
+    return ApiService.get(`${this.BASE_URL}/permissions/${id}/roles`)
+  }
+
+  /**
+   * 批量更新权限
+   */
+  static async batchUpdatePermissions(permissionIds: number[], data: {
+    status?: 'active' | 'inactive'
+  }): Promise<ApiResponse<{ updated_count: number }>> {
+    return ApiService.post(`${this.BASE_URL}/permissions/batch/update`, {
+      permission_ids: permissionIds,
+      ...data
+    })
+  }
+
+  /**
+   * 批量删除权限
+   */
+  static async batchDeletePermissions(permissionIds: number[]): Promise<ApiResponse<{ deleted_count: number }>> {
+    return ApiService.post(`${this.BASE_URL}/permissions/batch/delete`, { permission_ids: permissionIds })
+  }
+
+  /**
+   * 导出权限
+   */
+  static async exportPermissions(): Promise<ApiResponse<{ download_url: string }>> {
+    return ApiService.get(`${this.BASE_URL}/permissions/export`)
   }
 }
 

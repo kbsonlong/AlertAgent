@@ -103,7 +103,7 @@
             allow-clear
           >
             <a-select-option
-              v-for="category in categories"
+              v-for="category in categories || []"
               :key="category.id"
               :value="category.id"
             >
@@ -403,7 +403,14 @@ import {
   importKnowledge,
   exportKnowledge
 } from '@/services/knowledge'
-import type { Knowledge, KnowledgeCategory } from '@/types'
+import type { Knowledge } from '@/types'
+
+// 知识库分类接口
+interface KnowledgeCategory {
+  id: string
+  name: string
+  description?: string
+}
 
 // 知识库分页响应接口
 interface PaginatedResponse<T> {
@@ -578,24 +585,28 @@ const loadData = async () => {
   try {
     const params = {
       page: pagination.current,
-      pageSize: pagination.pageSize,
-      keyword: searchForm.keyword,
+      page_size: pagination.pageSize,
+      search: searchForm.keyword,
       category: searchForm.category,
-      status: searchForm.status,
-      tags: searchForm.tags
+      tags: searchForm.tags.join(',') // 将数组转换为逗号分隔的字符串
     }
     
     const response = await getKnowledgeList(params)
-    const data = response.data || response
-    knowledgeList.value = data.list || []
-    pagination.total = data.total || 0
+    const data = (response as any).data || response
     
-    // 更新统计数据
-    if (data.stats) {
-      stats.total = data.stats.total || 0
-      stats.published = data.stats.published || 0
-      stats.draft = data.stats.draft || 0
-      stats.thisMonth = data.stats.thisMonth || 0
+    // 处理响应数据结构
+    if (data && typeof data === 'object') {
+      knowledgeList.value = (data as any).list || (data as any).data || []
+      pagination.total = (data as any).total || 0
+      
+      // 更新统计数据
+      const statsData = (data as any).stats
+      if (statsData) {
+        stats.total = statsData.total || 0
+        stats.published = statsData.published || 0
+        stats.draft = statsData.draft || 0
+        stats.thisMonth = statsData.thisMonth || 0
+      }
     }
   } catch (error) {
     console.error('加载知识列表失败:', error)
@@ -613,8 +624,30 @@ const loadMetadata = async () => {
       getKnowledgeTags()
     ])
     
-    categories.value = categoriesRes.data
-    tags.value = tagsRes.data
+    // 处理分类数据
+    const categoriesData = (categoriesRes as any).data || []
+    if (Array.isArray(categoriesData)) {
+      categories.value = categoriesData.map((item: any) => ({
+        id: item.category || item.id || String(item),
+        name: item.category || item.name || String(item),
+        description: item.description
+      }))
+    } else {
+      categories.value = []
+    }
+    
+    // 处理标签数据，可能是字符串数组或对象数组
+    const tagsData = (tagsRes as any).data || []
+    if (Array.isArray(tagsData) && tagsData.length > 0) {
+      if (typeof tagsData[0] === 'string') {
+        tags.value = tagsData
+      } else {
+        // 如果是对象数组，提取tag字段
+        tags.value = tagsData.map((item: any) => item.tag || item.name || String(item))
+      }
+    } else {
+      tags.value = []
+    }
   } catch (error) {
     console.error('加载元数据失败:', error)
   }
@@ -649,7 +682,8 @@ const handleTableChange = (pag: any, filters: any, sorter: any) => {
 const handleView = async (knowledge: Knowledge) => {
   try {
     const response = await getKnowledge(knowledge.id)
-    currentKnowledge.value = response.data || response
+    const knowledgeData = response.data || response
+    currentKnowledge.value = knowledgeData as Knowledge
     detailVisible.value = true
   } catch (error) {
     console.error('获取知识详情失败:', error)
@@ -694,7 +728,7 @@ const handleFormSubmit = async (data: any) => {
 // 复制
 const handleDuplicate = async (knowledge: Knowledge) => {
   try {
-    const { id, createdAt, updatedAt, created_at, updated_at, ...cleanData } = knowledge
+    const { id, created_at, updated_at, ...cleanData } = knowledge as any
     const data = {
       ...cleanData,
       title: `${knowledge.title} (副本)`,
@@ -766,7 +800,8 @@ const handleBatchUnpublish = async () => {
 // 批量删除
 const handleBatchDelete = async () => {
   try {
-    await batchDeleteKnowledge(selectedRowKeys.value)
+    const ids = selectedRowKeys.value.map(id => parseInt(id, 10))
+    await batchDeleteKnowledge(ids)
     message.success('批量删除成功')
     selectedRowKeys.value = []
     loadData()
