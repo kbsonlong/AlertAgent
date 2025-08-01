@@ -96,6 +96,9 @@ func main() {
 	// 创建Ollama服务
 	ollamaService := service.NewOllamaService()
 
+	// 创建Dify服务
+	difyService := service.NewDifyService()
+
 	// 创建队列监控器
 	monitor := queue.NewQueueMonitor(redisQueue, redis.Client, "alert:queue")
 
@@ -103,7 +106,7 @@ func main() {
 	queueWorker := queue.NewWorker(redisQueue, monitor, 2)
 
 	// 注册任务处理器
-	aiHandler := worker.NewAIAnalysisHandler(ollamaService)
+	aiHandler := worker.NewAIAnalysisHandler(ollamaService, difyService)
 	queueWorker.RegisterHandler(aiHandler)
 	
 	notificationHandler := worker.NewNotificationHandler()

@@ -395,10 +395,14 @@ func (w *WorkerInstance) GetConfig() *WorkerConfig {
 
 // registerHandlers 注册任务处理器
 func (w *WorkerInstance) registerHandlers() error {
+	// 创建服务实例
+	ollamaService := service.NewOllamaService()
+	difyService := service.NewDifyService()
+	
 	// 根据Worker类型注册相应的处理器
 	switch w.config.Type {
 	case "ai-analysis":
-		aiHandler := NewAIAnalysisHandler(service.NewOllamaService())
+		aiHandler := NewAIAnalysisHandler(ollamaService, difyService)
 		w.handlers[aiHandler.Type()] = aiHandler
 		
 	case "notification":
@@ -411,7 +415,7 @@ func (w *WorkerInstance) registerHandlers() error {
 		
 	case "general":
 		// 注册通用处理器
-		aiHandler := NewAIAnalysisHandler(service.NewOllamaService())
+		aiHandler := NewAIAnalysisHandler(ollamaService, difyService)
 		w.handlers[aiHandler.Type()] = aiHandler
 		
 		notificationHandler := NewNotificationHandler()
@@ -422,7 +426,7 @@ func (w *WorkerInstance) registerHandlers() error {
 		
 	default:
 		// 默认注册所有处理器
-		aiHandler := NewAIAnalysisHandler(service.NewOllamaService())
+		aiHandler := NewAIAnalysisHandler(ollamaService, difyService)
 		w.handlers[aiHandler.Type()] = aiHandler
 		
 		notificationHandler := NewNotificationHandler()

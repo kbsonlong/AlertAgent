@@ -16,12 +16,14 @@ import (
 // AIAnalysisHandler AI分析任务处理器
 type AIAnalysisHandler struct {
 	ollamaService *service.OllamaService
+	difyService   *service.DifyService
 }
 
 // NewAIAnalysisHandler 创建AI分析处理器
-func NewAIAnalysisHandler(ollamaService *service.OllamaService) *AIAnalysisHandler {
+func NewAIAnalysisHandler(ollamaService *service.OllamaService, difyService *service.DifyService) *AIAnalysisHandler {
 	return &AIAnalysisHandler{
 		ollamaService: ollamaService,
+		difyService:   difyService,
 	}
 }
 
@@ -55,10 +57,37 @@ func (h *AIAnalysisHandler) Handle(ctx context.Context, task *queue.Task) error 
 		return fmt.Errorf("failed to get alert %s: %w", alertID, err)
 	}
 
-	// 调用Ollama服务进行分析
-	analysis, err := h.ollamaService.AnalyzeAlert(ctx, &alert)
-	if err != nil {
-		return fmt.Errorf("AI analysis failed for alert %s: %w", alertID, err)
+	// 根据配置选择AI服务进行分析
+	var analysis string
+	var err error
+	
+	// 优先使用Dify服务（如果启用）
+	if h.difyService != nil {
+		analysis, err = h.difyService.AnalyzeAlert(ctx, &alert)
+		if err != nil {
+			logger.L.Warn("Dify analysis failed, falling back to Ollama",
+				zap.String("alert_id", alertID),
+				zap.Error(err),
+			)
+			// 如果Dify失败，回退到Ollama
+			analysis, err = h.ollamaService.AnalyzeAlert(ctx, &alert)
+			if err != nil {
+				return fmt.Errorf("both Dify and Ollama analysis failed for alert %s: %w", alertID, err)
+			}
+		} else {
+			logger.L.Info("Analysis completed using Dify",
+				zap.String("alert_id", alertID),
+			)
+		}
+	} else {
+		// 使用Ollama服务
+		analysis, err = h.ollamaService.AnalyzeAlert(ctx, &alert)
+		if err != nil {
+			return fmt.Errorf("Ollama analysis failed for alert %s: %w", alertID, err)
+		}
+		logger.L.Info("Analysis completed using Ollama",
+			zap.String("alert_id", alertID),
+		)
 	}
 
 	// 更新数据库中的分析结果

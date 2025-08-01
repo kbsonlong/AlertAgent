@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"alert_agent/internal/config"
 	"alert_agent/internal/model"
 	"alert_agent/internal/pkg/logger"
 
@@ -75,20 +76,22 @@ type DifyWorkflowResponse struct {
 // NewDifyService 创建Dify服务
 func NewDifyService() *DifyService {
 	// 从全局配置获取Dify配置
-	// cfg := config.GetConfig()
+	cfg := config.GetConfig()
 	
-	// 创建默认Dify配置（如果配置文件中没有）
+	// 创建Dify配置
 	difyConfig := &DifyConfig{
-		Enabled:     false,
-		APIEndpoint: "http://localhost:5001",
-		APIKey:      "",
-		Timeout:     30,
-		Model:       "gpt-3.5-turbo",
-		MaxRetries:  3,
+		Enabled:     cfg.Dify.Enabled,
+		APIEndpoint: cfg.Dify.APIEndpoint,
+		APIKey:      cfg.Dify.APIKey,
+		Timeout:     cfg.Dify.Timeout,
+		Model:       cfg.Dify.Model,
+		MaxRetries:  cfg.Dify.MaxRetries,
 	}
 
-	// 如果配置中有Dify配置，使用配置的值
-	// 这里假设配置结构中有Dify字段，如果没有需要添加到config包中
+	// 如果Dify未启用，返回nil
+	if !difyConfig.Enabled {
+		return nil
+	}
 
 	logger := logger.L
 	if logger == nil {

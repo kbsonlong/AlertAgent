@@ -66,6 +66,7 @@ type Config struct {
 		MaxOpenConns int    `yaml:"max_open_conns"`
 	} `yaml:"database"`
 	Ollama OllamaConfig `yaml:"ollama"`
+	Dify   DifyConfig   `yaml:"dify"`
 	Redis  struct {
 		Host         string `yaml:"host"`
 		Port         int    `yaml:"port"`
@@ -84,14 +85,6 @@ type Config struct {
 		MaxBackups int    `yaml:"max_backups"`
 		Compress   bool   `yaml:"compress"`
 	} `yaml:"log"`
-	Dify struct {
-		Enabled     bool   `yaml:"enabled"`
-		APIEndpoint string `yaml:"api_endpoint"`
-		APIKey      string `yaml:"api_key"`
-		Model       string `yaml:"model"`
-		Timeout     int    `yaml:"timeout"`
-		MaxRetries  int    `yaml:"max_retries"`
-	} `yaml:"dify"`
 }
 
 // DefaultConfig 返回默认配置
