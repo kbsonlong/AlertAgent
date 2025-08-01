@@ -18,6 +18,7 @@ type Container struct {
 	RuleDistributionRepository  repository.RuleDistributionRepository
 	PermissionRepository        repository.PermissionRepository
 	RoleRepository              repository.RoleRepository
+	UserRepository              repository.UserRepository
 
 	// Services
 	RuleService             service.RuleService
@@ -27,6 +28,7 @@ type Container struct {
 	QueueService            *service.QueueService
 	PermissionService       service.PermissionService
 	RoleService             service.RoleService
+	UserService             service.UserService
 
 	// Queue components
 	QueueManager *queue.RedisMessageQueue
@@ -38,6 +40,7 @@ type Container struct {
 	QueueAPI            *v1.QueueAPI
 	PermissionController *v1.PermissionController
 	RoleController       *v1.RoleController
+	UserController       *v1.UserController
 }
 
 // NewContainer 创建新的容器实例
@@ -57,6 +60,7 @@ func (c *Container) initRepositories() {
 	c.RuleDistributionRepository = repository.NewRuleDistributionRepository(database.DB)
 	c.PermissionRepository = repository.NewPermissionRepository()
 	c.RoleRepository = repository.NewRoleRepository()
+	c.UserRepository = repository.NewUserRepository()
 }
 
 // initServices 初始化服务层
@@ -67,6 +71,7 @@ func (c *Container) initServices() {
 	c.RuleDistributionService = service.NewRuleDistributionService(c.RuleDistributionRepository, c.RuleRepository)
 	c.PermissionService = service.NewPermissionService(c.PermissionRepository, c.RoleRepository)
 	c.RoleService = service.NewRoleService(c.RoleRepository, c.PermissionRepository)
+	c.UserService = service.NewUserService(c.UserRepository, c.RoleRepository)
 	
 	// 初始化队列组件
 	c.QueueManager = queue.NewRedisMessageQueue(redis.Client, "alert_agent")
@@ -81,4 +86,8 @@ func (c *Container) initAPIs() {
 	c.QueueAPI = v1.NewQueueAPI(c.QueueManager, c.QueueMonitor)
 	c.PermissionController = v1.NewPermissionController(c.PermissionService)
 	c.RoleController = v1.NewRoleController(c.RoleService)
+	c.UserController = v1.NewUserController(c.UserService)
+	
+	// 初始化用户控制器
+	v1.InitUserController(c.UserController)
 }
