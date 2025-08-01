@@ -52,8 +52,8 @@ database:
     loc: Local
 ollama:
     enabled: true
-    api_endpoint: http://10.98.65.131:11434
-    model: llama3:latest
+    api_endpoint: http://192.168.3.18:11434
+    model: deepseek-r1:7b
     timeout: 300
     max_retries: 3
 dify:

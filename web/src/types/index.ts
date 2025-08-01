@@ -57,13 +57,31 @@ export interface Alert {
   notify_time?: string
   notify_count: number
   severity: string
+  analysis_result?: AlertAnalysis
 }
 
 // 告警分析结果
 export interface AlertAnalysis {
+  id?: number
+  alert_id: number
   analysis: string
+  analyzed_at: string
+  model?: string
+  confidence?: number
+  severity_assessment?: string
+  root_cause?: string
+  contributing_factors?: string[]
+  business_impact?: string
+  user_impact?: string
+  system_impact?: string
+  impact_description?: string
+  immediate_actions?: string[]
+  long_term_actions?: string[]
+  prevention_measures?: string[]
   similar_alerts?: SimilarAlert[]
   knowledge_references?: Knowledge[]
+  created_at?: string
+  updated_at?: string
 }
 
 // 相似告警

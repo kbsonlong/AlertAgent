@@ -485,17 +485,14 @@ definitions:
         type: integer
       by_level:
         additionalProperties:
-          format: int64
           type: integer
         type: object
       by_severity:
         additionalProperties:
-          format: int64
           type: integer
         type: object
       by_source:
         additionalProperties:
-          format: int64
           type: integer
         type: object
       firing:

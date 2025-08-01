@@ -100,7 +100,7 @@
     </a-card>
 
     <!-- 操作历史 -->
-    <a-card title="操作历史" class="detail-card">
+    <!-- <a-card title="操作历史" class="detail-card">
       <a-timeline>
         <a-timeline-item
           v-for="(history, index) in alert.history || []"
@@ -135,6 +135,49 @@
           </div>
         </a-timeline-item>
       </a-timeline>
+    </a-card> -->
+
+    <!-- AI分析结果展示 -->
+    <a-card title="AI分析结果" class="detail-card" v-if="analysisResult">
+      <div class="analysis-summary">
+        <a-descriptions :column="2" bordered>
+          <a-descriptions-item label="分析时间">
+            {{ formatDateTime(analysisResult.analyzed_at) }}
+          </a-descriptions-item>
+          <a-descriptions-item label="分析模型">
+            {{ analysisResult.model || 'Ollama' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="置信度">
+            <a-progress
+              :percent="Math.round((analysisResult.confidence || 0.8) * 100)"
+              :stroke-color="getConfidenceColor(analysisResult.confidence || 0.8)"
+              size="small"
+            />
+          </a-descriptions-item>
+          <a-descriptions-item label="严重程度评估">
+            <a-tag :color="getSeverityColor(analysisResult.severity_assessment || alert.severity)">
+              {{ getSeverityText(analysisResult.severity_assessment || alert.severity) }}
+            </a-tag>
+          </a-descriptions-item>
+        </a-descriptions>
+        
+        <div class="analysis-content" v-if="analysisResult.analysis">
+          <h4>分析结果</h4>
+          <div class="analysis-text" v-html="formatAnalysisContent(analysisResult.analysis)"></div>
+        </div>
+        
+        <div class="analysis-actions">
+          <a-space>
+            <!-- <a-button @click="viewFullAnalysis" type="link">
+              查看完整分析
+            </a-button> -->
+            <a-button @click="handleAnalyzeClick" :loading="analysisLoading">
+              <template #icon><BulbOutlined /></template>
+              重新分析
+            </a-button>
+          </a-space>
+        </div>
+      </div>
     </a-card>
 
     <!-- 操作按钮 -->
@@ -158,7 +201,7 @@
           <template #icon><CheckOutlined /></template>
           解决告警
         </a-button>
-        <a-button @click="analyzeAlert" :loading="analysisLoading">
+        <a-button @click="handleAnalyzeClick" :loading="analysisLoading" v-if="!analysisResult">
           <template #icon><BulbOutlined /></template>
           AI分析
         </a-button>
@@ -190,11 +233,39 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <!-- AI分析二次确认模态框 -->
+    <a-modal
+      v-model:open="analysisConfirmModalVisible"
+      title="重新分析确认"
+      @ok="confirmAnalyze"
+      @cancel="analysisConfirmModalVisible = false"
+      :confirm-loading="analysisLoading"
+    >
+      <div class="confirm-content">
+        <p><ExclamationCircleOutlined style="color: #faad14; margin-right: 8px;" />该告警已存在AI分析结果，是否要重新进行分析？</p>
+        <p class="confirm-note">重新分析将覆盖现有的分析结果。</p>
+      </div>
+    </a-modal>
+
+    <!-- 完整分析结果模态框 -->
+    <a-modal
+      v-model:open="fullAnalysisModalVisible"
+      title="完整AI分析结果"
+      width="800px"
+      :footer="null"
+    >
+      <AlertAnalysisComponent
+        v-if="analysisResult"
+        :analysis="analysisResult"
+        @close="fullAnalysisModalVisible = false"
+      />
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import {
   Card,
   Descriptions,
@@ -207,6 +278,7 @@ import {
   Modal,
   Form,
   Input,
+  Progress,
   message
 } from 'ant-design-vue'
 import {
@@ -222,7 +294,8 @@ import {
 } from '@ant-design/icons-vue'
 import { formatDateTime, getFriendlyTime } from '@/utils/datetime'
 import { updateAlert, analyzeAlert as analyzeAlertApi, convertToKnowledge as convertToKnowledgeApi } from '@/services/alert'
-import type { Alert } from '@/types'
+import type { Alert, AlertAnalysis } from '@/types'
+import AlertAnalysisComponent from './AlertAnalysis.vue'
 
 const ACard = Card
 const ADescriptions = Descriptions
@@ -240,6 +313,7 @@ const AModal = Modal
 const AForm = Form
 const AFormItem = Form.Item
 const ATextarea = Input.TextArea
+const AProgress = Progress
 
 interface Props {
   alert: Alert
@@ -260,7 +334,10 @@ const analysisLoading = ref(false)
 const convertLoading = ref(false)
 const commentLoading = ref(false)
 const commentModalVisible = ref(false)
+const analysisConfirmModalVisible = ref(false)
+const fullAnalysisModalVisible = ref(false)
 const relatedAlerts = ref<Alert[]>([])
+const analysisResult = ref<AlertAnalysis | null>(null)
 
 // 备注表单
 const commentForm = reactive({
@@ -429,6 +506,39 @@ const renderMarkdown = (text: string) => {
     .replace(/\n/g, '<br>')
 }
 
+// 格式化分析内容
+const formatAnalysisContent = (text: string) => {
+  if (!text) return ''
+  
+  return text
+    // 移除<think>标签内容
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
+    // 处理标题（### 开头的行）
+    .replace(/^### (.*$)/gm, '<h3 style="color: #1890ff; margin: 16px 0 8px 0; font-size: 16px;">$1</h3>')
+    // 处理二级标题（#### 开头的行）
+    .replace(/^#### (.*$)/gm, '<h4 style="color: #1890ff; margin: 12px 0 6px 0; font-size: 14px;">$1</h4>')
+    // 处理粗体
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    // 处理斜体
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    // 处理代码
+    .replace(/`(.*?)`/g, '<code style="background: #f5f5f5; padding: 2px 4px; border-radius: 3px;">$1</code>')
+    // 处理列表项（- 开头的行）
+    .replace(/^- (.*$)/gm, '<li style="margin: 4px 0;">$1</li>')
+    // 处理换行
+    .replace(/\n\n/g, '</p><p style="margin: 8px 0;">')
+    .replace(/\n/g, '<br>')
+    // 包装段落
+    .replace(/^(.)/gm, '<p style="margin: 8px 0;">$1')
+    .replace(/(.*)$/gm, '$1</p>')
+    // 处理列表
+    .replace(/(<li[^>]*>.*?<\/li>)/gs, '<ul style="margin: 8px 0; padding-left: 20px;">$1</ul>')
+    // 清理多余的段落标签
+    .replace(/<\/p><p[^>]*><h/g, '</p><h')
+    .replace(/<\/h[1-6]><\/p>/g, '</h1>')
+    .replace(/<p[^>]*><\/p>/g, '')
+}
+
 // 确认告警
 const acknowledgeAlert = async () => {
   actionLoading.value = true
@@ -457,18 +567,47 @@ const resolveAlert = async () => {
   }
 }
 
+// 处理AI分析按钮点击
+const handleAnalyzeClick = () => {
+  if (analysisResult.value) {
+    // 如果已存在分析结果，弹出二次确认
+    analysisConfirmModalVisible.value = true
+  } else {
+    // 如果不存在分析结果，直接进行分析
+    analyzeAlert()
+  }
+}
+
+// 确认重新分析
+const confirmAnalyze = () => {
+  analysisConfirmModalVisible.value = false
+  analyzeAlert()
+}
+
 // AI分析
 const analyzeAlert = async () => {
   analysisLoading.value = true
   try {
     const response = await analyzeAlertApi(props.alert.id)
-    // 这里可以显示分析结果或跳转到分析页面
+    analysisResult.value = response.data
     message.success('AI分析完成')
   } catch (error) {
     message.error('AI分析失败')
   } finally {
     analysisLoading.value = false
   }
+}
+
+// 查看完整分析结果
+const viewFullAnalysis = () => {
+  fullAnalysisModalVisible.value = true
+}
+
+// 获取置信度颜色
+const getConfidenceColor = (confidence: number) => {
+  if (confidence >= 0.8) return '#52c41a'
+  if (confidence >= 0.6) return '#faad14'
+  return '#ff4d4f'
 }
 
 // 转为知识
@@ -515,6 +654,36 @@ const submitComment = async () => {
     commentLoading.value = false
   }
 }
+
+// 初始化时检查是否已有分析结果
+const checkExistingAnalysis = async () => {
+  try {
+    // 检查告警是否有analysis字段
+    if (props.alert.analysis && props.alert.analysis.trim()) {
+      // 构造分析结果对象
+      analysisResult.value = {
+        id: props.alert.id,
+        alert_id: props.alert.id,
+        analysis: props.alert.analysis,
+        analyzed_at: props.alert.updated_at || new Date().toISOString(),
+        model: 'Ollama',
+        confidence: 0.85,
+        severity_assessment: props.alert.severity,
+        created_at: props.alert.updated_at || new Date().toISOString(),
+        updated_at: props.alert.updated_at || new Date().toISOString()
+      }
+    } else if (props.alert.analysis_result) {
+      analysisResult.value = props.alert.analysis_result
+    }
+  } catch (error) {
+    console.error('检查分析结果失败:', error)
+  }
+}
+
+// 组件挂载时检查分析结果
+onMounted(() => {
+  checkExistingAnalysis()
+})
 </script>
 
 <style scoped>
@@ -557,6 +726,43 @@ const submitComment = async () => {
   padding: 16px 0;
   border-top: 1px solid #f0f0f0;
   text-align: center;
+}
+
+.analysis-summary {
+  margin-bottom: 16px;
+}
+
+.analysis-content {
+  margin: 16px 0;
+}
+
+.analysis-content h4 {
+  margin-bottom: 8px;
+  color: #1890ff;
+}
+
+.analysis-text {
+  background: #f6f8fa;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 4px solid #1890ff;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.analysis-actions {
+  margin-top: 16px;
+  text-align: right;
+}
+
+.confirm-content {
+  padding: 16px 0;
+}
+
+.confirm-note {
+  color: #666;
+  font-size: 12px;
+  margin-top: 8px;
 }
 
 /* 响应式设计 */

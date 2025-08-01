@@ -118,6 +118,15 @@ const routes: RouteRecordRaw[] = [
           title: '个人资料',
           icon: 'user'
         }
+      },
+      {
+        path: 'test-alert-detail',
+        name: 'TestAlertDetail',
+        component: () => import('@/views/TestAlertDetail.vue'),
+        meta: {
+          title: '告警详情测试',
+          icon: 'experiment'
+        }
       }
     ]
   }

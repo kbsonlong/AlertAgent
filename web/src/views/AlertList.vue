@@ -266,7 +266,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, h } from 'vue'
 import {
   Card,
   Table,
@@ -572,6 +572,27 @@ const resolveAlert = async (alert: Alert) => {
 
 // AI分析告警
 const analyzeAlert = async (alert: Alert) => {
+  // 检查是否已有分析结果
+  if (alert.analysis_result || alert.analysis) {
+    // 弹出二次确认对话框
+    Modal.confirm({
+      title: '重新分析确认',
+      content: '该告警已存在AI分析结果，是否要重新进行分析？重新分析将覆盖现有的分析结果。',
+      icon: h(ExclamationCircleOutlined, { style: { color: '#faad14' } }),
+      okText: '确定',
+      cancelText: '取消',
+      onOk: () => {
+        performAnalysis(alert)
+      }
+    })
+  } else {
+    // 直接进行分析
+    performAnalysis(alert)
+  }
+}
+
+// 执行AI分析
+const performAnalysis = async (alert: Alert) => {
   try {
     loading.value = true
     const response = await analyzeAlertApi(alert.id)

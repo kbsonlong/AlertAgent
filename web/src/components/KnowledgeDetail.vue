@@ -6,15 +6,9 @@
         <h2 class="knowledge-title">{{ knowledge.title }}</h2>
         <div class="knowledge-meta">
           <a-space>
-            <a-tag :color="getStatusColor(knowledge.status)">
-              {{ getStatusText(knowledge.status) }}
-            </a-tag>
             <a-tag v-if="knowledge.category" color="blue">
               {{ getCategoryName(knowledge.category) }}
             </a-tag>
-            <span class="meta-item">
-              <EyeOutlined /> {{ knowledge.views || 0 }} 次浏览
-            </span>
             <span class="meta-item">
               <ClockCircleOutlined /> {{ formatDateTime(knowledge.updated_at) }}
             </span>
@@ -234,10 +228,10 @@ const knowledgeHistory = ref([
 ])
 
 // 获取标签列表
-const getTagList = (tags: string) => {
+const getTagList = (tags: string | string[] | undefined) => {
   if (!tags) return []
   try {
-    return typeof tags === 'string' ? tags.split(',').filter(Boolean) : []
+    return typeof tags === 'string' ? tags.split(',').filter(Boolean) : tags
   } catch {
     return []
   }
@@ -344,17 +338,88 @@ const getHistoryText = (action: string) => {
 
 // 渲染Markdown
 const renderMarkdown = (content: string) => {
-  // 简单的Markdown渲染，实际项目中应该使用专业的Markdown解析器
   if (!content) return ''
   
-  return content
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/`(.*?)`/g, '<code>$1</code>')
-    .replace(/\n/g, '<br>')
-    .replace(/#{3}\s(.*)/g, '<h3>$1</h3>')
-    .replace(/#{2}\s(.*)/g, '<h2>$1</h2>')
-    .replace(/#{1}\s(.*)/g, '<h1>$1</h1>')
+  let html = content
+  
+  // 处理代码块（三个反引号）
+  html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+  
+  // 处理标题（需要在换行处理之前）
+  html = html.replace(/^#{6}\s(.*)$/gm, '<h6>$1</h6>')
+  html = html.replace(/^#{5}\s(.*)$/gm, '<h5>$1</h5>')
+  html = html.replace(/^#{4}\s(.*)$/gm, '<h4>$1</h4>')
+  html = html.replace(/^#{3}\s(.*)$/gm, '<h3>$1</h3>')
+  html = html.replace(/^#{2}\s(.*)$/gm, '<h2>$1</h2>')
+  html = html.replace(/^#{1}\s(.*)$/gm, '<h1>$1</h1>')
+  
+  // 处理链接
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+  
+  // 处理图片
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; height: auto;" />')
+  
+  // 处理粗体和斜体
+  html = html.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>')
+  
+  // 处理删除线
+  html = html.replace(/~~(.*?)~~/g, '<del>$1</del>')
+  
+  // 处理行内代码
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
+  
+  // 处理无序列表
+  html = html.replace(/^[\s]*[-*+]\s(.*)$/gm, '<li>$1</li>')
+  html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+  
+  // 处理有序列表
+  html = html.replace(/^[\s]*\d+\.\s(.*)$/gm, '<li>$1</li>')
+  // 如果有连续的<li>但不在<ul>中，则包装为<ol>
+  html = html.replace(/(<li>(?:(?!<\/ul>|<ul>)[\s\S])*?<\/li>)/g, (match) => {
+    if (!match.includes('<ul>')) {
+      return `<ol>${match}</ol>`
+    }
+    return match
+  })
+  
+  // 处理引用
+  html = html.replace(/^>\s(.*)$/gm, '<blockquote>$1</blockquote>')
+  
+  // 处理水平分割线
+  html = html.replace(/^[-*_]{3,}$/gm, '<hr>')
+  
+  // 处理表格
+  const tableRegex = /^\|(.+)\|\s*\n\|([\s\S]*?)\|\s*\n((?:\|.*\|\s*\n?)*)/gm
+  html = html.replace(tableRegex, (match, header, separator, rows) => {
+    const headerCells = header.split('|').map((cell: string) => `<th>${cell.trim()}</th>`).join('')
+    const rowCells = rows.trim().split('\n').map((row: string) => {
+      const cells = row.split('|').slice(1, -1).map((cell: string) => `<td>${cell.trim()}</td>`).join('')
+      return `<tr>${cells}</tr>`
+    }).join('')
+    return `<table><thead><tr>${headerCells}</tr></thead><tbody>${rowCells}</tbody></table>`
+  })
+  
+  // 处理段落（将连续的非HTML行包装为段落）
+  html = html.replace(/^(?!<[h1-6]|<ul|<ol|<li|<blockquote|<pre|<hr|<table)([^\n]+)$/gm, '<p>$1</p>')
+  
+  // 处理换行
+  html = html.replace(/\n/g, '<br>')
+  
+  // 清理多余的<br>标签
+  html = html.replace(/<\/p><br>/g, '</p>')
+  html = html.replace(/<br><p>/g, '<p>')
+  html = html.replace(/<\/h[1-6]><br>/g, (match) => match.replace('<br>', ''))
+  html = html.replace(/<br><h[1-6]>/g, (match) => match.replace('<br>', ''))
+  html = html.replace(/<\/blockquote><br>/g, '</blockquote>')
+  html = html.replace(/<br><blockquote>/g, '<blockquote>')
+  html = html.replace(/<\/ul><br>/g, '</ul>')
+  html = html.replace(/<\/ol><br>/g, '</ol>')
+  html = html.replace(/<br><ul>/g, '<ul>')
+  html = html.replace(/<br><ol>/g, '<ol>')
+  
+  return html
 }
 
 // 编辑
