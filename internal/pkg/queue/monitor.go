@@ -37,7 +37,7 @@ type QueueMetrics struct {
 	DeadLetterCount int64         `json:"dead_letter_count"`
 	DelayedCount    int64         `json:"delayed_count"`
 	ThroughputPerMin float64      `json:"throughput_per_min"`
-	AvgProcessingTime time.Duration `json:"avg_processing_time"`
+	AvgProcessingTime time.Duration `json:"avg_processing_time" swaggertype:"integer" example:"3000" format:"int64"`
 	ErrorRate       float64       `json:"error_rate"`
 	LastUpdated     time.Time     `json:"last_updated"`
 }
@@ -48,7 +48,7 @@ type TaskMetrics struct {
 	TotalCount        int64         `json:"total_count"`
 	CompletedCount    int64         `json:"completed_count"`
 	FailedCount       int64         `json:"failed_count"`
-	AvgProcessingTime time.Duration `json:"avg_processing_time"`
+	AvgProcessingTime time.Duration `json:"avg_processing_time" swaggertype:"integer" example:"2500" format:"int64"`
 	SuccessRate       float64       `json:"success_rate"`
 	LastHourCount     int64         `json:"last_hour_count"`
 }

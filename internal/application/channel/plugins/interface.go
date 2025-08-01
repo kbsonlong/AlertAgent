@@ -62,7 +62,7 @@ type PluginConfig struct {
 type SendResult struct {
 	Success   bool      `json:"success"`
 	Error     string    `json:"error,omitempty"`
-	Duration  time.Duration `json:"duration"`
+	Duration  time.Duration `json:"duration" swaggertype:"integer" example:"1000" format:"int64"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
@@ -72,7 +72,7 @@ type PluginStats struct {
 	TotalSent    int64     `json:"total_sent"`
 	SuccessCount int64     `json:"success_count"`
 	FailureCount int64     `json:"failure_count"`
-	AvgDuration  time.Duration `json:"avg_duration"`
+	AvgDuration  time.Duration `json:"avg_duration" swaggertype:"integer" example:"1500" format:"int64"`
 	LastSent     time.Time `json:"last_sent"`
 	LastError    string    `json:"last_error,omitempty"`
 }

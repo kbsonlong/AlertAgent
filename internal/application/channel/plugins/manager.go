@@ -266,7 +266,7 @@ type UsageStats struct {
 	TotalRequests    int64         `json:"total_requests"`
 	SuccessRequests  int64         `json:"success_requests"`
 	FailureRequests  int64         `json:"failure_requests"`
-	AvgResponseTime  time.Duration `json:"avg_response_time"`
+	AvgResponseTime  time.Duration `json:"avg_response_time" swaggertype:"integer" example:"2000" format:"int64"`
 	LastUsed         time.Time     `json:"last_used"`
 	RequestsPerHour  float64       `json:"requests_per_hour"`
 	SuccessRate      float64       `json:"success_rate"`

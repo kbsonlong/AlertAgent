@@ -27,7 +27,18 @@ func NewRuleAPI(ruleService service.RuleService, distributionService service.Rul
 }
 
 // CreateRule 创建告警规则
-// POST /api/v1/rules
+// @Summary 创建告警规则
+// @Description 创建新的告警规则
+// @Tags 规则管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body model.CreateRuleRequest true "规则信息"
+// @Success 201 {object} response.Response{data=model.Rule}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/rules [post]
 func (r *RuleAPI) CreateRule(c *gin.Context) {
 	var req model.CreateRuleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -58,8 +69,20 @@ func (r *RuleAPI) CreateRule(c *gin.Context) {
 	})
 }
 
-// GetRule 获取单个告警规则
-// GET /api/v1/rules/{id}
+// GetRule 获取告警规则详情
+// @Summary 获取告警规则详情
+// @Description 根据规则ID获取告警规则的详细信息
+// @Tags 规则管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "规则ID"
+// @Success 200 {object} response.Response{data=model.Rule}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/rules/{id} [get]
 func (r *RuleAPI) GetRule(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -90,7 +113,20 @@ func (r *RuleAPI) GetRule(c *gin.Context) {
 }
 
 // UpdateRule 更新告警规则
-// PUT /api/v1/rules/{id}
+// @Summary 更新告警规则
+// @Description 更新指定的告警规则
+// @Tags 规则管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "规则ID"
+// @Param request body model.UpdateRuleRequest true "规则信息"
+// @Success 200 {object} response.Response{data=model.Rule}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/rules/{id} [put]
 func (r *RuleAPI) UpdateRule(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -132,7 +168,19 @@ func (r *RuleAPI) UpdateRule(c *gin.Context) {
 }
 
 // DeleteRule 删除告警规则
-// DELETE /api/v1/rules/{id}
+// @Summary 删除告警规则
+// @Description 删除指定的告警规则
+// @Tags 规则管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "规则ID"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/rules/{id} [delete]
 func (r *RuleAPI) DeleteRule(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -163,7 +211,22 @@ func (r *RuleAPI) DeleteRule(c *gin.Context) {
 }
 
 // ListRules 获取告警规则列表
-// GET /api/v1/rules
+// @Summary 获取告警规则列表
+// @Description 获取告警规则列表，支持分页和筛选
+// @Tags 规则管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(10)
+// @Param name query string false "规则名称筛选"
+// @Param status query string false "规则状态筛选"
+// @Param severity query string false "严重程度筛选"
+// @Success 200 {object} response.Response{data=object}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/rules [get]
 func (r *RuleAPI) ListRules(c *gin.Context) {
 	// 解析分页参数
 	page := 1
@@ -205,7 +268,19 @@ func (r *RuleAPI) ListRules(c *gin.Context) {
 }
 
 // GetRuleDistribution 获取规则分发状态
-// GET /api/v1/rules/{id}/distribution
+// @Summary 获取规则分发状态
+// @Description 获取指定规则的分发状态信息
+// @Tags 规则分发
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "规则ID"
+// @Success 200 {object} response.Response{data=object}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/rules/{id}/distribution [get]
 func (r *RuleAPI) GetRuleDistribution(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -236,7 +311,18 @@ func (r *RuleAPI) GetRuleDistribution(c *gin.Context) {
 }
 
 // ValidateRule 验证规则语法
-// POST /api/v1/rules/validate
+// @Summary 验证告警规则
+// @Description 验证告警规则的语法和配置是否正确
+// @Tags 规则管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body object{expression=string,duration=string} true "规则验证信息"
+// @Success 200 {object} response.Response{data=object}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/rules/validate [post]
 func (r *RuleAPI) ValidateRule(c *gin.Context) {
 	var req struct {
 		Expression string `json:"expression" binding:"required"`
@@ -328,7 +414,18 @@ func DeleteRule(c *gin.Context) {
 	})
 }
 // GetDistributionSummary 获取多个规则的分发汇总
-// POST /api/v1/rules/distribution/summary
+// @Summary 获取多个规则的分发汇总
+// @Description 获取多个规则的分发状态汇总信息
+// @Tags 规则分发
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body object{rule_ids=[]string} true "规则ID列表"
+// @Success 200 {object} response.Response{data=object}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/rules/distribution/summary [post]
 func (r *RuleAPI) GetDistributionSummary(c *gin.Context) {
 	var req struct {
 		RuleIDs []string `json:"rule_ids"`
@@ -363,7 +460,18 @@ func (r *RuleAPI) GetDistributionSummary(c *gin.Context) {
 }
 
 // BatchRuleOperation 批量规则操作
-// POST /api/v1/rules/batch
+// @Summary 批量操作规则
+// @Description 批量启用、禁用或删除规则
+// @Tags 规则管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body model.BatchRuleOperation true "批量操作信息"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/rules/batch [post]
 func (r *RuleAPI) BatchRuleOperation(c *gin.Context) {
 	var req model.BatchRuleOperation
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -395,7 +503,18 @@ func (r *RuleAPI) BatchRuleOperation(c *gin.Context) {
 }
 
 // RetryDistribution 重试分发
-// POST /api/v1/rules/distribution/retry
+// @Summary 重试分发
+// @Description 重试失败的规则分发
+// @Tags 规则分发
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body model.RetryDistributionRequest true "重试分发请求"
+// @Success 200 {object} response.Response{data=object}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/rules/distribution/retry [post]
 func (r *RuleAPI) RetryDistribution(c *gin.Context) {
 	var req model.RetryDistributionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

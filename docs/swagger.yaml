@@ -1,0 +1,3395 @@
+basePath: /
+definitions:
+  model.Alert:
+    properties:
+      ai_summary:
+        type: string
+      analysis:
+        type: string
+      analysis_result:
+        type: string
+      analysis_status:
+        type: string
+      content:
+        type: string
+      fingerprint:
+        type: string
+      group_id:
+        type: integer
+      handle_note:
+        type: string
+      handler:
+        type: string
+      id:
+        type: integer
+      labels:
+        type: string
+      level:
+        type: string
+      name:
+        type: string
+      notify_count:
+        type: integer
+      resolution_suggestion:
+        type: string
+      rule_id:
+        type: integer
+      severity:
+        type: string
+      similar_alerts:
+        type: string
+      source:
+        type: string
+      status:
+        type: string
+      template_id:
+        type: integer
+      title:
+        type: string
+    type: object
+  model.BatchRuleOperation:
+    properties:
+      action:
+        description: create, update, delete, distribute
+        type: string
+      options:
+        additionalProperties: true
+        type: object
+      rule_ids:
+        items:
+          type: string
+        type: array
+      targets:
+        items:
+          type: string
+        type: array
+    required:
+    - action
+    - rule_ids
+    type: object
+  model.CreateRuleRequest:
+    properties:
+      annotations:
+        additionalProperties:
+          type: string
+        type: object
+      duration:
+        type: string
+      expression:
+        type: string
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      name:
+        type: string
+      severity:
+        type: string
+      targets:
+        items:
+          type: string
+        type: array
+    required:
+    - duration
+    - expression
+    - name
+    - severity
+    type: object
+  model.RetryDistributionRequest:
+    properties:
+      force:
+        description: 是否强制重试（忽略重试次数限制）
+        type: boolean
+      rule_ids:
+        items:
+          type: string
+        type: array
+      targets:
+        description: 如果为空，重试所有失败的目标
+        items:
+          type: string
+        type: array
+    required:
+    - rule_ids
+    type: object
+  model.Rule:
+    properties:
+      annotations:
+        type: string
+      created_at:
+        type: string
+      duration:
+        type: string
+      expression:
+        type: string
+      id:
+        type: string
+      labels:
+        type: string
+      name:
+        type: string
+      severity:
+        type: string
+      status:
+        type: string
+      targets:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: string
+    type: object
+  model.UpdateRuleRequest:
+    properties:
+      annotations:
+        additionalProperties:
+          type: string
+        type: object
+      duration:
+        type: string
+      expression:
+        type: string
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      name:
+        type: string
+      severity:
+        type: string
+      targets:
+        items:
+          type: string
+        type: array
+    type: object
+  plugins.HealthStatus:
+    properties:
+      check_count:
+        type: integer
+      failure_count:
+        type: integer
+      is_healthy:
+        type: boolean
+      last_check:
+        type: string
+      last_error:
+        type: string
+      plugin_name:
+        type: string
+      success_rate:
+        type: number
+    type: object
+  plugins.NotificationMessage:
+    properties:
+      alert_id:
+        type: string
+      annotations:
+        additionalProperties:
+          type: string
+        type: object
+      content:
+        type: string
+      extra:
+        additionalProperties: true
+        type: object
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      severity:
+        type: string
+      timestamp:
+        type: string
+      title:
+        type: string
+    type: object
+  plugins.PluginConfig:
+    properties:
+      config:
+        additionalProperties: true
+        type: object
+      enabled:
+        type: boolean
+      name:
+        type: string
+      priority:
+        description: 发送优先级，数字越小优先级越高
+        type: integer
+    type: object
+  plugins.PluginInfo:
+    properties:
+      description:
+        type: string
+      last_error:
+        type: string
+      load_time:
+        type: string
+      name:
+        type: string
+      schema:
+        additionalProperties: true
+        type: object
+      status:
+        description: active, inactive, error
+        type: string
+      version:
+        type: string
+    type: object
+  plugins.PluginStats:
+    properties:
+      avg_duration:
+        example: 1500
+        format: int64
+        type: integer
+      failure_count:
+        type: integer
+      last_error:
+        type: string
+      last_sent:
+        type: string
+      name:
+        type: string
+      success_count:
+        type: integer
+      total_sent:
+        type: integer
+    type: object
+  plugins.SendResult:
+    properties:
+      duration:
+        example: 1000
+        format: int64
+        type: integer
+      error:
+        type: string
+      success:
+        type: boolean
+      timestamp:
+        type: string
+    type: object
+  plugins.UsageStats:
+    properties:
+      avg_response_time:
+        example: 2000
+        format: int64
+        type: integer
+      failure_requests:
+        type: integer
+      last_used:
+        type: string
+      plugin_name:
+        type: string
+      requests_per_hour:
+        type: number
+      success_rate:
+        type: number
+      success_requests:
+        type: integer
+      total_requests:
+        type: integer
+    type: object
+  queue.QueueMetrics:
+    properties:
+      avg_processing_time:
+        example: 3000
+        format: int64
+        type: integer
+      completed_count:
+        type: integer
+      dead_letter_count:
+        type: integer
+      delayed_count:
+        type: integer
+      error_rate:
+        type: number
+      failed_count:
+        type: integer
+      last_updated:
+        type: string
+      pending_count:
+        type: integer
+      processing_count:
+        type: integer
+      queue_name:
+        type: string
+      throughput_per_min:
+        type: number
+    type: object
+  queue.Task:
+    properties:
+      completed_at:
+        type: string
+      created_at:
+        type: string
+      error_msg:
+        type: string
+      id:
+        type: string
+      max_retry:
+        type: integer
+      payload:
+        additionalProperties: true
+        type: object
+      priority:
+        $ref: '#/definitions/queue.TaskPriority'
+      retry:
+        type: integer
+      scheduled_at:
+        type: string
+      started_at:
+        type: string
+      status:
+        $ref: '#/definitions/queue.TaskStatus'
+      type:
+        $ref: '#/definitions/queue.TaskType'
+      updated_at:
+        type: string
+      worker_id:
+        type: string
+    type: object
+  queue.TaskMetrics:
+    properties:
+      avg_processing_time:
+        example: 2500
+        format: int64
+        type: integer
+      completed_count:
+        type: integer
+      failed_count:
+        type: integer
+      last_hour_count:
+        type: integer
+      success_rate:
+        type: number
+      task_type:
+        $ref: '#/definitions/queue.TaskType'
+      total_count:
+        type: integer
+    type: object
+  queue.TaskPriority:
+    enum:
+    - 0
+    - 1
+    - 2
+    - 3
+    type: integer
+    x-enum-varnames:
+    - PriorityLow
+    - PriorityNormal
+    - PriorityHigh
+    - PriorityCritical
+  queue.TaskStatus:
+    enum:
+    - pending
+    - processing
+    - completed
+    - failed
+    - retrying
+    type: string
+    x-enum-varnames:
+    - TaskStatusPending
+    - TaskStatusProcessing
+    - TaskStatusCompleted
+    - TaskStatusFailed
+    - TaskStatusRetrying
+  queue.TaskType:
+    enum:
+    - ai_analysis
+    - notification
+    - config_sync
+    - rule_update
+    - health_check
+    type: string
+    x-enum-varnames:
+    - TaskTypeAIAnalysis
+    - TaskTypeNotification
+    - TaskTypeConfigSync
+    - TaskTypeRuleUpdate
+    - TaskTypeHealthCheck
+  response.ErrorResponse:
+    properties:
+      code:
+        type: integer
+      error:
+        type: string
+      message:
+        type: string
+      request_id:
+        type: string
+      timestamp:
+        type: integer
+    type: object
+  response.Response:
+    properties:
+      code:
+        type: integer
+      data: {}
+      message:
+        type: string
+      request_id:
+        type: string
+      timestamp:
+        type: integer
+    type: object
+  service.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  service.LoginResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      refresh_token:
+        type: string
+      token_type:
+        type: string
+      user:
+        $ref: '#/definitions/service.User'
+    type: object
+  service.RefreshTokenRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  service.User:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+      username:
+        type: string
+    type: object
+  v1.BatchTaskRequest:
+    properties:
+      task_ids:
+        items:
+          type: string
+        type: array
+    required:
+    - task_ids
+    type: object
+  v1.BatchTaskResponse:
+    properties:
+      failed:
+        type: integer
+      results:
+        items:
+          $ref: '#/definitions/v1.TaskOperationResult'
+        type: array
+      succeeded:
+        type: integer
+      total:
+        type: integer
+    type: object
+  v1.HealthStatus:
+    properties:
+      services:
+        additionalProperties:
+          $ref: '#/definitions/v1.ServiceInfo'
+        type: object
+      status:
+        type: string
+      timestamp:
+        type: integer
+      version:
+        type: string
+    type: object
+  v1.OptimizationOperation:
+    properties:
+      details:
+        additionalProperties: true
+        type: object
+      duration:
+        description: 毫秒
+        type: integer
+      error:
+        type: string
+      message:
+        type: string
+      status:
+        description: success, failed, skipped
+        type: string
+      type:
+        type: string
+    type: object
+  v1.OptimizationSummary:
+    properties:
+      failed_operations:
+        type: integer
+      improvement_score:
+        type: number
+      skipped_operations:
+        type: integer
+      success_rate:
+        type: number
+      successful_operations:
+        type: integer
+      total_operations:
+        type: integer
+    type: object
+  v1.QueueAlert:
+    properties:
+      acknowledged_at:
+        type: string
+      acknowledged_by:
+        type: string
+      created_at:
+        type: string
+      details:
+        additionalProperties: true
+        type: object
+      id:
+        type: string
+      message:
+        type: string
+      queue_name:
+        type: string
+      resolved_at:
+        type: string
+      severity:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+      type:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  v1.QueueAlertsResponse:
+    properties:
+      alerts:
+        items:
+          $ref: '#/definitions/v1.QueueAlert'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  v1.QueueOptimizeRequest:
+    properties:
+      auto_scale:
+        type: boolean
+      cleanup_expired:
+        type: boolean
+      max_age:
+        type: string
+      optimize_workers:
+        type: boolean
+      rebalance:
+        type: boolean
+    type: object
+  v1.QueueOptimizeResponse:
+    properties:
+      completed_at:
+        type: string
+      duration:
+        description: 毫秒
+        type: integer
+      operations:
+        items:
+          $ref: '#/definitions/v1.OptimizationOperation'
+        type: array
+      queue_name:
+        type: string
+      summary:
+        $ref: '#/definitions/v1.OptimizationSummary'
+    type: object
+  v1.QueueRecommendation:
+    properties:
+      action:
+        type: string
+      auto_fix:
+        type: boolean
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      impact:
+        type: string
+      metrics:
+        additionalProperties: true
+        type: object
+      priority:
+        type: string
+      title:
+        type: string
+      type:
+        type: string
+    type: object
+  v1.QueueScaleRequest:
+    properties:
+      force:
+        type: boolean
+      scale_reason:
+        type: string
+      target_workers:
+        maximum: 100
+        minimum: 0
+        type: integer
+    required:
+    - target_workers
+    type: object
+  v1.QueueScaleResponse:
+    properties:
+      completed_at:
+        type: string
+      current_workers:
+        type: integer
+      estimated_time:
+        description: 秒
+        type: integer
+      message:
+        type: string
+      queue_name:
+        type: string
+      scaled_workers:
+        type: integer
+      status:
+        type: string
+      target_workers:
+        type: integer
+    type: object
+  v1.ServiceInfo:
+    properties:
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+  v1.TaskHistoryRecord:
+    properties:
+      action:
+        description: created, started, completed, failed, retried, cancelled
+        type: string
+      duration:
+        description: 毫秒
+        type: integer
+      error_msg:
+        type: string
+      id:
+        type: string
+      message:
+        type: string
+      metadata:
+        additionalProperties: true
+        type: object
+      status:
+        type: string
+      task_id:
+        type: string
+      timestamp:
+        type: string
+      worker_id:
+        type: string
+    type: object
+  v1.TaskListResponse:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      tasks:
+        items:
+          $ref: '#/definitions/queue.Task'
+        type: array
+      total:
+        type: integer
+    type: object
+  v1.TaskLog:
+    properties:
+      context:
+        additionalProperties: true
+        type: object
+      id:
+        type: string
+      level:
+        type: string
+      message:
+        type: string
+      task_id:
+        type: string
+      timestamp:
+        type: string
+      worker_id:
+        type: string
+    type: object
+  v1.TaskLogsResponse:
+    properties:
+      logs:
+        items:
+          $ref: '#/definitions/v1.TaskLog'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  v1.TaskOperationResult:
+    properties:
+      error:
+        type: string
+      success:
+        type: boolean
+      task_id:
+        type: string
+    type: object
+  v1.UserListResponse:
+    properties:
+      page:
+        example: 1
+        type: integer
+      size:
+        example: 10
+        type: integer
+      total:
+        example: 100
+        type: integer
+      users:
+        items:
+          $ref: '#/definitions/v1.UserResponse'
+        type: array
+    type: object
+  v1.UserRequest:
+    properties:
+      department:
+        example: 技术部
+        type: string
+      email:
+        example: admin@example.com
+        type: string
+      full_name:
+        example: 管理员
+        type: string
+      password:
+        example: password123
+        type: string
+      phone:
+        example: +86 138 0013 8000
+        type: string
+      position:
+        example: 系统管理员
+        type: string
+      role:
+        example: admin
+        type: string
+      status:
+        example: active
+        type: string
+      username:
+        example: admin
+        type: string
+    required:
+    - email
+    - full_name
+    - role
+    - status
+    - username
+    type: object
+  v1.UserResponse:
+    properties:
+      created_at:
+        example: "2024-01-01T12:00:00Z"
+        type: string
+      created_by:
+        example: admin
+        type: string
+      department:
+        example: 技术部
+        type: string
+      email:
+        example: admin@example.com
+        type: string
+      full_name:
+        example: 管理员
+        type: string
+      id:
+        example: 1
+        type: integer
+      last_login_at:
+        example: "2024-01-01T12:00:00Z"
+        type: string
+      last_login_ip:
+        example: 192.168.1.100
+        type: string
+      login_count:
+        example: 10
+        type: integer
+      permissions:
+        items:
+          type: string
+        type: array
+      phone:
+        example: +86 138 0013 8000
+        type: string
+      position:
+        example: 系统管理员
+        type: string
+      role:
+        example: admin
+        type: string
+      status:
+        example: active
+        type: string
+      updated_at:
+        example: "2024-01-01T12:00:00Z"
+        type: string
+      updated_by:
+        example: admin
+        type: string
+      username:
+        example: admin
+        type: string
+    type: object
+  v1.UserStatsResponse:
+    properties:
+      active:
+        example: 85
+        type: integer
+      inactive:
+        example: 10
+        type: integer
+      locked:
+        example: 5
+        type: integer
+      total:
+        example: 100
+        type: integer
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: AlertAgent告警管理系统API文档
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: AlertAgent API
+  version: "1.0"
+paths:
+  /api/v1/alerts:
+    get:
+      consumes:
+      - application/json
+      description: 获取系统中的告警列表，支持分页和筛选
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 告警状态筛选
+        in: query
+        name: status
+        type: string
+      - description: 严重程度筛选
+        in: query
+        name: severity
+        type: string
+      - description: 搜索关键词
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取告警列表
+      tags:
+      - 告警管理
+    post:
+      consumes:
+      - application/json
+      description: 创建新的告警记录
+      parameters:
+      - description: 告警信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.Alert'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.Alert'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建告警
+      tags:
+      - 告警管理
+  /api/v1/alerts/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 根据告警ID获取告警的详细信息
+      parameters:
+      - description: 告警ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.Alert'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取告警详情
+      tags:
+      - 告警管理
+    put:
+      consumes:
+      - application/json
+      description: 更新告警信息
+      parameters:
+      - description: 告警ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 告警信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.Alert'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.Alert'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新告警
+      tags:
+      - 告警管理
+  /api/v1/alerts/{id}/analyze:
+    post:
+      consumes:
+      - application/json
+      description: 对指定告警进行AI分析
+      parameters:
+      - description: 告警ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 分析告警
+      tags:
+      - 告警管理
+  /api/v1/alerts/{id}/handle:
+    post:
+      consumes:
+      - application/json
+      description: 处理指定的告警，更新告警状态
+      parameters:
+      - description: 告警ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 处理操作
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            action:
+              type: string
+            comment:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 处理告警
+      tags:
+      - 告警管理
+  /api/v1/alerts/{id}/similar:
+    get:
+      consumes:
+      - application/json
+      description: 查找与指定告警相似的其他告警
+      parameters:
+      - description: 告警ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.Alert'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查找相似告警
+      tags:
+      - 告警管理
+  /api/v1/alerts/stats:
+    get:
+      consumes:
+      - application/json
+      description: 获取告警数量统计信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取告警统计
+      tags:
+      - 告警管理
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: 用户登录获取访问令牌
+      parameters:
+      - description: 登录请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/service.LoginResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: 用户登录
+      tags:
+      - 认证
+  /api/v1/auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: 用户登出，使令牌失效
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 用户登出
+      tags:
+      - 认证
+  /api/v1/auth/profile:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前登录用户的信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/service.User'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取用户信息
+      tags:
+      - 认证
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: 使用刷新令牌获取新的访问令牌
+      parameters:
+      - description: 刷新令牌请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/service.LoginResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: 刷新访问令牌
+      tags:
+      - 认证
+  /api/v1/health:
+    get:
+      consumes:
+      - application/json
+      description: 检查系统各组件的健康状态
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.HealthStatus'
+              type: object
+      summary: 健康检查
+      tags:
+      - 系统
+  /api/v1/plugins:
+    get:
+      consumes:
+      - application/json
+      description: 获取系统中所有已注册的通知插件信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/plugins.PluginInfo'
+                  type: array
+              type: object
+      summary: 获取所有可用插件
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/config:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定插件的配置信息
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/plugins.PluginConfig'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取插件配置
+      tags:
+      - 插件管理
+    post:
+      consumes:
+      - application/json
+      description: 设置指定插件的配置信息
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 插件配置
+        in: body
+        name: config
+        required: true
+        schema:
+          $ref: '#/definitions/plugins.PluginConfig'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 设置插件配置
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/config/history:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定插件的配置变更历史
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页大小
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取插件配置历史
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/disable:
+    post:
+      consumes:
+      - application/json
+      description: 禁用指定的通知插件
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 禁用插件
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/enable:
+    post:
+      consumes:
+      - application/json
+      description: 启用指定的通知插件
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 启用插件
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/health:
+    get:
+      consumes:
+      - application/json
+      description: 检查指定插件的健康状态
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 检查插件健康状态
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/health/status:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定插件的详细健康状态信息
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/plugins.HealthStatus'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取插件健康状态详情
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/hot-reload:
+    post:
+      consumes:
+      - application/json
+      description: 动态重新加载指定插件
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 热重载插件
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/hot-unload:
+    post:
+      consumes:
+      - application/json
+      description: 动态卸载指定插件
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 热卸载插件
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/schema:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定插件的配置Schema，用于动态生成配置表单
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取插件配置Schema
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/send:
+    post:
+      consumes:
+      - application/json
+      description: 使用指定插件发送测试通知
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 通知消息
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/plugins.NotificationMessage'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/plugins.SendResult'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 发送测试通知
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/stats:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定插件的使用统计信息
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/plugins.PluginStats'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取插件统计信息
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/test:
+    post:
+      consumes:
+      - application/json
+      description: 使用指定配置测试插件是否工作正常
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 插件配置
+        in: body
+        name: config
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 测试插件配置
+      tags:
+      - 插件管理
+  /api/v1/plugins/{name}/usage:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定插件的详细使用统计信息
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/plugins.UsageStats'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取插件使用统计
+      tags:
+      - 插件管理
+  /api/v1/plugins/health:
+    get:
+      consumes:
+      - application/json
+      description: 检查所有已配置插件的健康状态
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+      summary: 检查所有插件健康状态
+      tags:
+      - 插件管理
+  /api/v1/plugins/health/status:
+    get:
+      consumes:
+      - application/json
+      description: 获取所有插件的详细健康状态信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    $ref: '#/definitions/plugins.HealthStatus'
+                  type: object
+              type: object
+      summary: 获取所有插件健康状态
+      tags:
+      - 插件管理
+  /api/v1/plugins/hot-load:
+    post:
+      consumes:
+      - application/json
+      description: 动态加载新的插件
+      parameters:
+      - description: 插件路径
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 热加载插件
+      tags:
+      - 插件管理
+  /api/v1/plugins/stats:
+    get:
+      consumes:
+      - application/json
+      description: 获取所有插件的使用统计信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    $ref: '#/definitions/plugins.PluginStats'
+                  type: object
+              type: object
+      summary: 获取所有插件统计信息
+      tags:
+      - 插件管理
+  /api/v1/plugins/usage:
+    get:
+      consumes:
+      - application/json
+      description: 获取所有插件的详细使用统计信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    $ref: '#/definitions/plugins.UsageStats'
+                  type: object
+              type: object
+      summary: 获取所有插件使用统计
+      tags:
+      - 插件管理
+  /api/v1/queues/{queue_name}/cleanup:
+    post:
+      consumes:
+      - application/json
+      description: 清理指定队列中的过期任务
+      parameters:
+      - description: 队列名称
+        in: path
+        name: queue_name
+        required: true
+        type: string
+      - default: '"1h"'
+        description: 最大存活时间
+        in: query
+        name: max_age
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 清理过期任务
+      tags:
+      - Queue
+  /api/v1/queues/{queue_name}/metrics:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定队列的详细指标信息
+      parameters:
+      - description: 队列名称
+        in: path
+        name: queue_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/queue.QueueMetrics'
+              type: object
+      summary: 获取队列指标
+      tags:
+      - Queue
+  /api/v1/queues/{queue_name}/optimize:
+    post:
+      consumes:
+      - application/json
+      description: 对指定队列执行优化操作
+      parameters:
+      - description: 队列名称
+        in: path
+        name: queue_name
+        required: true
+        type: string
+      - description: 优化请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1.QueueOptimizeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.QueueOptimizeResponse'
+              type: object
+      summary: 队列优化
+      tags:
+      - Queue
+  /api/v1/queues/{queue_name}/pause:
+    post:
+      consumes:
+      - application/json
+      description: 暂停指定队列的任务处理
+      parameters:
+      - description: 队列名称
+        in: path
+        name: queue_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 暂停队列
+      tags:
+      - Queue
+  /api/v1/queues/{queue_name}/recommendations:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定队列的性能优化建议
+      parameters:
+      - description: 队列名称
+        in: path
+        name: queue_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/v1.QueueRecommendation'
+                  type: array
+              type: object
+      summary: 获取队列优化建议
+      tags:
+      - Queue
+  /api/v1/queues/{queue_name}/resume:
+    post:
+      consumes:
+      - application/json
+      description: 恢复指定队列的任务处理
+      parameters:
+      - description: 队列名称
+        in: path
+        name: queue_name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 恢复队列
+      tags:
+      - Queue
+  /api/v1/queues/{queue_name}/scale:
+    post:
+      consumes:
+      - application/json
+      description: 手动调整队列的Worker数量
+      parameters:
+      - description: 队列名称
+        in: path
+        name: queue_name
+        required: true
+        type: string
+      - description: 扩缩容请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1.QueueScaleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.QueueScaleResponse'
+              type: object
+      summary: 队列扩缩容
+      tags:
+      - Queue
+  /api/v1/queues/alerts:
+    get:
+      consumes:
+      - application/json
+      description: 获取队列相关的告警信息
+      parameters:
+      - description: 队列名称
+        in: query
+        name: queue_name
+        type: string
+      - description: 告警状态
+        in: query
+        name: status
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页大小
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.QueueAlertsResponse'
+              type: object
+      summary: 获取队列告警
+      tags:
+      - Queue
+  /api/v1/queues/alerts/{alert_id}/acknowledge:
+    post:
+      consumes:
+      - application/json
+      description: 确认指定的队列告警
+      parameters:
+      - description: 告警ID
+        in: path
+        name: alert_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 确认告警
+      tags:
+      - Queue
+  /api/v1/queues/health:
+    get:
+      consumes:
+      - application/json
+      description: 获取所有队列的健康状态信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+      summary: 获取队列健康状态
+      tags:
+      - Queue
+  /api/v1/queues/metrics:
+    get:
+      consumes:
+      - application/json
+      description: 获取系统中所有队列的指标信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    $ref: '#/definitions/queue.QueueMetrics'
+                  type: object
+              type: object
+      summary: 获取所有队列指标
+      tags:
+      - Queue
+  /api/v1/queues/tasks:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定队列的任务列表，支持分页和过滤
+      parameters:
+      - description: 队列名称
+        in: query
+        name: queue_name
+        type: string
+      - description: 任务状态
+        in: query
+        name: status
+        type: string
+      - description: 任务类型
+        in: query
+        name: task_type
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页大小
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.TaskListResponse'
+              type: object
+      summary: 获取任务列表
+      tags:
+      - Queue
+  /api/v1/queues/tasks/{task_id}:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定任务的详细状态信息
+      parameters:
+      - description: 任务ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/queue.Task'
+              type: object
+      summary: 获取任务状态
+      tags:
+      - Queue
+  /api/v1/queues/tasks/{task_id}/cancel:
+    post:
+      consumes:
+      - application/json
+      description: 取消正在处理的任务
+      parameters:
+      - description: 任务ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 取消任务
+      tags:
+      - Queue
+  /api/v1/queues/tasks/{task_id}/history:
+    get:
+      consumes:
+      - application/json
+      description: 获取任务的执行历史记录
+      parameters:
+      - description: 任务ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/v1.TaskHistoryRecord'
+                  type: array
+              type: object
+      summary: 获取任务执行历史
+      tags:
+      - Queue
+  /api/v1/queues/tasks/{task_id}/logs:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定任务的执行日志
+      parameters:
+      - description: 任务ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: 每页大小
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.TaskLogsResponse'
+              type: object
+      summary: 获取任务执行日志
+      tags:
+      - Queue
+  /api/v1/queues/tasks/{task_id}/retry:
+    post:
+      consumes:
+      - application/json
+      description: 重新执行失败的任务
+      parameters:
+      - description: 任务ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 重试任务
+      tags:
+      - Queue
+  /api/v1/queues/tasks/{task_id}/skip:
+    post:
+      consumes:
+      - application/json
+      description: 跳过指定的任务，将其标记为已跳过
+      parameters:
+      - description: 任务ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 跳过任务
+      tags:
+      - Queue
+  /api/v1/queues/tasks/{task_type}/metrics:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定任务类型的指标信息
+      parameters:
+      - description: 任务类型
+        in: path
+        name: task_type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/queue.TaskMetrics'
+              type: object
+      summary: 获取任务类型指标
+      tags:
+      - Queue
+  /api/v1/queues/tasks/batch/retry:
+    post:
+      consumes:
+      - application/json
+      description: 批量重试失败的任务
+      parameters:
+      - description: 批量任务请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1.BatchTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.BatchTaskResponse'
+              type: object
+      summary: 批量重试任务
+      tags:
+      - Queue
+  /api/v1/queues/tasks/batch/skip:
+    post:
+      consumes:
+      - application/json
+      description: 批量跳过待处理或失败的任务
+      parameters:
+      - description: 批量任务请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1.BatchTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.BatchTaskResponse'
+              type: object
+      summary: 批量跳过任务
+      tags:
+      - Queue
+  /api/v1/queues/tasks/export:
+    get:
+      consumes:
+      - application/json
+      description: 导出任务数据为CSV或JSON格式
+      parameters:
+      - description: 队列名称
+        in: query
+        name: queue_name
+        type: string
+      - description: 任务状态
+        in: query
+        name: status
+        type: string
+      - description: 任务类型
+        in: query
+        name: task_type
+        type: string
+      - description: 开始时间
+        in: query
+        name: start_time
+        type: string
+      - description: 结束时间
+        in: query
+        name: end_time
+        type: string
+      - default: '"csv"'
+        description: 导出格式
+        in: query
+        name: format
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      summary: 导出任务数据
+      tags:
+      - Queue
+  /api/v1/rules:
+    get:
+      consumes:
+      - application/json
+      description: 获取告警规则列表，支持分页和筛选
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 规则名称筛选
+        in: query
+        name: name
+        type: string
+      - description: 规则状态筛选
+        in: query
+        name: status
+        type: string
+      - description: 严重程度筛选
+        in: query
+        name: severity
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取告警规则列表
+      tags:
+      - 规则管理
+    post:
+      consumes:
+      - application/json
+      description: 创建新的告警规则
+      parameters:
+      - description: 规则信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.CreateRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.Rule'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建告警规则
+      tags:
+      - 规则管理
+  /api/v1/rules/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 删除指定的告警规则
+      parameters:
+      - description: 规则ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除告警规则
+      tags:
+      - 规则管理
+    get:
+      consumes:
+      - application/json
+      description: 根据规则ID获取告警规则的详细信息
+      parameters:
+      - description: 规则ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.Rule'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取告警规则详情
+      tags:
+      - 规则管理
+    put:
+      consumes:
+      - application/json
+      description: 更新指定的告警规则
+      parameters:
+      - description: 规则ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 规则信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.UpdateRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/model.Rule'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新告警规则
+      tags:
+      - 规则管理
+  /api/v1/rules/{id}/distribution:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定规则的分发状态信息
+      parameters:
+      - description: 规则ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取规则分发状态
+      tags:
+      - 规则分发
+  /api/v1/rules/batch:
+    post:
+      consumes:
+      - application/json
+      description: 批量启用、禁用或删除规则
+      parameters:
+      - description: 批量操作信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.BatchRuleOperation'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 批量操作规则
+      tags:
+      - 规则管理
+  /api/v1/rules/distribution/retry:
+    post:
+      consumes:
+      - application/json
+      description: 重试失败的规则分发
+      parameters:
+      - description: 重试分发请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.RetryDistributionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 重试分发
+      tags:
+      - 规则分发
+  /api/v1/rules/distribution/summary:
+    post:
+      consumes:
+      - application/json
+      description: 获取多个规则的分发状态汇总信息
+      parameters:
+      - description: 规则ID列表
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            rule_ids:
+              items:
+                type: string
+              type: array
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取多个规则的分发汇总
+      tags:
+      - 规则分发
+  /api/v1/rules/validate:
+    post:
+      consumes:
+      - application/json
+      description: 验证告警规则的语法和配置是否正确
+      parameters:
+      - description: 规则验证信息
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            duration:
+              type: string
+            expression:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 验证告警规则
+      tags:
+      - 规则管理
+  /api/v1/users:
+    get:
+      consumes:
+      - application/json
+      description: 获取系统中所有用户的列表，支持分页和筛选
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: size
+        type: integer
+      - description: 用户名筛选
+        in: query
+        name: username
+        type: string
+      - description: 邮箱筛选
+        in: query
+        name: email
+        type: string
+      - description: 角色筛选
+        in: query
+        name: role
+        type: string
+      - description: 状态筛选
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.UserListResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取用户列表
+      tags:
+      - 用户管理
+    post:
+      consumes:
+      - application/json
+      description: 创建新的系统用户
+      parameters:
+      - description: 用户信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1.UserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.UserResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建用户
+      tags:
+      - 用户管理
+  /api/v1/users/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 删除指定的用户
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除用户
+      tags:
+      - 用户管理
+    get:
+      consumes:
+      - application/json
+      description: 根据用户ID获取用户的详细信息
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.UserResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取用户详情
+      tags:
+      - 用户管理
+    put:
+      consumes:
+      - application/json
+      description: 更新用户信息
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 用户信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1.UserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.UserResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新用户
+      tags:
+      - 用户管理
+  /api/v1/users/{id}/permissions:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定用户的权限列表
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  items:
+                    type: string
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取用户权限
+      tags:
+      - 用户管理
+    put:
+      consumes:
+      - application/json
+      description: 更新指定用户的权限列表
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 权限列表
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            permissions:
+              items:
+                type: string
+              type: array
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新用户权限
+      tags:
+      - 用户管理
+  /api/v1/users/batch:
+    put:
+      consumes:
+      - application/json
+      description: 批量更新多个用户的状态或角色
+      parameters:
+      - description: 批量更新请求
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            ids:
+              items:
+                type: integer
+              type: array
+            role:
+              type: string
+            status:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 批量更新用户
+      tags:
+      - 用户管理
+  /api/v1/users/stats:
+    get:
+      consumes:
+      - application/json
+      description: 获取用户数量统计信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/v1.UserStatsResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取用户统计
+      tags:
+      - 用户管理
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

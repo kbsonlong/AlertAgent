@@ -7,6 +7,8 @@ import (
 	"alert_agent/internal/middleware"
 
 	"github.com/gin-gonic/gin"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	swaggerFiles "github.com/swaggo/files"
 )
 
 // RegisterRoutes 注册所有路由
@@ -29,6 +31,20 @@ func RegisterRoutes(r *gin.Engine) {
 		authenticated := apiV1.Group("")
 		if cfg.Gateway.Auth.Enabled {
 			authenticated.Use(middleware.JWTAuth())
+		}
+
+		// 用户管理 - 需要认证
+		users := authenticated.Group("/users")
+		{
+			users.GET("", v1.ListUsers)
+			users.POST("", middleware.RequireRole("admin"), v1.CreateUser)
+			users.GET("/stats", v1.GetUserStats)
+			users.PUT("/batch", middleware.RequireRole("admin"), v1.BatchUpdateUsers)
+			users.GET("/:id", v1.GetUser)
+			users.PUT("/:id", middleware.RequireRole("admin"), v1.UpdateUser)
+			users.DELETE("/:id", middleware.RequireRole("admin"), v1.DeleteUser)
+			users.GET("/:id/permissions", v1.GetUserPermissions)
+			users.PUT("/:id/permissions", middleware.RequireRole("admin"), v1.UpdateUserPermissions)
 		}
 
 		// 告警规则管理 - 需要认证 (使用新的RuleAPI)
@@ -182,4 +198,7 @@ func RegisterRoutes(r *gin.Engine) {
 			queues.POST("/alerts/:alert_id/acknowledge", middleware.RequireRole("admin", "operator"), container.QueueAPI.AcknowledgeAlert)
 		}
 	}
+
+	// Swagger文档路由
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }

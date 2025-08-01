@@ -33,6 +33,22 @@ func NewAlertAPI(alertService *service.AlertService) *AlertAPI {
 }
 
 // ListAlerts 获取告警列表
+// @Summary 获取告警列表
+// @Description 获取系统中的告警列表，支持分页和筛选
+// @Tags 告警管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(10)
+// @Param status query string false "告警状态筛选"
+// @Param severity query string false "严重程度筛选"
+// @Param search query string false "搜索关键词"
+// @Success 200 {object} response.Response{data=object}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/alerts [get]
 func ListAlerts(c *gin.Context) {
 	// 获取分页参数
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -104,6 +120,18 @@ func ListAlerts(c *gin.Context) {
 }
 
 // CreateAlert 创建告警（同步版本，保持向后兼容）
+// @Summary 创建告警
+// @Description 创建新的告警记录
+// @Tags 告警管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body model.Alert true "告警信息"
+// @Success 201 {object} response.Response{data=model.Alert}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/alerts [post]
 func CreateAlert(c *gin.Context) {
 	var alert model.Alert
 	if err := c.ShouldBindJSON(&alert); err != nil {
@@ -170,6 +198,19 @@ func (api *AlertAPI) CreateAlertWithService(c *gin.Context) {
 }
 
 // GetAlert 获取单个告警
+// @Summary 获取告警详情
+// @Description 根据告警ID获取告警的详细信息
+// @Tags 告警管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "告警ID"
+// @Success 200 {object} response.Response{data=model.Alert}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/alerts/{id} [get]
 func GetAlert(c *gin.Context) {
 	id := c.Param("id")
 	var alert model.Alert
@@ -234,6 +275,20 @@ func (api *AlertAPI) GetAlertWithService(c *gin.Context) {
 }
 
 // UpdateAlert 更新告警
+// @Summary 更新告警
+// @Description 更新告警信息
+// @Tags 告警管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "告警ID"
+// @Param request body model.Alert true "告警信息"
+// @Success 200 {object} response.Response{data=model.Alert}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/alerts/{id} [put]
 func UpdateAlert(c *gin.Context) {
 	id := c.Param("id")
 	var alert model.Alert
@@ -273,6 +328,20 @@ func UpdateAlert(c *gin.Context) {
 }
 
 // HandleAlert 处理告警
+// @Summary 处理告警
+// @Description 处理指定的告警，更新告警状态
+// @Tags 告警管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "告警ID"
+// @Param request body object{action=string,comment=string} true "处理操作"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/alerts/{id}/handle [post]
 func HandleAlert(c *gin.Context) {
 	id := c.Param("id")
 	var req struct {
@@ -390,6 +459,19 @@ func (api *AlertAPI) HandleAlertWithService(c *gin.Context) {
 }
 
 // AnalyzeAlert 分析告警
+// @Summary 分析告警
+// @Description 对指定告警进行AI分析
+// @Tags 告警管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "告警ID"
+// @Success 200 {object} response.Response{data=object}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/alerts/{id}/analyze [post]
 func AnalyzeAlert(c *gin.Context) {
 	var alert model.Alert
 	if err := c.ShouldBindJSON(&alert); err != nil {
@@ -411,6 +493,19 @@ func AnalyzeAlert(c *gin.Context) {
 }
 
 // FindSimilarAlerts 查找相似告警
+// @Summary 查找相似告警
+// @Description 查找与指定告警相似的其他告警
+// @Tags 告警管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "告警ID"
+// @Success 200 {object} response.Response{data=[]model.Alert}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/alerts/{id}/similar [get]
 func FindSimilarAlerts(c *gin.Context) {
 	var alert model.Alert
 	if err := c.ShouldBindJSON(&alert); err != nil {
@@ -431,7 +526,17 @@ func FindSimilarAlerts(c *gin.Context) {
 	})
 }
 
-// GetAlertStats 获取告警统计信息
+// GetAlertStats 获取告警统计
+// @Summary 获取告警统计
+// @Description 获取告警数量统计信息
+// @Tags 告警管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.Response{data=object}
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/alerts/stats [get]
 func GetAlertStats(c *gin.Context) {
 	var stats struct {
 		Total        int64                  `json:"total"`
