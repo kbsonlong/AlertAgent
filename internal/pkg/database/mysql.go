@@ -201,6 +201,8 @@ func autoMigrate() error {
 		&model.NotifyRecord{},
 		&model.Provider{},
 		&model.Knowledge{},
+		&model.Permission{},
+		&model.Role{},
 	); err != nil {
 		return err
 	}
@@ -323,6 +325,16 @@ func seedUsers() error {
 
 // seedData 插入初始化数据
 func seedData() error {
+	// 检查并插入默认权限
+	if err := seedPermissions(); err != nil {
+		return err
+	}
+
+	// 检查并插入默认角色
+	if err := seedRoles(); err != nil {
+		return err
+	}
+
 	// 检查并插入默认用户
 	if err := seedUsers(); err != nil {
 		return err
@@ -345,6 +357,11 @@ func seedData() error {
 
 	// 检查并插入默认告警规则
 	if err := seedRules(); err != nil {
+		return err
+	}
+
+	// 初始化用户角色关联
+	if err := seedUserRoles(); err != nil {
 		return err
 	}
 
@@ -456,6 +473,235 @@ func seedProviders() error {
 
 	return nil
 }
+
+// seedPermissions 插入默认权限
+func seedPermissions() error {
+	// 检查是否已存在权限
+	var count int64
+	if err := DB.Model(&model.Permission{}).Count(&count).Error; err != nil {
+		return err
+	}
+
+	// 如果已有权限，跳过初始化
+	if count > 0 {
+		return nil
+	}
+
+	// 创建系统默认权限
+	defaultPermissions := []model.Permission{
+		// 用户管理权限
+		{Code: "user:create", Name: "创建用户", Description: "创建新用户的权限", Resource: "user", Action: "create", Category: "user", Type: "system", IsSystem: true},
+		{Code: "user:read", Name: "查看用户", Description: "查看用户信息的权限", Resource: "user", Action: "read", Category: "user", Type: "system", IsSystem: true},
+		{Code: "user:update", Name: "更新用户", Description: "更新用户信息的权限", Resource: "user", Action: "update", Category: "user", Type: "system", IsSystem: true},
+		{Code: "user:delete", Name: "删除用户", Description: "删除用户的权限", Resource: "user", Action: "delete", Category: "user", Type: "system", IsSystem: true},
+		{Code: "user:list", Name: "用户列表", Description: "查看用户列表的权限", Resource: "user", Action: "list", Category: "user", Type: "system", IsSystem: true},
+		
+		// 角色管理权限
+		{Code: "role:create", Name: "创建角色", Description: "创建新角色的权限", Resource: "role", Action: "create", Category: "role", Type: "system", IsSystem: true},
+		{Code: "role:read", Name: "查看角色", Description: "查看角色信息的权限", Resource: "role", Action: "read", Category: "role", Type: "system", IsSystem: true},
+		{Code: "role:update", Name: "更新角色", Description: "更新角色信息的权限", Resource: "role", Action: "update", Category: "role", Type: "system", IsSystem: true},
+		{Code: "role:delete", Name: "删除角色", Description: "删除角色的权限", Resource: "role", Action: "delete", Category: "role", Type: "system", IsSystem: true},
+		{Code: "role:list", Name: "角色列表", Description: "查看角色列表的权限", Resource: "role", Action: "list", Category: "role", Type: "system", IsSystem: true},
+		{Code: "role:assign", Name: "分配角色", Description: "为用户分配角色的权限", Resource: "role", Action: "manage", Category: "role", Type: "system", IsSystem: true},
+		
+		// 权限管理权限
+		{Code: "permission:create", Name: "创建权限", Description: "创建新权限的权限", Resource: "permission", Action: "create", Category: "permission", Type: "system", IsSystem: true},
+		{Code: "permission:read", Name: "查看权限", Description: "查看权限信息的权限", Resource: "permission", Action: "read", Category: "permission", Type: "system", IsSystem: true},
+		{Code: "permission:update", Name: "更新权限", Description: "更新权限信息的权限", Resource: "permission", Action: "update", Category: "permission", Type: "system", IsSystem: true},
+		{Code: "permission:delete", Name: "删除权限", Description: "删除权限的权限", Resource: "permission", Action: "delete", Category: "permission", Type: "system", IsSystem: true},
+		{Code: "permission:list", Name: "权限列表", Description: "查看权限列表的权限", Resource: "permission", Action: "list", Category: "permission", Type: "system", IsSystem: true},
+		
+		// 告警管理权限
+		{Code: "alert:create", Name: "创建告警", Description: "创建告警的权限", Resource: "alert", Action: "create", Category: "alert", Type: "system", IsSystem: true},
+		{Code: "alert:read", Name: "查看告警", Description: "查看告警信息的权限", Resource: "alert", Action: "read", Category: "alert", Type: "system", IsSystem: true},
+		{Code: "alert:update", Name: "更新告警", Description: "更新告警状态的权限", Resource: "alert", Action: "update", Category: "alert", Type: "system", IsSystem: true},
+		{Code: "alert:delete", Name: "删除告警", Description: "删除告警的权限", Resource: "alert", Action: "delete", Category: "alert", Type: "system", IsSystem: true},
+		{Code: "alert:list", Name: "告警列表", Description: "查看告警列表的权限", Resource: "alert", Action: "list", Category: "alert", Type: "system", IsSystem: true},
+		
+		// 规则管理权限
+		{Code: "rule:create", Name: "创建规则", Description: "创建告警规则的权限", Resource: "rule", Action: "create", Category: "rule", Type: "system", IsSystem: true},
+		{Code: "rule:read", Name: "查看规则", Description: "查看告警规则的权限", Resource: "rule", Action: "read", Category: "rule", Type: "system", IsSystem: true},
+		{Code: "rule:update", Name: "更新规则", Description: "更新告警规则的权限", Resource: "rule", Action: "update", Category: "rule", Type: "system", IsSystem: true},
+		{Code: "rule:delete", Name: "删除规则", Description: "删除告警规则的权限", Resource: "rule", Action: "delete", Category: "rule", Type: "system", IsSystem: true},
+		{Code: "rule:list", Name: "规则列表", Description: "查看告警规则列表的权限", Resource: "rule", Action: "list", Category: "rule", Type: "system", IsSystem: true},
+		
+		// 数据源管理权限
+		{Code: "provider:create", Name: "创建数据源", Description: "创建数据源的权限", Resource: "provider", Action: "create", Category: "provider", Type: "system", IsSystem: true},
+		{Code: "provider:read", Name: "查看数据源", Description: "查看数据源信息的权限", Resource: "provider", Action: "read", Category: "provider", Type: "system", IsSystem: true},
+		{Code: "provider:update", Name: "更新数据源", Description: "更新数据源配置的权限", Resource: "provider", Action: "update", Category: "provider", Type: "system", IsSystem: true},
+		{Code: "provider:delete", Name: "删除数据源", Description: "删除数据源的权限", Resource: "provider", Action: "delete", Category: "provider", Type: "system", IsSystem: true},
+		{Code: "provider:list", Name: "数据源列表", Description: "查看数据源列表的权限", Resource: "provider", Action: "list", Category: "provider", Type: "system", IsSystem: true},
+		
+		// 系统配置权限
+		{Code: "config:read", Name: "查看配置", Description: "查看系统配置的权限", Resource: "config", Action: "read", Category: "config", Type: "system", IsSystem: true},
+		{Code: "config:update", Name: "更新配置", Description: "更新系统配置的权限", Resource: "config", Action: "update", Category: "config", Type: "system", IsSystem: true},
+		
+		// 系统管理权限
+		{Code: "system:manage", Name: "系统管理", Description: "系统管理的权限", Resource: "system", Action: "manage", Category: "system", Type: "system", IsSystem: true},
+		{Code: "system:monitor", Name: "系统监控", Description: "系统监控的权限", Resource: "system", Action: "read", Category: "system", Type: "system", IsSystem: true},
+	}
+
+	for _, permission := range defaultPermissions {
+		if err := DB.Create(&permission).Error; err != nil {
+			return fmt.Errorf("failed to create default permission %s: %w", permission.Code, err)
+		}
+	}
+
+	return nil
+}
+
+// seedRoles 插入默认角色
+func seedRoles() error {
+	// 检查是否已存在角色
+	var count int64
+	if err := DB.Model(&model.Role{}).Count(&count).Error; err != nil {
+		return err
+	}
+
+	// 如果已有角色，跳过初始化
+	if count > 0 {
+		return nil
+	}
+
+	// 创建系统默认角色
+	defaultRoles := []model.Role{
+		{
+			Code:        "super_admin",
+			Name:        "超级管理员",
+			Description: "拥有系统所有权限的超级管理员角色",
+			Type:        "system",
+			IsSystem:    true,
+			Status:      "active",
+		},
+		{
+			Code:        "admin",
+			Name:        "管理员",
+			Description: "拥有大部分管理权限的管理员角色",
+			Type:        "system",
+			IsSystem:    true,
+			Status:      "active",
+		},
+		{
+			Code:        "operator",
+			Name:        "操作员",
+			Description: "拥有操作权限的操作员角色",
+			Type:        "system",
+			IsSystem:    true,
+			Status:      "active",
+		},
+		{
+			Code:        "viewer",
+			Name:        "查看者",
+			Description: "只拥有查看权限的查看者角色",
+			Type:        "system",
+			IsSystem:    true,
+			Status:      "active",
+		},
+	}
+
+	for _, role := range defaultRoles {
+		if err := DB.Create(&role).Error; err != nil {
+			return fmt.Errorf("failed to create default role %s: %w", role.Code, err)
+		}
+	}
+
+	// 为角色分配权限
+	if err := assignRolePermissions(); err != nil {
+		return fmt.Errorf("failed to assign role permissions: %w", err)
+	}
+
+	return nil
+}
+
+// assignRolePermissions 为角色分配权限
+func assignRolePermissions() error {
+	// 获取所有权限
+	var permissions []model.Permission
+	if err := DB.Find(&permissions).Error; err != nil {
+		return err
+	}
+
+	// 获取所有角色
+	var roles []model.Role
+	if err := DB.Find(&roles).Error; err != nil {
+		return err
+	}
+
+	// 为每个角色分配相应权限
+	for _, role := range roles {
+		var rolePermissions []model.Permission
+		
+		switch role.Code {
+		case "super_admin":
+			// 超级管理员拥有所有权限
+			rolePermissions = permissions
+		case "admin":
+			// 管理员拥有除系统管理外的所有权限
+			for _, perm := range permissions {
+				if perm.Category != "system" || perm.Action == "read" {
+					rolePermissions = append(rolePermissions, perm)
+				}
+			}
+		case "operator":
+			// 操作员拥有告警、规则、数据源的操作权限，用户和角色的查看权限
+			for _, perm := range permissions {
+				if (perm.Category == "alert" || perm.Category == "rule" || perm.Category == "provider") ||
+					(perm.Category == "user" || perm.Category == "role" || perm.Category == "permission") && perm.Action == "read" ||
+					(perm.Category == "config" && perm.Action == "read") ||
+					(perm.Category == "system" && perm.Action == "read") {
+					rolePermissions = append(rolePermissions, perm)
+				}
+			}
+		case "viewer":
+			// 查看者只拥有查看权限
+			for _, perm := range permissions {
+				if perm.Action == "read" || perm.Action == "list" {
+					rolePermissions = append(rolePermissions, perm)
+				}
+			}
+		}
+
+		// 为角色分配权限
+		if len(rolePermissions) > 0 {
+			if err := DB.Model(&role).Association("Permissions").Replace(rolePermissions); err != nil {
+				return fmt.Errorf("failed to assign permissions to role %s: %w", role.Code, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// seedUserRoles 初始化用户角色关联
+func seedUserRoles() error {
+	// 获取admin用户
+	var adminUser model.User
+	if err := DB.Where("username = ?", "admin").First(&adminUser).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// 如果没有admin用户，跳过
+			return nil
+		}
+		return err
+	}
+
+	// 获取超级管理员角色
+	var superAdminRole model.Role
+	if err := DB.Where("code = ?", "super_admin").First(&superAdminRole).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// 如果没有超级管理员角色，跳过
+			return nil
+		}
+		return err
+	}
+
+	// 为admin用户分配超级管理员角色
+	if err := DB.Model(&adminUser).Association("Roles").Append(&superAdminRole); err != nil {
+		return fmt.Errorf("failed to assign super_admin role to admin user: %w", err)
+	}
+
+	return nil
+}
+
 // GetConnectionStats 获取连接池统计信息
 func GetConnectionStats() (map[string]interface{}, error) {
 	if DB == nil {

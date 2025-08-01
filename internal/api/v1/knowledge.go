@@ -13,6 +13,20 @@ import (
 )
 
 // ListKnowledge 获取知识库列表
+// @Summary 获取知识库列表
+// @Description 获取知识库列表，支持关键词搜索、分类筛选和分页
+// @Tags 知识库管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param keyword query string false "关键词搜索"
+// @Param category query string false "分类筛选"
+// @Param page query int false "页码" default(1)
+// @Param pageSize query int false "每页数量" default(10)
+// @Success 200 {object} response.Response{data=object{list=[]model.Knowledge,total=int64,page=int,pageSize=int}}
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/knowledge [get]
 func ListKnowledge(c *gin.Context) {
 	// 获取查询参数
 	keyword := c.Query("keyword")
@@ -74,6 +88,19 @@ func ListKnowledge(c *gin.Context) {
 }
 
 // GetKnowledge 获取单个知识库记录
+// @Summary 获取单个知识库记录
+// @Description 根据ID获取单个知识库记录的详细信息
+// @Tags 知识库管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "知识库记录ID"
+// @Success 200 {object} response.Response{data=model.Knowledge}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/knowledge/{id} [get]
 func GetKnowledge(c *gin.Context) {
 	id := c.Param("id")
 	knowledgeID, err := strconv.ParseUint(id, 10, 64)
@@ -105,6 +132,18 @@ func GetKnowledge(c *gin.Context) {
 }
 
 // CreateKnowledge 创建知识库记录
+// @Summary 创建知识库记录
+// @Description 创建新的知识库记录
+// @Tags 知识库管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body model.Knowledge true "知识库记录信息"
+// @Success 200 {object} response.Response{data=model.Knowledge}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/knowledge [post]
 func CreateKnowledge(c *gin.Context) {
 	var knowledge model.Knowledge
 	if err := c.ShouldBindJSON(&knowledge); err != nil {
@@ -134,6 +173,20 @@ func CreateKnowledge(c *gin.Context) {
 }
 
 // UpdateKnowledge 更新知识库记录
+// @Summary 更新知识库记录
+// @Description 根据ID更新知识库记录信息
+// @Tags 知识库管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "知识库记录ID"
+// @Param request body model.Knowledge true "知识库记录信息"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/knowledge/{id} [put]
 func UpdateKnowledge(c *gin.Context) {
 	id := c.Param("id")
 	knowledgeID, err := strconv.ParseUint(id, 10, 64)
@@ -183,6 +236,19 @@ func UpdateKnowledge(c *gin.Context) {
 }
 
 // DeleteKnowledge 删除知识库记录
+// @Summary 删除知识库记录
+// @Description 根据ID删除指定的知识库记录
+// @Tags 知识库管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "知识库记录ID"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/knowledge/{id} [delete]
 func DeleteKnowledge(c *gin.Context) {
 	id := c.Param("id")
 	knowledgeID, err := strconv.ParseUint(id, 10, 64)
@@ -222,6 +288,19 @@ func DeleteKnowledge(c *gin.Context) {
 }
 
 // ConvertAlertToKnowledge 将告警转换为知识库记录
+// @Summary 将告警转换为知识库记录
+// @Description 根据告警ID将告警信息转换为知识库记录
+// @Tags 知识库管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "告警ID"
+// @Success 200 {object} response.Response{data=model.Knowledge}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/knowledge/convert/{id} [post]
 func ConvertAlertToKnowledge(c *gin.Context) {
 	id := c.Param("id")
 	alertID, err := strconv.ParseUint(id, 10, 64)
@@ -264,6 +343,16 @@ func ConvertAlertToKnowledge(c *gin.Context) {
 }
 
 // GetKnowledgeCategories 获取知识库分类列表
+// @Summary 获取知识库分类列表
+// @Description 获取所有知识库记录的分类列表
+// @Tags 知识库管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.Response{data=[]string}
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/knowledge/categories [get]
 func GetKnowledgeCategories(c *gin.Context) {
 	var categories []string
 	result := database.DB.Model(&model.Knowledge{}).Distinct("category").Pluck("category", &categories)
@@ -284,6 +373,16 @@ func GetKnowledgeCategories(c *gin.Context) {
 }
 
 // GetKnowledgeTags 获取知识库标签列表
+// @Summary 获取知识库标签列表
+// @Description 获取所有知识库记录的标签列表，自动去重
+// @Tags 知识库管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.Response{data=[]string}
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/knowledge/tags [get]
 func GetKnowledgeTags(c *gin.Context) {
 	// 获取所有标签字符串
 	var tagStrings []string

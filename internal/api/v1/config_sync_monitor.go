@@ -25,7 +25,15 @@ func NewConfigSyncMonitorAPI() *ConfigSyncMonitorAPI {
 }
 
 // GetSyncMetrics 获取同步指标
-// GET /api/v1/config/sync/metrics
+// @Summary 获取同步指标
+// @Description 获取配置同步的各项性能指标
+// @Tags 配置同步监控
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.Response{data=object} "获取成功"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/sync/metrics [get]
 func (api *ConfigSyncMonitorAPI) GetSyncMetrics(ctx *gin.Context) {
 	logger.L.Debug("Getting sync metrics")
 
@@ -42,7 +50,19 @@ func (api *ConfigSyncMonitorAPI) GetSyncMetrics(ctx *gin.Context) {
 }
 
 // GetSyncDelayMetrics 获取同步延迟指标
-// GET /api/v1/config/sync/metrics/delay
+// @Summary 获取同步延迟指标
+// @Description 获取配置同步的延迟相关指标
+// @Tags 配置同步监控
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param cluster_id query string false "集群ID"
+// @Param config_type query string false "配置类型"
+// @Param hours query int false "时间范围(小时)" default(24)
+// @Success 200 {object} response.Response{data=object} "获取成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/sync/metrics/delay [get]
 func (api *ConfigSyncMonitorAPI) GetSyncDelayMetrics(ctx *gin.Context) {
 	clusterID := ctx.Query("cluster_id")
 	configType := ctx.Query("config_type")
@@ -77,7 +97,19 @@ func (api *ConfigSyncMonitorAPI) GetSyncDelayMetrics(ctx *gin.Context) {
 }
 
 // GetFailureRateMetrics 获取失败率指标
-// GET /api/v1/config/sync/metrics/failure-rate
+// @Summary 获取失败率指标
+// @Description 获取配置同步的失败率相关指标
+// @Tags 配置同步监控
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param cluster_id query string false "集群ID"
+// @Param config_type query string false "配置类型"
+// @Param hours query int false "时间范围(小时)" default(24)
+// @Success 200 {object} response.Response{data=object} "获取成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/sync/metrics/failure-rate [get]
 func (api *ConfigSyncMonitorAPI) GetFailureRateMetrics(ctx *gin.Context) {
 	clusterID := ctx.Query("cluster_id")
 	configType := ctx.Query("config_type")
@@ -112,7 +144,17 @@ func (api *ConfigSyncMonitorAPI) GetFailureRateMetrics(ctx *gin.Context) {
 }
 
 // RecordSyncHistory 记录同步历史
-// POST /api/v1/config/sync/history
+// @Summary 记录同步历史
+// @Description 记录配置同步的历史信息
+// @Tags 配置同步监控
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body object{cluster_id=string,config_type=string,config_hash=string,config_size=int64,sync_status=string,sync_duration_ms=int64,error_message=string} true "同步历史记录"
+// @Success 200 {object} response.Response "记录成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/sync/history [post]
 func (api *ConfigSyncMonitorAPI) RecordSyncHistory(ctx *gin.Context) {
 	var req struct {
 		ClusterID    string `json:"cluster_id" binding:"required"`
@@ -161,8 +203,18 @@ func (api *ConfigSyncMonitorAPI) RecordSyncHistory(ctx *gin.Context) {
 	})
 }
 
-// CleanupOldHistory 清理旧的历史记录
-// DELETE /api/v1/config/sync/history/cleanup
+// CleanupOldHistory 清理旧历史记录
+// @Summary 清理旧历史记录
+// @Description 清理过期的配置同步历史记录
+// @Tags 配置同步监控
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param days query int false "保留天数" default(30)
+// @Success 200 {object} response.Response{data=object} "清理成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/sync/history/cleanup [delete]
 func (api *ConfigSyncMonitorAPI) CleanupOldHistory(ctx *gin.Context) {
 	retentionDaysStr := ctx.DefaultQuery("retention_days", "30")
 	retentionDays, err := strconv.Atoi(retentionDaysStr)

@@ -16,6 +16,8 @@ type Container struct {
 	RuleVersionRepository       repository.RuleVersionRepository
 	RuleAuditLogRepository      repository.RuleAuditLogRepository
 	RuleDistributionRepository  repository.RuleDistributionRepository
+	PermissionRepository        repository.PermissionRepository
+	RoleRepository              repository.RoleRepository
 
 	// Services
 	RuleService             service.RuleService
@@ -23,15 +25,19 @@ type Container struct {
 	RuleDistributionService service.RuleDistributionService
 	RuleValidator           service.RuleValidator
 	QueueService            *service.QueueService
+	PermissionService       service.PermissionService
+	RoleService             service.RoleService
 
 	// Queue components
 	QueueManager *queue.RedisMessageQueue
 	QueueMonitor *queue.QueueMonitor
 
 	// APIs
-	RuleAPI        *v1.RuleAPI
-	RuleVersionAPI *v1.RuleVersionAPI
-	QueueAPI       *v1.QueueAPI
+	RuleAPI             *v1.RuleAPI
+	RuleVersionAPI      *v1.RuleVersionAPI
+	QueueAPI            *v1.QueueAPI
+	PermissionController *v1.PermissionController
+	RoleController       *v1.RoleController
 }
 
 // NewContainer 创建新的容器实例
@@ -49,6 +55,8 @@ func (c *Container) initRepositories() {
 	c.RuleVersionRepository = repository.NewRuleVersionRepository(database.DB)
 	c.RuleAuditLogRepository = repository.NewRuleAuditLogRepository(database.DB)
 	c.RuleDistributionRepository = repository.NewRuleDistributionRepository(database.DB)
+	c.PermissionRepository = repository.NewPermissionRepository()
+	c.RoleRepository = repository.NewRoleRepository()
 }
 
 // initServices 初始化服务层
@@ -57,6 +65,8 @@ func (c *Container) initServices() {
 	c.RuleVersionService = service.NewRuleVersionService(c.RuleRepository, c.RuleVersionRepository, c.RuleAuditLogRepository)
 	c.RuleService = service.NewRuleService(c.RuleRepository, c.RuleValidator, c.RuleVersionService)
 	c.RuleDistributionService = service.NewRuleDistributionService(c.RuleDistributionRepository, c.RuleRepository)
+	c.PermissionService = service.NewPermissionService(c.PermissionRepository, c.RoleRepository)
+	c.RoleService = service.NewRoleService(c.RoleRepository, c.PermissionRepository)
 	
 	// 初始化队列组件
 	c.QueueManager = queue.NewRedisMessageQueue(redis.Client, "alert_agent")
@@ -69,4 +79,6 @@ func (c *Container) initAPIs() {
 	c.RuleAPI = v1.NewRuleAPI(c.RuleService, c.RuleDistributionService)
 	c.RuleVersionAPI = v1.NewRuleVersionAPI(c.RuleService, c.RuleVersionService)
 	c.QueueAPI = v1.NewQueueAPI(c.QueueManager, c.QueueMonitor)
+	c.PermissionController = v1.NewPermissionController(c.PermissionService)
+	c.RoleController = v1.NewRoleController(c.RoleService)
 }

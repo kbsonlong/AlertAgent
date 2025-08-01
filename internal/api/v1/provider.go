@@ -13,6 +13,16 @@ import (
 )
 
 // ListProviders 获取数据源列表
+// @Summary 获取数据源列表
+// @Description 获取系统中所有数据源的列表信息
+// @Tags 数据源管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.Response{data=[]model.Provider}
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/providers [get]
 func ListProviders(c *gin.Context) {
 	providerService := service.NewProviderService(database.DB, redis.Client)
 	providers, err := providerService.ListProviders(c.Request.Context())
@@ -33,6 +43,19 @@ func ListProviders(c *gin.Context) {
 }
 
 // GetProvider 获取单个数据源
+// @Summary 获取单个数据源
+// @Description 根据数据源ID获取单个数据源的详细信息
+// @Tags 数据源管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "数据源ID"
+// @Success 200 {object} response.Response{data=model.Provider}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/providers/{id} [get]
 func GetProvider(c *gin.Context) {
 	id := c.Param("id")
 	providerID, err := strconv.ParseUint(id, 10, 64)
@@ -72,6 +95,18 @@ func GetProvider(c *gin.Context) {
 }
 
 // CreateProvider 创建数据源
+// @Summary 创建数据源
+// @Description 创建新的数据源配置
+// @Tags 数据源管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body model.Provider true "数据源信息"
+// @Success 200 {object} response.Response{data=model.Provider}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/providers [post]
 func CreateProvider(c *gin.Context) {
 	var provider model.Provider
 	if err := c.ShouldBindJSON(&provider); err != nil {
@@ -110,6 +145,20 @@ func CreateProvider(c *gin.Context) {
 }
 
 // UpdateProvider 更新数据源
+// @Summary 更新数据源
+// @Description 根据ID更新数据源配置信息
+// @Tags 数据源管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "数据源ID"
+// @Param request body model.Provider true "数据源信息"
+// @Success 200 {object} response.Response{data=model.Provider}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/providers/{id} [put]
 func UpdateProvider(c *gin.Context) {
 	id := c.Param("id")
 	providerID, err := strconv.ParseUint(id, 10, 64)
@@ -168,6 +217,19 @@ func UpdateProvider(c *gin.Context) {
 }
 
 // DeleteProvider 删除数据源
+// @Summary 删除数据源
+// @Description 根据ID删除指定的数据源
+// @Tags 数据源管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "数据源ID"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/providers/{id} [delete]
 func DeleteProvider(c *gin.Context) {
 	id := c.Param("id")
 	providerID, err := strconv.ParseUint(id, 10, 64)
@@ -207,6 +269,18 @@ func DeleteProvider(c *gin.Context) {
 }
 
 // TestProvider 测试数据源连接
+// @Summary 测试数据源连接
+// @Description 测试数据源的连接是否正常
+// @Tags 数据源管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body model.Provider true "数据源信息"
+// @Success 200 {object} response.Response{data=object{status=string,message=string}}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/providers/test [post]
 func TestProvider(c *gin.Context) {
 	var provider model.Provider
 	if err := c.ShouldBindJSON(&provider); err != nil {

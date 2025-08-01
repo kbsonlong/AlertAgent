@@ -29,7 +29,19 @@ func NewConfigAPI() *ConfigAPI {
 }
 
 // GetSyncConfig Sidecar配置拉取接口
-// GET /api/v1/config/sync
+// @Summary 获取同步配置
+// @Description 获取指定集群和类型的配置内容，用于Sidecar配置同步
+// @Tags 配置管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param cluster_id query string true "集群ID"
+// @Param type query string true "配置类型" Enums(prometheus,alertmanager,vmalert)
+// @Success 200 {object} response.Response{data=object}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/config/sync [get]
 func (c *ConfigAPI) GetSyncConfig(ctx *gin.Context) {
 	clusterID := ctx.Query("cluster_id")
 	configType := ctx.Query("type") // prometheus, alertmanager, vmalert
@@ -83,7 +95,18 @@ func (c *ConfigAPI) GetSyncConfig(ctx *gin.Context) {
 }
 
 // UpdateSyncStatus 更新同步状态接口
-// POST /api/v1/config/sync/status
+// @Summary 更新同步状态
+// @Description 更新配置同步状态信息，由Sidecar调用
+// @Tags 配置管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body object{cluster_id=string,config_type=string,status=string,sync_time=int64,error_message=string,config_hash=string,config_size=int64,sync_duration_ms=int64} true "同步状态信息"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/config/sync/status [post]
 func (c *ConfigAPI) UpdateSyncStatus(ctx *gin.Context) {
 	var req struct {
 		ClusterID    string `json:"cluster_id" binding:"required"`
@@ -161,7 +184,19 @@ func (c *ConfigAPI) UpdateSyncStatus(ctx *gin.Context) {
 }
 
 // GetSyncStatus 获取同步状态接口
-// GET /api/v1/config/sync/status
+// @Summary 获取同步状态
+// @Description 获取指定集群的配置同步状态信息
+// @Tags 配置管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param cluster_id query string true "集群ID"
+// @Param type query string false "配置类型" Enums(prometheus,alertmanager,vmalert)
+// @Success 200 {object} response.Response{data=object}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/config/sync/status [get]
 func (c *ConfigAPI) GetSyncStatus(ctx *gin.Context) {
 	clusterID := ctx.Query("cluster_id")
 	configType := ctx.Query("type")
@@ -189,7 +224,16 @@ func (c *ConfigAPI) GetSyncStatus(ctx *gin.Context) {
 }
 
 // ListClusters 列出所有集群
-// GET /api/v1/config/clusters
+// @Summary 获取集群列表
+// @Description 获取系统中所有已注册的集群列表
+// @Tags 配置管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.Response{data=[]object}
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/config/clusters [get]
 func (c *ConfigAPI) ListClusters(ctx *gin.Context) {
 	clusters, err := c.configService.ListClusters(ctx.Request.Context())
 	if err != nil {
@@ -204,7 +248,18 @@ func (c *ConfigAPI) ListClusters(ctx *gin.Context) {
 }
 
 // TriggerSync 触发配置同步
-// POST /api/v1/config/sync/trigger
+// @Summary 触发配置同步
+// @Description 手动触发指定集群的配置同步操作
+// @Tags 配置管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body object{cluster_id=string,config_type=string} true "同步触发请求"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/config/sync/trigger [post]
 func (c *ConfigAPI) TriggerSync(ctx *gin.Context) {
 	var req struct {
 		ClusterID  string `json:"cluster_id" binding:"required"`

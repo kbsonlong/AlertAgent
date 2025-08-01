@@ -25,7 +25,17 @@ func NewConfigVersionAPI() *ConfigVersionAPI {
 }
 
 // CreateVersion 创建配置版本
-// POST /api/v1/config/versions
+// @Summary 创建配置版本
+// @Description 为指定集群和配置类型创建新的配置版本
+// @Tags 配置版本管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body object{cluster_id=string,config_type=string,description=string,created_by=string} true "创建版本请求"
+// @Success 200 {object} response.Response{data=object} "创建成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/versions [post]
 func (api *ConfigVersionAPI) CreateVersion(ctx *gin.Context) {
 	var req struct {
 		ClusterID   string `json:"cluster_id" binding:"required"`
@@ -68,7 +78,19 @@ func (api *ConfigVersionAPI) CreateVersion(ctx *gin.Context) {
 }
 
 // GetVersions 获取配置版本列表
-// GET /api/v1/config/versions
+// @Summary 获取配置版本列表
+// @Description 根据集群ID和配置类型获取配置版本列表
+// @Tags 配置版本管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param cluster_id query string true "集群ID"
+// @Param config_type query string true "配置类型"
+// @Param limit query int false "限制数量" default(50)
+// @Success 200 {object} response.Response{data=object} "获取成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/versions [get]
 func (api *ConfigVersionAPI) GetVersions(ctx *gin.Context) {
 	clusterID := ctx.Query("cluster_id")
 	configType := ctx.Query("config_type")
@@ -108,7 +130,17 @@ func (api *ConfigVersionAPI) GetVersions(ctx *gin.Context) {
 }
 
 // GetVersion 获取指定版本
-// GET /api/v1/config/versions/{id}
+// @Summary 获取指定版本
+// @Description 根据版本ID获取指定的配置版本信息
+// @Tags 配置版本管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "版本ID"
+// @Success 200 {object} response.Response{data=object} "获取成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/versions/{id} [get]
 func (api *ConfigVersionAPI) GetVersion(ctx *gin.Context) {
 	versionID := ctx.Param("id")
 
@@ -137,7 +169,18 @@ func (api *ConfigVersionAPI) GetVersion(ctx *gin.Context) {
 }
 
 // CompareVersions 比较版本差异
-// GET /api/v1/config/versions/compare
+// @Summary 比较版本差异
+// @Description 比较两个配置版本之间的差异
+// @Tags 配置版本管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param from query string true "源版本ID"
+// @Param to query string true "目标版本ID"
+// @Success 200 {object} response.Response{data=object} "比较成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/versions/compare [get]
 func (api *ConfigVersionAPI) CompareVersions(ctx *gin.Context) {
 	fromVersionID := ctx.Query("from")
 	toVersionID := ctx.Query("to")
@@ -169,7 +212,18 @@ func (api *ConfigVersionAPI) CompareVersions(ctx *gin.Context) {
 }
 
 // RollbackToVersion 回滚到指定版本
-// POST /api/v1/config/versions/{id}/rollback
+// @Summary 回滚到指定版本
+// @Description 将配置回滚到指定的版本
+// @Tags 配置版本管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "版本ID"
+// @Param request body object{rollback_by=string} true "回滚请求"
+// @Success 200 {object} response.Response "回滚成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/versions/{id}/rollback [post]
 func (api *ConfigVersionAPI) RollbackToVersion(ctx *gin.Context) {
 	versionID := ctx.Param("id")
 	if versionID == "" {
@@ -271,7 +325,18 @@ func (api *ConfigVersionAPI) GetActiveVersion(ctx *gin.Context) {
 }
 
 // DeleteVersion 删除版本
-// DELETE /api/v1/config/versions/{id}
+// @Summary 删除版本
+// @Description 删除指定的配置版本
+// @Tags 配置版本管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "版本ID"
+// @Param request body object{deleted_by=string} true "删除请求"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/versions/{id} [delete]
 func (api *ConfigVersionAPI) DeleteVersion(ctx *gin.Context) {
 	versionID := ctx.Param("id")
 	if versionID == "" {

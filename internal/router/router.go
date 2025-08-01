@@ -137,6 +137,38 @@ func RegisterRoutes(r *gin.Engine) {
 		// 配置管理 - 需要管理员权限
 		v1.RegisterConfigRoutes(authenticated, middleware.RequireRole("admin"))
 
+		// 权限管理 - 需要管理员权限
+		permissions := authenticated.Group("/permissions")
+		permissions.Use(middleware.RequireRole("admin"))
+		{
+			permissions.GET("", container.PermissionController.ListPermissions)
+			permissions.POST("", container.PermissionController.CreatePermission)
+			permissions.GET("/stats", container.PermissionController.GetPermissionStats)
+			permissions.POST("/init", container.PermissionController.InitializeSystemPermissions)
+			permissions.GET("/:id", container.PermissionController.GetPermission)
+			permissions.PUT("/:id", container.PermissionController.UpdatePermission)
+			permissions.DELETE("/:id", container.PermissionController.DeletePermission)
+		}
+
+		// 角色管理 - 需要管理员权限
+		roles := authenticated.Group("/roles")
+		roles.Use(middleware.RequireRole("admin"))
+		{
+			roles.GET("", container.RoleController.ListRoles)
+			roles.POST("", container.RoleController.CreateRole)
+			roles.GET("/stats", container.RoleController.GetRoleStats)
+			roles.POST("/init", container.RoleController.InitializeSystemRoles)
+			roles.GET("/:id", container.RoleController.GetRole)
+			roles.PUT("/:id", container.RoleController.UpdateRole)
+			roles.DELETE("/:id", container.RoleController.DeleteRole)
+			
+			// 角色权限管理
+			roles.GET("/:id/permissions", container.RoleController.GetRolePermissions)
+			roles.POST("/:id/permissions", container.RoleController.AssignPermissions)
+			roles.DELETE("/:id/permissions", container.RoleController.RemovePermissions)
+			roles.PUT("/:id/permissions", container.RoleController.SyncPermissions)
+		}
+
 		// 知识库管理 - 需要认证
 		knowledge := authenticated.Group("/knowledge")
 		{

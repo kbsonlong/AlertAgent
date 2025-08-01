@@ -11,6 +11,15 @@ import (
 )
 
 // ListGroups 获取通知组列表
+// @Summary 获取通知组列表
+// @Description 获取系统中所有通知组的列表信息
+// @Tags 通知组管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.Response{data=[]model.NotifyGroup} "获取成功"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/groups [get]
 func ListGroups(c *gin.Context) {
 	var groups []model.NotifyGroup
 	result := database.DB.Find(&groups)
@@ -31,6 +40,17 @@ func ListGroups(c *gin.Context) {
 }
 
 // CreateGroup 创建通知组
+// @Summary 创建通知组
+// @Description 创建新的通知组
+// @Tags 通知组管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param group body model.NotifyGroup true "通知组信息"
+// @Success 200 {object} response.Response{data=model.NotifyGroup} "创建成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/groups [post]
 func CreateGroup(c *gin.Context) {
 	var group model.NotifyGroup
 	if err := c.ShouldBindJSON(&group); err != nil {
@@ -60,6 +80,17 @@ func CreateGroup(c *gin.Context) {
 }
 
 // GetGroup 获取单个通知组
+// @Summary 获取单个通知组
+// @Description 根据ID获取指定的通知组信息
+// @Tags 通知组管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "通知组ID"
+// @Success 200 {object} response.Response{data=model.NotifyGroup} "获取成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 404 {object} response.Response "通知组不存在"
+// @Router /api/v1/groups/{id} [get]
 func GetGroup(c *gin.Context) {
 	id := c.Param("id")
 	groupID, err := strconv.ParseUint(id, 10, 64)
@@ -91,6 +122,19 @@ func GetGroup(c *gin.Context) {
 }
 
 // UpdateGroup 更新通知组
+// @Summary 更新通知组
+// @Description 根据ID更新指定的通知组信息
+// @Tags 通知组管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "通知组ID"
+// @Param group body model.NotifyGroup true "通知组信息"
+// @Success 200 {object} response.Response "更新成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 404 {object} response.Response "通知组不存在"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/groups/{id} [put]
 func UpdateGroup(c *gin.Context) {
 	id := c.Param("id")
 	groupID, err := strconv.ParseUint(id, 10, 64)
@@ -140,6 +184,18 @@ func UpdateGroup(c *gin.Context) {
 }
 
 // DeleteGroup 删除通知组
+// @Summary 删除通知组
+// @Description 根据ID删除指定的通知组
+// @Tags 通知组管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "通知组ID"
+// @Success 200 {object} response.Response "删除成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 404 {object} response.Response "通知组不存在"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/groups/{id} [delete]
 func DeleteGroup(c *gin.Context) {
 	id := c.Param("id")
 	groupID, err := strconv.ParseUint(id, 10, 64)

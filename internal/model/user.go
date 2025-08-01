@@ -27,6 +27,9 @@ type User struct {
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
+
+	// 关联关系
+	Roles []Role `json:"roles,omitempty" gorm:"many2many:user_roles;"`
 }
 
 // 用户状态常量

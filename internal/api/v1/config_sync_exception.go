@@ -24,7 +24,15 @@ func NewConfigSyncExceptionAPI() *ConfigSyncExceptionAPI {
 }
 
 // DetectExceptions 检测同步异常
-// POST /api/v1/config/sync/exceptions/detect
+// @Summary 检测同步异常
+// @Description 主动检测配置同步过程中的异常情况
+// @Tags 配置同步异常管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.Response "检测完成"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/sync/exceptions/detect [post]
 func (api *ConfigSyncExceptionAPI) DetectExceptions(ctx *gin.Context) {
 	logger.L.Debug("Detecting sync exceptions")
 
@@ -41,7 +49,17 @@ func (api *ConfigSyncExceptionAPI) DetectExceptions(ctx *gin.Context) {
 }
 
 // GetActiveExceptions 获取活跃异常
-// GET /api/v1/config/sync/exceptions
+// @Summary 获取活跃异常
+// @Description 获取当前活跃的配置同步异常列表
+// @Tags 配置同步异常管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param cluster_id query string false "集群ID"
+// @Param config_type query string false "配置类型"
+// @Success 200 {object} response.Response{data=[]object} "获取成功"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/sync/exceptions [get]
 func (api *ConfigSyncExceptionAPI) GetActiveExceptions(ctx *gin.Context) {
 	clusterID := ctx.Query("cluster_id")
 	configType := ctx.Query("config_type")
@@ -68,7 +86,17 @@ func (api *ConfigSyncExceptionAPI) GetActiveExceptions(ctx *gin.Context) {
 }
 
 // AnalyzeException 分析异常根因
-// GET /api/v1/config/sync/exceptions/{id}/analysis
+// @Summary 分析异常根因
+// @Description 分析指定异常的根本原因
+// @Tags 配置同步异常管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "异常ID"
+// @Success 200 {object} response.Response{data=object} "分析成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/sync/exceptions/{id}/analysis [get]
 func (api *ConfigSyncExceptionAPI) AnalyzeException(ctx *gin.Context) {
 	exceptionID := ctx.Param("id")
 	if exceptionID == "" {
@@ -94,7 +122,18 @@ func (api *ConfigSyncExceptionAPI) AnalyzeException(ctx *gin.Context) {
 }
 
 // ResolveException 解决异常
-// POST /api/v1/config/sync/exceptions/{id}/resolve
+// @Summary 解决异常
+// @Description 标记指定异常为已解决状态
+// @Tags 配置同步异常管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "异常ID"
+// @Param request body object{resolved_by=string,resolution=string} true "解决请求"
+// @Success 200 {object} response.Response "解决成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/sync/exceptions/{id}/resolve [post]
 func (api *ConfigSyncExceptionAPI) ResolveException(ctx *gin.Context) {
 	exceptionID := ctx.Param("id")
 	if exceptionID == "" {
@@ -133,7 +172,19 @@ func (api *ConfigSyncExceptionAPI) ResolveException(ctx *gin.Context) {
 }
 
 // TriggerManualRetry 触发手动重试
-// POST /api/v1/config/sync/exceptions/{id}/retry
+// @Summary 触发手动重试
+// @Description 对指定的同步异常触发手动重试
+// @Tags 配置同步异常
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "异常ID"
+// @Param request body object{retry_type=string,retry_config=object} true "重试配置"
+// @Success 200 {object} response.Response "重试触发成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 404 {object} response.Response "异常不存在"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/sync/exceptions/{id}/retry [post]
 func (api *ConfigSyncExceptionAPI) TriggerManualRetry(ctx *gin.Context) {
 	exceptionID := ctx.Param("id")
 	if exceptionID == "" {
@@ -165,8 +216,21 @@ func (api *ConfigSyncExceptionAPI) TriggerManualRetry(ctx *gin.Context) {
 	})
 }
 
-// GetExceptionStatistics 获取异常统计
-// GET /api/v1/config/sync/exceptions/statistics
+// GetExceptionStatistics 获取异常统计信息
+// @Summary 获取异常统计信息
+// @Description 获取配置同步异常的统计信息
+// @Tags 配置同步异常
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param cluster_id query string false "集群ID"
+// @Param config_type query string false "配置类型"
+// @Param start_time query string false "开始时间(RFC3339格式)"
+// @Param end_time query string false "结束时间(RFC3339格式)"
+// @Success 200 {object} response.Response{data=object} "获取成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /api/v1/config/sync/exceptions/statistics [get]
 func (api *ConfigSyncExceptionAPI) GetExceptionStatistics(ctx *gin.Context) {
 	clusterID := ctx.Query("cluster_id")
 	configType := ctx.Query("config_type")
