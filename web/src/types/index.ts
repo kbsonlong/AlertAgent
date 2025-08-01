@@ -13,6 +13,14 @@ export interface PaginatedResponse<T> {
   page_size: number
 }
 
+// 用户列表响应类型（匹配后端返回结构）
+export interface UserListResponse {
+  users: User[]
+  total: number
+  page: number
+  size: number
+}
+
 // 告警相关类型
 export interface Alert {
   id: number | string
@@ -260,6 +268,10 @@ export interface User {
   username: string
   email: string
   role: 'admin' | 'operator' | 'viewer'
+  status: 'active' | 'inactive'
+  avatar?: string
+  email_verified?: boolean
+  last_login_at?: string
   created_at: string
   updated_at: string
 }

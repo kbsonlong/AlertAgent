@@ -192,6 +192,7 @@ func seedAlerts() error {
 func autoMigrate() error {
 	// 自动迁移数据库表
 	if err := DB.AutoMigrate(
+		&model.User{},
 		&model.Alert{},
 		&model.Rule{},
 		&model.RuleDistributionRecord{},
@@ -262,8 +263,71 @@ func isIndexExistsError(err error) bool {
 	return strings.Contains(errStr, "Duplicate key name") || strings.Contains(errStr, "already exists")
 }
 
+// seedUsers 插入默认用户
+func seedUsers() error {
+	// 检查是否已存在用户
+	var count int64
+	if err := DB.Model(&model.User{}).Count(&count).Error; err != nil {
+		return err
+	}
+
+	// 如果已有用户，跳过初始化
+	if count > 0 {
+		return nil
+	}
+
+	// 创建默认用户
+	users := []model.User{
+		{
+			ID:       "admin-001",
+			Username: "admin",
+			Email:    "admin@example.com",
+			Password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password
+			Role:     "admin",
+			Status:   "active",
+		},
+		{
+			ID:       "operator-001",
+			Username: "operator",
+			Email:    "operator@example.com",
+			Password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password
+			Role:     "operator",
+			Status:   "active",
+		},
+		{
+			ID:       "viewer-001",
+			Username: "viewer",
+			Email:    "viewer@example.com",
+			Password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password
+			Role:     "viewer",
+			Status:   "inactive",
+		},
+		{
+			ID:       "test-001",
+			Username: "test_user",
+			Email:    "test@example.com",
+			Password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password
+			Role:     "viewer",
+			Status:   "locked",
+		},
+	}
+
+	for _, user := range users {
+		if err := DB.Create(&user).Error; err != nil {
+			return fmt.Errorf("failed to create user %s: %w", user.Username, err)
+		}
+	}
+
+	return nil
+}
+
 // seedData 插入初始化数据
 func seedData() error {
+	// 检查并插入默认用户
+	if err := seedUsers(); err != nil {
+		return err
+	}
+
 	// 检查并插入默认通知模板
 	if err := seedNotifyTemplates(); err != nil {
 		return err
@@ -349,7 +413,9 @@ func seedNotifyGroups() error {
 	defaultGroup := model.NotifyGroup{
 		Name:        "默认通知组",
 		Description: "系统默认通知组",
+		Contacts:    "[]", // JSON数组格式
 		Members:     "admin@example.com", // 可根据实际需求修改
+		Channels:    "",
 	}
 
 	if err := DB.Create(&defaultGroup).Error; err != nil {

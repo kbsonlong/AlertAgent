@@ -33,6 +33,9 @@ func RegisterRoutes(r *gin.Engine) {
 			authenticated.Use(middleware.JWTAuth())
 		}
 
+		// 需要认证的认证路由
+		v1.RegisterProtectedAuthRoutes(authenticated)
+
 		// 用户管理 - 需要认证
 		users := authenticated.Group("/users")
 		{
@@ -51,6 +54,7 @@ func RegisterRoutes(r *gin.Engine) {
 		rules := authenticated.Group("/rules")
 		{
 			rules.GET("", container.RuleAPI.ListRules)
+			rules.GET("/stats", v1.GetRuleStats)
 			rules.POST("", middleware.RequireRole("admin", "operator"), container.RuleAPI.CreateRule)
 			rules.GET("/:id", container.RuleAPI.GetRule)
 			rules.PUT("/:id", middleware.RequireRole("admin", "operator"), container.RuleAPI.UpdateRule)

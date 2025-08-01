@@ -122,7 +122,7 @@
               <DownOutlined />
             </a-button>
             <template #overlay>
-              <a-menu>
+              <a-menu @click="handleUserMenuClick">
                 <a-menu-item key="profile">
                   <UserOutlined />
                   个人信息
@@ -149,8 +149,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { message } from 'ant-design-vue'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -167,9 +168,11 @@ import {
   SafetyOutlined,
   SyncOutlined
 } from '@ant-design/icons-vue'
+import { useUserStore } from '@/stores'
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
 
 // 侧边栏折叠状态
 const collapsed = ref(false)
@@ -222,6 +225,27 @@ const handleMenuClick = ({ key }: { key: string }) => {
   const routeName = routeMap[key] || key
   router.push({ name: routeName })
 }
+
+// 用户菜单点击处理
+const handleUserMenuClick = ({ key }: { key: string }) => {
+  if (key === 'profile') {
+    router.push('/profile')
+  } else if (key === 'logout') {
+    userStore.logout()
+    router.push('/login')
+    message.success('已退出登录')
+  }
+}
+
+// 组件挂载时检查用户登录状态
+onMounted(async () => {
+  try {
+    await userStore.checkAuth()
+  } catch (error) {
+    console.error('检查用户登录状态失败:', error)
+    router.push('/login')
+  }
+})
 
 // 监听路由变化更新选中状态
 router.afterEach((to) => {

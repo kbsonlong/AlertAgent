@@ -100,14 +100,21 @@ const handleLogin = async (values: any) => {
     })
     
     if (response.code === 200 && response.data) {
-      // 设置用户信息和token
+      // 设置token
       userStore.setToken(response.data.access_token)
-      userStore.setUser(response.data.user)
       
-      message.success('登录成功')
-      
-      // 跳转到首页
-      router.push('/')
+      // 获取用户信息
+      try {
+        await userStore.fetchCurrentUser()
+        message.success('登录成功')
+        
+        // 跳转到首页
+        router.push('/')
+      } catch (userError) {
+        console.error('获取用户信息失败:', userError)
+        message.error('登录成功但获取用户信息失败，请重新登录')
+        userStore.logout()
+      }
     } else {
       message.error(response.message || '登录失败')
     }

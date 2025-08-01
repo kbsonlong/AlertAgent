@@ -113,19 +113,22 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // @Router /api/v1/auth/profile [get]
 func (h *AuthHandler) GetProfile(c *gin.Context) {
 	userID := c.GetString("user_id")
-	username := c.GetString("username")
-	roles, _ := c.Get("roles")
+	if userID == "" {
+		response.Unauthorized(c, "User not authenticated", nil)
+		return
+	}
 
-	user := service.User{
-		ID:       userID,
-		Username: username,
-		Roles:    roles.([]string),
+	// 从数据库获取最新的用户信息
+	user, err := h.authService.GetUserProfile(userID)
+	if err != nil {
+		response.InternalServerError(c, "Failed to get user profile", err)
+		return
 	}
 
 	response.Success(c, user)
 }
 
-// RegisterAuthRoutes 注册认证路由
+// RegisterAuthRoutes 注册认证路由（无需认证的路由）
 func RegisterAuthRoutes(r *gin.RouterGroup) {
 	authHandler := NewAuthHandler()
 	
@@ -134,6 +137,51 @@ func RegisterAuthRoutes(r *gin.RouterGroup) {
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/refresh", authHandler.RefreshToken)
 		auth.POST("/logout", authHandler.Logout)
+	}
+}
+
+// UpdateProfile 更新用户资料
+// @Summary 更新用户资料
+// @Description 更新当前登录用户的资料信息
+// @Tags 认证
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body service.UpdateProfileRequest true "更新资料请求"
+// @Success 200 {object} response.Response{data=service.User}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Router /api/v1/auth/profile [put]
+func (h *AuthHandler) UpdateProfile(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		response.Unauthorized(c, "User not authenticated", nil)
+		return
+	}
+
+	var req service.UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ValidationError(c, err)
+		return
+	}
+
+	user, err := h.authService.UpdateProfile(userID, req)
+	if err != nil {
+		response.InternalServerError(c, "Failed to update profile", err)
+		return
+	}
+
+	response.SuccessWithMessage(c, "Profile updated successfully", user)
+}
+
+// RegisterProtectedAuthRoutes 注册需要认证的认证路由
+func RegisterProtectedAuthRoutes(r *gin.RouterGroup) {
+	authHandler := NewAuthHandler()
+	
+	auth := r.Group("/auth")
+	{
 		auth.GET("/profile", authHandler.GetProfile)
+		auth.PUT("/profile", authHandler.UpdateProfile)
 	}
 }

@@ -509,8 +509,9 @@ const loadUsers = async () => {
     }
     
     const response = await getUserList(params)
-    users.value = response.list
-    pagination.total = response.total
+    // 后端返回的数据结构是 {users: [...], total: ..., page: ..., size: ...}
+    users.value = response.users || []
+    pagination.total = response.total || 0
   } catch (error) {
     console.error('加载用户列表失败:', error)
     message.error('加载用户列表失败')

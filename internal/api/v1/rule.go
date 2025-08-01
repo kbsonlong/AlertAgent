@@ -676,8 +676,38 @@ func (r *RuleAPI) ProcessRetryableDistributions(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+			"code": 200,
+			"msg":  "success",
+			"data": "Retryable distributions processed successfully",
+		})
+}
+
+// RuleStatsResponse 规则统计响应结构
+type RuleStatsResponse struct {
+	Total    int64                    `json:"total"`
+	Active   int64                    `json:"active"`
+	Inactive int64                    `json:"inactive"`
+	ByLevel  map[string]int64         `json:"by_level"`
+	BySource map[string]int64         `json:"by_source"`
+}
+
+// GetRuleStats 获取规则统计信息
+func GetRuleStats(c *gin.Context) {
+	ruleStatsService := service.NewRuleStatsService()
+	stats, err := ruleStatsService.GetRuleStats(c.Request.Context())
+	if err != nil {
+		logger.L.Error("Failed to get rule stats", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "Failed to get rule stats",
+			"data": nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
 		"msg":  "success",
-		"data": "Retryable distributions processed successfully",
+		"data": stats,
 	})
 }

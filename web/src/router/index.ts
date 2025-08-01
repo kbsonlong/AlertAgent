@@ -109,6 +109,15 @@ const routes: RouteRecordRaw[] = [
           title: '配置同步监控',
           icon: 'sync'
         }
+      },
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('@/views/Profile.vue'),
+        meta: {
+          title: '个人资料',
+          icon: 'user'
+        }
       }
     ]
   }

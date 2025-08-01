@@ -1,5 +1,5 @@
 import { request } from '@/utils/request'
-import type { PaginatedResponse } from '@/types'
+import type { PaginatedResponse, UserListResponse } from '@/types'
 
 // 用户接口
 export interface User {
@@ -57,7 +57,7 @@ export const getUserList = async (params: {
   status?: string
   sortBy?: string
   sortOrder?: string
-}): Promise<PaginatedResponse<User>> => {
+}): Promise<UserListResponse> => {
   const response = await request({
     url: '/api/v1/users',
     method: 'GET',

@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User, MenuItem } from '@/types'
+import { userApi } from '@/api/user'
+import { message } from 'ant-design-vue'
 
 // 用户状态管理
 export const useUserStore = defineStore('user', () => {
@@ -18,6 +20,38 @@ export const useUserStore = defineStore('user', () => {
     localStorage.setItem('token', tokenValue)
   }
   
+  // 获取当前用户信息
+  const fetchCurrentUser = async () => {
+    try {
+      if (!token.value) {
+        throw new Error('未找到认证令牌')
+      }
+      const response = await userApi.getCurrentUser()
+      user.value = response.data
+      return response.data
+    } catch (error) {
+      console.error('获取用户信息失败:', error)
+      // 如果获取用户信息失败，清除无效的token
+      logout()
+      throw error
+    }
+  }
+  
+  // 检查用户认证状态
+  const checkAuth = async () => {
+    if (!token.value) {
+      throw new Error('未找到认证令牌')
+    }
+    
+    // 如果已有用户信息，直接返回
+    if (user.value) {
+      return user.value
+    }
+    
+    // 否则获取用户信息
+    return await fetchCurrentUser()
+  }
+  
   const logout = () => {
     user.value = null
     token.value = null
@@ -30,6 +64,8 @@ export const useUserStore = defineStore('user', () => {
     isLoggedIn,
     setUser,
     setToken,
+    fetchCurrentUser,
+    checkAuth,
     logout
   }
 })

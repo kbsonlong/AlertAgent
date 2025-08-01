@@ -231,8 +231,16 @@ type JWTClaims struct {
 func JWTAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
+		requestID := c.GetString("request_id")
+		
+		// 添加调试日志
+		logger.L.Debug("JWT Auth Debug",
+			zap.String("auth_header", authHeader),
+			zap.String("request_id", requestID),
+		)
+		
 		if authHeader == "" {
-			requestID := c.GetString("request_id")
+			logger.L.Debug("Missing authorization header", zap.String("request_id", requestID))
 			
 			c.AbortWithStatusJSON(http.StatusUnauthorized, ErrorResponse{
 				Code:      http.StatusUnauthorized,
@@ -247,7 +255,10 @@ func JWTAuth() gin.HandlerFunc {
 		// 检查Bearer前缀
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		if tokenString == authHeader {
-			requestID := c.GetString("request_id")
+			logger.L.Debug("Invalid authorization format", 
+				zap.String("auth_header", authHeader),
+				zap.String("request_id", requestID),
+			)
 			
 			c.AbortWithStatusJSON(http.StatusUnauthorized, ErrorResponse{
 				Code:      http.StatusUnauthorized,
@@ -259,9 +270,22 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 
+		// 添加token调试日志
+		logger.L.Debug("Parsing JWT token",
+			zap.String("token_string", tokenString),
+			zap.String("request_id", requestID),
+		)
+
 		// 解析JWT token
 		cfg := config.GetConfig()
 		token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+			// 添加签名方法调试日志
+			logger.L.Debug("JWT signing method check",
+				zap.Any("method", token.Method),
+				zap.Any("header", token.Header),
+				zap.String("request_id", requestID),
+			)
+			
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
@@ -269,7 +293,11 @@ func JWTAuth() gin.HandlerFunc {
 		})
 
 		if err != nil {
-			requestID := c.GetString("request_id")
+			logger.L.Debug("JWT parsing failed",
+				zap.Error(err),
+				zap.String("token_string", tokenString),
+				zap.String("request_id", requestID),
+			)
 			
 			c.AbortWithStatusJSON(http.StatusUnauthorized, ErrorResponse{
 				Code:      http.StatusUnauthorized,
@@ -281,12 +309,31 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 
+		// 添加claims调试日志
+		logger.L.Debug("JWT token parsed successfully",
+			zap.Bool("token_valid", token.Valid),
+			zap.Any("claims", token.Claims),
+			zap.String("request_id", requestID),
+		)
+
 		if claims, ok := token.Claims.(*JWTClaims); ok && token.Valid {
+			logger.L.Debug("JWT claims extracted",
+				zap.String("user_id", claims.UserID),
+				zap.String("username", claims.Username),
+				zap.Strings("roles", claims.Roles),
+				zap.String("request_id", requestID),
+			)
+			
 			c.Set("user_id", claims.UserID)
 			c.Set("username", claims.Username)
 			c.Set("roles", claims.Roles)
 		} else {
-			requestID := c.GetString("request_id")
+			logger.L.Debug("JWT claims validation failed",
+				zap.Bool("claims_ok", ok),
+				zap.Bool("token_valid", token.Valid),
+				zap.Any("claims", token.Claims),
+				zap.String("request_id", requestID),
+			)
 			
 			c.AbortWithStatusJSON(http.StatusUnauthorized, ErrorResponse{
 				Code:      http.StatusUnauthorized,

@@ -263,7 +263,7 @@ export class UserService {
    * 获取当前用户信息
    */
   static async getCurrentUser(): Promise<ApiResponse<User>> {
-    return ApiService.get(`${this.BASE_URL}/auth/me`)
+    return ApiService.get(`${this.BASE_URL}/auth/profile`)
   }
 
   /**
@@ -276,7 +276,7 @@ export class UserService {
     department?: string
     position?: string
   }): Promise<ApiResponse<User>> {
-    return ApiService.put(`${this.BASE_URL}/auth/me`, data)
+    return ApiService.put(`${this.BASE_URL}/auth/profile`, data)
   }
 
   /**

@@ -112,9 +112,9 @@
             <template #overlay>
               <a-menu>
                 <a-menu-item key="profile" @click="() => navigateTo('/profile')">
-                  <UserOutlined />
-                  个人资料
-                </a-menu-item>
+              <UserOutlined />
+              个人资料
+            </a-menu-item>
                 <a-menu-item key="settings" @click="() => navigateTo('/settings')">
                   <SettingOutlined />
                   系统设置

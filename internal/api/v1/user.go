@@ -6,6 +6,7 @@ import (
 
 	"alert_agent/internal/pkg/logger"
 	"alert_agent/internal/pkg/response"
+	"alert_agent/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -55,10 +56,10 @@ type UserListResponse struct {
 
 // UserStatsResponse 用户统计响应结构
 type UserStatsResponse struct {
-	Total    int `json:"total" example:"100"`
-	Active   int `json:"active" example:"85"`
-	Inactive int `json:"inactive" example:"10"`
-	Locked   int `json:"locked" example:"5"`
+	Total    int64 `json:"total" example:"100"`
+	Active   int64 `json:"active" example:"85"`
+	Inactive int64 `json:"inactive" example:"10"`
+	Locked   int64 `json:"locked" example:"5"`
 }
 
 // ListUsers 获取用户列表
@@ -390,18 +391,39 @@ func DeleteUser(c *gin.Context) {
 // @Failure 401 {object} response.ErrorResponse
 // @Failure 500 {object} response.ErrorResponse
 // @Router /api/v1/users/stats [get]
+// GetUserStats 获取用户统计信息
+// @Summary 获取用户统计信息
+// @Description 获取系统中用户的统计信息，包括总数、活跃数、非活跃数和锁定数
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.Response{data=UserStatsResponse}
+// @Failure 500 {object} response.ErrorResponse
+// @Router /api/v1/users/stats [get]
 func GetUserStats(c *gin.Context) {
 	logger.L.Info("Getting user stats")
 
-	// 模拟统计数据
-	stats := UserStatsResponse{
-		Total:    100,
-		Active:   85,
-		Inactive: 10,
-		Locked:   5,
+	// 创建用户统计服务
+	userStatsService := service.NewUserStatsService()
+
+	// 获取用户统计数据
+	stats, err := userStatsService.GetUserStats(c.Request.Context())
+	if err != nil {
+		logger.L.Error("Failed to get user stats", zap.Error(err))
+		response.Error(c, http.StatusInternalServerError, "获取用户统计信息失败", err)
+		return
 	}
 
-	response.Success(c, stats)
+	// 转换为响应格式
+	responseStats := UserStatsResponse{
+		Total:    stats.Total,
+		Active:   stats.Active,
+		Inactive: stats.Inactive,
+		Locked:   stats.Locked,
+	}
+
+	response.Success(c, responseStats)
 }
 
 // BatchUpdateUsers 批量更新用户
