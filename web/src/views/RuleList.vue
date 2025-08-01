@@ -166,78 +166,80 @@
         @change="handleTableChange"
         row-key="id"
       >
-        <template #name="{ record }">
-          <div class="rule-name">
-            <a @click="viewRule(record)">{{ record.name }}</a>
-            <div class="rule-description">{{ record.description }}</div>
-          </div>
-        </template>
-        
-        <template #status="{ record }">
-          <a-switch
-            :checked="record.enabled"
-            @change="(checked) => toggleRule(record, checked)"
-            :loading="record.toggling"
-          >
-            <template #checkedChildren>启用</template>
-            <template #unCheckedChildren>禁用</template>
-          </a-switch>
-        </template>
-        
-        <template #severity="{ record }">
-          <a-tag :color="getSeverityColor(record.severity)">
-            {{ getSeverityText(record.severity) }}
-          </a-tag>
-        </template>
-        
-        <template #provider="{ record }">
-          <a-tag>{{ getProviderName(record.provider_id) }}</a-tag>
-        </template>
-        
-        <template #firing="{ record }">
-          <a-badge
-            :count="record.firing_count"
-            :number-style="{ backgroundColor: record.firing_count > 0 ? '#ff4d4f' : '#52c41a' }"
-          >
-            <span>{{ record.firing_count > 0 ? '触发中' : '正常' }}</span>
-          </a-badge>
-        </template>
-        
-        <template #updated_at="{ record }">
-          {{ formatDateTime(record.updated_at) }}
-        </template>
-        
-        <template #action="{ record }">
-          <a-space>
-            <a-button type="link" size="small" @click="viewRule(record)">
-              查看
-            </a-button>
-            <a-button type="link" size="small" @click="editRule(record)">
-              编辑
-            </a-button>
-            <a-button type="link" size="small" @click="testRule(record)">
-              测试
-            </a-button>
-            <a-dropdown>
-              <template #overlay>
-                <a-menu>
-                  <a-menu-item @click="duplicateRule(record)">
-                    <CopyOutlined /> 复制
-                  </a-menu-item>
-                  <a-menu-item @click="syncRule(record)">
-                    <SyncOutlined /> 同步
-                  </a-menu-item>
-                  <a-menu-divider />
-                  <a-menu-item @click="deleteRule(record)" class="danger-item">
-                    <DeleteOutlined /> 删除
-                  </a-menu-item>
-                </a-menu>
-              </template>
-              <a-button type="link" size="small">
-                更多 <DownOutlined />
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'name'">
+            <div class="rule-name">
+              <a @click="viewRule(record as any)">{{ (record as any).name }}</a>
+              <div class="rule-description">{{ (record as any).description || '' }}</div>
+            </div>
+          </template>
+          
+          <template v-else-if="column.key === 'status'">
+            <a-switch
+              :checked="(record as any).enabled"
+              @change="(checked: boolean) => toggleRule(record as any, checked)"
+              :loading="(record as any).toggling"
+            >
+              <template #checkedChildren>启用</template>
+              <template #unCheckedChildren>禁用</template>
+            </a-switch>
+          </template>
+          
+          <template v-else-if="column.key === 'severity'">
+            <a-tag :color="getSeverityColor((record as any).severity)">
+              {{ getSeverityText((record as any).severity) }}
+            </a-tag>
+          </template>
+          
+          <template v-else-if="column.key === 'provider'">
+            <a-tag>{{ getProviderName((record as any).provider_id || 0) }}</a-tag>
+          </template>
+          
+          <template v-else-if="column.key === 'firing'">
+            <a-badge
+              :count="(record as any).firing_count || 0"
+              :number-style="{ backgroundColor: (record as any).firing_count > 0 ? '#ff4d4f' : '#52c41a' }"
+            >
+              <span>{{ (record as any).firing_count > 0 ? '触发中' : '正常' }}</span>
+            </a-badge>
+          </template>
+          
+          <template v-else-if="column.key === 'updated_at'">
+            {{ formatDateTime((record as any).updated_at) }}
+          </template>
+          
+          <template v-else-if="column.key === 'action'">
+            <a-space>
+              <a-button type="link" size="small" @click="viewRule(record as any)">
+                查看
               </a-button>
-            </a-dropdown>
-          </a-space>
+              <a-button type="link" size="small" @click="editRule(record as any)">
+                编辑
+              </a-button>
+              <a-button type="link" size="small" @click="testRule(record as any)">
+                测试
+              </a-button>
+              <a-dropdown>
+                <template #overlay>
+                  <a-menu>
+                    <a-menu-item @click="duplicateRule(record as any)">
+                      <CopyOutlined /> 复制
+                    </a-menu-item>
+                    <a-menu-item @click="syncRule(record as any)">
+                      <SyncOutlined /> 同步
+                    </a-menu-item>
+                    <a-menu-divider />
+                    <a-menu-item @click="deleteRule(record as any)" class="danger-item">
+                      <DeleteOutlined /> 删除
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+                <a-button type="link" size="small">
+                  更多 <DownOutlined />
+                </a-button>
+              </a-dropdown>
+            </a-space>
+          </template>
         </template>
       </a-table>
     </a-card>
@@ -501,12 +503,21 @@ const columns = [
 ]
 
 // 行选择配置
-const rowSelection = {
-  selectedRowKeys,
+const rowSelection = computed(() => ({
+  type: 'checkbox' as const, // 明确指定为复选框类型
+  selectedRowKeys: selectedRowKeys.value,
   onChange: (keys: string[]) => {
     selectedRowKeys.value = keys
+  },
+  onSelectAll: (selected: boolean, selectedRows: any[], changeRows: any[]) => {
+    // 处理全选/取消全选
+    console.log('全选状态:', selected, '选中行:', selectedRows, '变化行:', changeRows)
+  },
+  onSelect: (record: any, selected: boolean, selectedRows: any[]) => {
+    // 处理单行选择
+    console.log('单行选择:', record, '选中状态:', selected, '所有选中行:', selectedRows)
   }
-}
+}))
 
 // 获取严重程度颜色
 const getSeverityColor = (severity: string) => {
@@ -544,9 +555,33 @@ const loadData = async () => {
       ...searchForm
     }
     
-    const response = await getRules(params)
-    rules.value = response.data.items
-    pagination.total = response.data.total
+    const response = await getRules(params) as any
+    // 适配后端返回的数据格式
+    if (response.data.rules) {
+      // 后端返回的是 {page, page_size, rules: [...], total} 格式
+      rules.value = response.data.rules.map((item: any) => ({
+        id: typeof item.id === 'string' ? parseInt(item.id) || 0 : item.id,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+        name: item.name,
+        expression: item.expression,
+        duration: item.duration,
+        severity: item.severity,
+        labels: typeof item.labels === 'string' ? JSON.parse(item.labels || '{}') : item.labels || {},
+        annotations: typeof item.annotations === 'string' ? JSON.parse(item.annotations || '{}') : item.annotations || {},
+        targets: typeof item.targets === 'string' ? JSON.parse(item.targets || '[]') : item.targets || [],
+        enabled: item.status === 'active',
+        version: item.version
+      }))
+      pagination.total = response.data.total
+    } else if (response.data.items) {
+      // 标准的分页响应格式
+      rules.value = response.data.items
+      pagination.total = response.data.total
+    } else {
+      rules.value = []
+      pagination.total = 0
+    }
   } catch (error) {
     message.error('加载规则列表失败')
   } finally {

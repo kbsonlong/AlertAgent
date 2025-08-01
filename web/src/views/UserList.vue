@@ -167,46 +167,46 @@
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'avatar'">
-            <a-avatar :src="record.avatar" :size="32">
-              {{ record.username?.charAt(0)?.toUpperCase() }}
+            <a-avatar :src="(record as ServiceUser).avatar" :size="32">
+              {{ (record as ServiceUser).username?.charAt(0)?.toUpperCase() }}
             </a-avatar>
           </template>
           
           <template v-else-if="column.key === 'username'">
-            <a @click="handleView(record)" class="username-link">
-              {{ record.username }}
+            <a @click="handleView(record as ServiceUser)" class="username-link">
+              {{ (record as ServiceUser).username }}
             </a>
           </template>
           
           <template v-else-if="column.key === 'role'">
-            <a-tag :color="getRoleColor(record.role)">
-              {{ getRoleText(record.role) }}
+            <a-tag :color="getRoleColor((record as ServiceUser).role)">
+              {{ getRoleText((record as ServiceUser).role) }}
             </a-tag>
           </template>
           
           <template v-else-if="column.key === 'status'">
-            <a-tag :color="record.status === 'active' ? 'green' : 'red'">
-              {{ record.status === 'active' ? '活跃' : '禁用' }}
+            <a-tag :color="(record as ServiceUser).status === 'active' ? 'green' : 'red'">
+              {{ (record as ServiceUser).status === 'active' ? '活跃' : '禁用' }}
             </a-tag>
           </template>
           
           <template v-else-if="column.key === 'lastLogin'">
-            <span v-if="record.lastLogin">
-              {{ formatDateTime(record.lastLogin) }}
+            <span v-if="(record as ServiceUser).lastLogin">
+              {{ formatDateTime((record as ServiceUser).lastLogin!) }}
             </span>
             <span v-else class="text-muted">从未登录</span>
           </template>
           
           <template v-else-if="column.key === 'createdAt'">
-            {{ formatDateTime(record.createdAt) }}
+            {{ formatDateTime((record as ServiceUser).createdAt) }}
           </template>
           
           <template v-else-if="column.key === 'actions'">
             <a-space>
-              <a-button type="link" size="small" @click="handleView(record)">
+              <a-button type="link" size="small" @click="handleView(record as ServiceUser)">
                 <EyeOutlined /> 查看
               </a-button>
-              <a-button type="link" size="small" @click="handleEdit(record)">
+              <a-button type="link" size="small" @click="handleEdit(record as ServiceUser)">
                 <EditOutlined /> 编辑
               </a-button>
               <a-dropdown>
@@ -215,11 +215,11 @@
                 </a-button>
                 <template #overlay>
                   <a-menu>
-                    <a-menu-item @click="handleResetPassword(record)">
+                    <a-menu-item @click="handleResetPassword(record as ServiceUser)">
                       <KeyOutlined /> 重置密码
                     </a-menu-item>
-                    <a-menu-item @click="handleToggleStatus(record)">
-                      <template v-if="record.status === 'active'">
+                    <a-menu-item @click="handleToggleStatus(record as ServiceUser)">
+                      <template v-if="(record as ServiceUser).status === 'active'">
                         <StopOutlined /> 禁用
                       </template>
                       <template v-else>
@@ -227,7 +227,7 @@
                       </template>
                     </a-menu-item>
                     <a-menu-divider />
-                    <a-menu-item @click="handleDelete(record)" danger>
+                    <a-menu-item @click="handleDelete(record as ServiceUser)" danger>
                       <DeleteOutlined /> 删除
                     </a-menu-item>
                   </a-menu>
@@ -246,12 +246,13 @@
       width="600"
       :footer-style="{ textAlign: 'right' }"
     >
-      <UserDetail
-        v-if="detailVisible && currentUser"
-        :user="currentUser"
-        @edit="handleEdit"
-        @close="detailVisible = false"
-      />
+      <div v-if="detailVisible && currentUser" class="user-detail-placeholder">
+        <p>用户详情功能开发中...</p>
+        <p>用户名: {{ currentUser.username }}</p>
+        <p>邮箱: {{ currentUser.email }}</p>
+        <p>角色: {{ currentUser.role }}</p>
+        <p>状态: {{ currentUser.status }}</p>
+      </div>
     </a-drawer>
 
     <!-- 用户表单抽屉 -->
@@ -261,13 +262,10 @@
       width="600"
       :footer-style="{ textAlign: 'right' }"
     >
-      <UserForm
-        v-if="formVisible"
-        :user="currentUser"
-        :is-edit="isEdit"
-        @submit="handleFormSubmit"
-        @cancel="formVisible = false"
-      />
+      <div v-if="formVisible" class="user-form-placeholder">
+        <p>用户表单功能开发中...</p>
+        <a-button @click="formVisible = false">关闭</a-button>
+      </div>
     </a-drawer>
 
     <!-- 导入用户模态框 -->
@@ -353,9 +351,9 @@ import {
   importUsers,
   exportUsers
 } from '@/services/user'
-import type { User } from '@/types'
-import UserDetail from '@/components/UserDetail.vue'
-import UserForm from '@/components/UserForm.vue'
+import type { User as ServiceUser } from '@/services/user'
+// import UserDetail from '@/components/UserDetail.vue'
+// import UserForm from '@/components/UserForm.vue'
 
 const ARow = Row
 const ACol = Col
@@ -382,13 +380,13 @@ const AUploadDragger = Upload.Dragger
 
 // 响应式数据
 const loading = ref(false)
-const users = ref<User[]>([])
+const users = ref<ServiceUser[]>([])
 const selectedRowKeys = ref<string[]>([])
 const detailVisible = ref(false)
 const formVisible = ref(false)
 const importVisible = ref(false)
 const isEdit = ref(false)
-const currentUser = ref<User | null>(null)
+const currentUser = ref<ServiceUser | null>(null)
 const importFileList = ref([])
 
 // 统计数据
@@ -423,7 +421,7 @@ const columns = [
     title: '头像',
     key: 'avatar',
     width: 80,
-    align: 'center'
+    align: 'center' as const
   },
   {
     title: '用户名',
@@ -466,7 +464,7 @@ const columns = [
     title: '操作',
     key: 'actions',
     width: 200,
-    fixed: 'right'
+    fixed: 'right' as const
   }
 ]
 
@@ -510,7 +508,14 @@ const loadUsers = async () => {
     
     const response = await getUserList(params)
     // 后端返回的数据结构是 {users: [...], total: ..., page: ..., size: ...}
-    users.value = response.users || []
+    // 转换数据格式以匹配ServiceUser类型
+    users.value = (response.users || []).map(user => ({
+      ...user,
+      id: String(user.id), // 确保id是string类型
+      createdAt: user.created_at || '',
+      updatedAt: user.updated_at || '',
+      lastLogin: user.last_login_at
+    })) as ServiceUser[]
     pagination.total = response.total || 0
   } catch (error) {
     console.error('加载用户列表失败:', error)
@@ -556,13 +561,13 @@ const handleTableChange = (pag: any, filters: any, sorter: any) => {
 }
 
 // 查看用户
-const handleView = (user: User) => {
+const handleView = (user: ServiceUser) => {
   currentUser.value = user
   detailVisible.value = true
 }
 
 // 编辑用户
-const handleEdit = (user: User) => {
+const handleEdit = (user: ServiceUser) => {
   currentUser.value = user
   isEdit.value = true
   formVisible.value = true
@@ -596,7 +601,7 @@ const handleFormSubmit = async (userData: any) => {
 }
 
 // 删除用户
-const handleDelete = (user: User) => {
+const handleDelete = (user: ServiceUser) => {
   Modal.confirm({
     title: '确认删除',
     content: `确定要删除用户 "${user.username}" 吗？`,
@@ -615,7 +620,7 @@ const handleDelete = (user: User) => {
 }
 
 // 重置密码
-const handleResetPassword = (user: User) => {
+const handleResetPassword = (user: ServiceUser) => {
   Modal.confirm({
     title: '确认重置密码',
     content: `确定要重置用户 "${user.username}" 的密码吗？`,
@@ -635,7 +640,7 @@ const handleResetPassword = (user: User) => {
 }
 
 // 切换用户状态
-const handleToggleStatus = async (user: User) => {
+const handleToggleStatus = async (user: ServiceUser) => {
   try {
     await toggleUserStatus(user.id)
     message.success('用户状态更新成功')

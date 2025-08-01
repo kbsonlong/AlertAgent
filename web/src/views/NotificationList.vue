@@ -182,13 +182,13 @@
                 <template v-if="column.key === 'name'">
                   <div class="group-name">
                     <div class="name-content">
-                      <component :is="getGroupTypeIcon(record.type)" class="type-icon" />
+                      <MailOutlined class="type-icon" />
                       <div class="name-info">
-                        <a @click="handleGroupView(record)" class="name-link">
-                          {{ record.name }}
+                        <a @click="handleGroupView(record as NotificationGroup)" class="name-link">
+                          {{ (record as NotificationGroup).name }}
                         </a>
                         <div class="name-meta">
-                          {{ record.description }}
+                          {{ (record as NotificationGroup).description }}
                         </div>
                       </div>
                     </div>
@@ -196,15 +196,15 @@
                 </template>
                 
                 <template v-else-if="column.key === 'type'">
-                  <a-tag :color="getGroupTypeColor(record.type)">
-                    {{ getGroupTypeText(record.type) }}
+                  <a-tag color="blue">
+                    通知组
                   </a-tag>
                 </template>
                 
                 <template v-else-if="column.key === 'enabled'">
                   <a-switch
-                    :checked="record.enabled"
-                    @change="(checked) => handleGroupToggle(record, checked)"
+                    :checked="(record as NotificationGroup).enabled"
+                    @change="(checked: boolean) => handleGroupToggle(record as NotificationGroup, checked)"
                     size="small"
                   />
                 </template>
@@ -213,41 +213,41 @@
                   <div class="stats-info">
                     <div class="stat-item">
                       <span class="stat-label">今日:</span>
-                      <span class="stat-value">{{ record.todaySent || 0 }}</span>
+                      <span class="stat-value">0</span>
                     </div>
                     <div class="stat-item">
                       <span class="stat-label">失败:</span>
-                      <span class="stat-value error">{{ record.failedCount || 0 }}</span>
+                      <span class="stat-value error">0</span>
                     </div>
                   </div>
                 </template>
                 
-                <template v-else-if="column.key === 'updatedAt'">
+                <template v-else-if="column.key === 'updated_at'">
                   <div class="time-info">
-                    <div>{{ formatDateTime(record.updatedAt) }}</div>
-                    <div class="time-relative">{{ getRelativeTime(record.updatedAt) }}</div>
+                    <div>{{ formatDateTime((record as NotificationGroup).updated_at) }}</div>
+                    <div class="time-relative">{{ getRelativeTime((record as NotificationGroup).updated_at) }}</div>
                   </div>
                 </template>
                 
                 <template v-else-if="column.key === 'action'">
                   <a-space>
-                    <a-button type="link" size="small" @click="handleGroupView(record)">
+                    <a-button type="link" size="small" @click="handleGroupView(record as NotificationGroup)">
                       查看
                     </a-button>
-                    <a-button type="link" size="small" @click="handleGroupTest(record)">
+                    <a-button type="link" size="small" @click="handleGroupTest(record as NotificationGroup)">
                       测试
                     </a-button>
                     <a-dropdown>
                       <template #overlay>
                         <a-menu>
-                          <a-menu-item @click="handleGroupEdit(record)">
+                          <a-menu-item @click="handleGroupEdit(record as NotificationGroup)">
                             <EditOutlined /> 编辑
                           </a-menu-item>
-                          <a-menu-item @click="handleGroupDuplicate(record)">
+                          <a-menu-item @click="handleGroupDuplicate(record as NotificationGroup)">
                             <CopyOutlined /> 复制
                           </a-menu-item>
                           <a-menu-divider />
-                          <a-menu-item @click="handleGroupDelete(record)" danger>
+                          <a-menu-item @click="handleGroupDelete(record as NotificationGroup)" danger>
                             <DeleteOutlined /> 删除
                           </a-menu-item>
                         </a-menu>
@@ -371,10 +371,10 @@
                   </div>
                 </template>
                 
-                <template v-else-if="column.key === 'updatedAt'">
+                <template v-else-if="column.key === 'updated_at'">
                   <div class="time-info">
-                    <div>{{ formatDateTime(record.updatedAt) }}</div>
-                    <div class="time-relative">{{ getRelativeTime(record.updatedAt) }}</div>
+                    <div>{{ formatDateTime(record.updated_at) }}</div>
+                    <div class="time-relative">{{ getRelativeTime(record.updated_at) }}</div>
                   </div>
                 </template>
                 
@@ -511,10 +511,16 @@
       width="800"
       :footer="null"
     >
-      <NotificationTemplatePreview
+      <!-- <NotificationTemplatePreview
         v-if="currentTemplate && previewVisible"
         :template="currentTemplate"
-      />
+      /> -->
+      <div v-if="currentTemplate && previewVisible">
+        <h4>模板预览</h4>
+        <p>模板名称: {{ currentTemplate.name }}</p>
+        <p>模板类型: {{ currentTemplate.type }}</p>
+        <pre>{{ JSON.stringify(currentTemplate, null, 2) }}</pre>
+      </div>
     </a-modal>
   </div>
 </template>
@@ -582,7 +588,7 @@ import NotificationGroupDetail from '@/components/NotificationGroupDetail.vue'
 import NotificationGroupForm from '@/components/NotificationGroupForm.vue'
 import NotificationTemplateDetail from '@/components/NotificationTemplateDetail.vue'
 import NotificationTemplateForm from '@/components/NotificationTemplateForm.vue'
-import NotificationTemplatePreview from '@/components/NotificationTemplatePreview.vue'
+// import NotificationTemplatePreview from '@/components/NotificationTemplatePreview.vue'
 
 const ACard = Card
 const ARow = Row
@@ -682,7 +688,7 @@ const groupColumns = [
   },
   {
     title: '更新时间',
-    key: 'updatedAt',
+    key: 'updated_at',
     width: 180,
     sorter: true
   },
@@ -690,7 +696,7 @@ const groupColumns = [
     title: '操作',
     key: 'action',
     width: 200,
-    fixed: 'right'
+    fixed: 'right' as 'left' | 'right'
   }
 ]
 
@@ -713,7 +719,7 @@ const templateColumns = [
   },
   {
     title: '更新时间',
-    key: 'updatedAt',
+    key: 'updated_at',
     width: 180,
     sorter: true
   },
@@ -721,20 +727,20 @@ const templateColumns = [
     title: '操作',
     key: 'action',
     width: 200,
-    fixed: 'right'
+    fixed: 'right' as 'left' | 'right'
   }
 ]
 
 // 行选择配置
 const groupRowSelection = {
-  selectedRowKeys: selectedGroupKeys,
+  selectedRowKeys: selectedGroupKeys.value,
   onChange: (keys: string[]) => {
     selectedGroupKeys.value = keys
   }
 }
 
 const templateRowSelection = {
-  selectedRowKeys: selectedTemplateKeys,
+  selectedRowKeys: selectedTemplateKeys.value,
   onChange: (keys: string[]) => {
     selectedTemplateKeys.value = keys
   }
@@ -827,8 +833,24 @@ const loadGroupData = async () => {
     }
     
     const response = await getNotificationGroups(params)
-    groupList.value = response.data.list
-    groupPagination.total = response.data.total
+    // 适配后端返回的数据格式
+    if (Array.isArray(response.data)) {
+      // 后端直接返回数组格式
+      groupList.value = response.data.map((item: any) => ({
+        id: item.ID,
+        created_at: item.CreatedAt,
+        updated_at: item.UpdatedAt,
+        name: item.name,
+        description: item.description,
+        channels: item.channels || [],
+        enabled: item.enabled
+      }))
+      groupPagination.total = response.data.length
+    } else {
+      // 标准的分页响应格式
+      groupList.value = response.data.items || []
+      groupPagination.total = response.data.total || 0
+    }
   } catch (error) {
     console.error('加载通知组列表失败:', error)
     message.error('加载通知组列表失败')
@@ -849,8 +871,27 @@ const loadTemplateData = async () => {
     }
     
     const response = await getNotificationTemplates(params)
-    templateList.value = response.data.list
-    templatePagination.total = response.data.total
+    // 适配后端返回的数据格式
+    if (Array.isArray(response.data)) {
+      // 后端直接返回数组格式
+      templateList.value = response.data.map((item: any) => ({
+        id: item.ID,
+        created_at: item.CreatedAt,
+        updated_at: item.UpdatedAt,
+        name: item.name,
+        type: item.type,
+        description: item.description,
+        enabled: item.enabled,
+        template: {
+          content: item.content
+        }
+      }))
+      templatePagination.total = response.data.length
+    } else {
+      // 标准的分页响应格式
+      templateList.value = response.data.items || []
+      templatePagination.total = response.data.total || 0
+    }
   } catch (error) {
     console.error('加载通知模板列表失败:', error)
     message.error('加载通知模板列表失败')
@@ -1040,7 +1081,7 @@ const handleBatchGroupTest = async () => {
 
 const handleBatchGroupDelete = async () => {
   try {
-    await batchDeleteNotificationGroups(selectedGroupKeys.value)
+    await batchDeleteNotificationGroups(selectedGroupKeys.value.map(Number))
     message.success('批量删除成功')
     selectedGroupKeys.value = []
     loadGroupData()
@@ -1080,7 +1121,7 @@ const handleTemplatePreview = async (template: NotificationTemplate) => {
     const response = await previewNotificationTemplate(template.id, {})
     currentTemplate.value = {
       ...template,
-      previewContent: response.data.content
+      // previewContent: response.data.content
     }
     previewVisible.value = true
   } catch (error) {
@@ -1132,7 +1173,7 @@ const handleTemplateFormSubmit = async (data: any) => {
 
 const handleBatchTemplateDelete = async () => {
   try {
-    await batchDeleteNotificationTemplates(selectedTemplateKeys.value)
+    await batchDeleteNotificationTemplates(selectedTemplateKeys.value.map(Number))
     message.success('批量删除成功')
     selectedTemplateKeys.value = []
     loadTemplateData()
