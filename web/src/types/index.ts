@@ -15,7 +15,7 @@ export interface PaginatedResponse<T> {
 
 // 告警相关类型
 export interface Alert {
-  id: number
+  id: number | string
   created_at: string
   updated_at: string
   name: string
@@ -24,7 +24,21 @@ export interface Alert {
   status: 'firing' | 'acknowledged' | 'resolved'
   source: string
   content: string
-  labels: Record<string, string>
+  description?: string
+  labels: string | Record<string, string> // 支持字符串和对象两种格式
+  annotations?: Record<string, string>
+  metrics?: {
+    current: number
+    threshold: number
+    unit: string
+    status: string
+  }
+  history?: Array<{
+    timestamp: string
+    status: string
+    value?: number
+    note?: string
+  }>
   rule_id?: number
   template_id?: number
   group_id?: number
@@ -94,7 +108,7 @@ export interface Knowledge {
   title: string
   content: string
   category: string
-  tags?: string
+  tags?: string | string[] // 支持字符串和数组两种格式
   source: string
   source_id: number
   summary?: string

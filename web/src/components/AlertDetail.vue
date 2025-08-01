@@ -32,9 +32,9 @@
     </a-card>
 
     <!-- 告警标签 -->
-    <a-card title="标签" class="detail-card" v-if="alert.labels && Object.keys(alert.labels).length > 0">
+    <a-card title="标签" class="detail-card" v-if="parsedLabels && Object.keys(parsedLabels).length > 0">
       <a-space wrap>
-        <a-tag v-for="(value, key) in alert.labels" :key="key" color="blue">
+        <a-tag v-for="(value, key) in parsedLabels" :key="key" color="blue">
           {{ key }}: {{ value }}
         </a-tag>
       </a-space>
@@ -291,6 +291,24 @@ const metricColumns = [
     key: 'unit'
   }
 ]
+
+// 解析标签数据
+const parsedLabels = computed(() => {
+  if (!props.alert.labels) return {}
+  
+  // 如果labels已经是对象，直接返回
+  if (typeof props.alert.labels === 'object') {
+    return props.alert.labels
+  }
+  
+  // 如果labels是字符串，尝试解析JSON
+  try {
+    return JSON.parse(props.alert.labels)
+  } catch (error) {
+    console.error('解析labels失败:', error)
+    return {}
+  }
+})
 
 // 指标数据
 const metricData = computed(() => {

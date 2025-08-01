@@ -495,6 +495,86 @@
         </div>
       </div>
     </a-modal>
+
+    <!-- 告警详情模态框 -->
+    <a-modal
+      v-model:open="alertDetailModalVisible"
+      title="告警详情"
+      width="800px"
+      :footer="null"
+    >
+      <div v-if="selectedAlert" class="alert-detail-content">
+        <a-descriptions :column="2" bordered>
+          <a-descriptions-item label="告警ID">
+            {{ selectedAlert.id }}
+          </a-descriptions-item>
+          <a-descriptions-item label="严重程度">
+            <a-tag :color="getAlertSeverityColor(selectedAlert.severity)">
+              {{ selectedAlert.severity.toUpperCase() }}
+            </a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="告警标题" :span="2">
+            {{ selectedAlert.title }}
+          </a-descriptions-item>
+          <a-descriptions-item label="告警消息" :span="2">
+            {{ selectedAlert.message }}
+          </a-descriptions-item>
+          <a-descriptions-item label="队列名称">
+            {{ getQueueDisplayName(selectedAlert.queue_name) }}
+          </a-descriptions-item>
+          <a-descriptions-item label="告警类型">
+            {{ selectedAlert.type || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="状态">
+            <a-tag :color="selectedAlert.status === 'active' ? 'red' : 'green'">
+              {{ selectedAlert.status === 'active' ? '活跃' : '已确认' }}
+            </a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="创建时间">
+            {{ formatDateTime(selectedAlert.created_at) }}
+          </a-descriptions-item>
+          <a-descriptions-item label="确认人" v-if="selectedAlert.acknowledged_by">
+            {{ selectedAlert.acknowledged_by }}
+          </a-descriptions-item>
+          <a-descriptions-item label="确认时间" v-if="selectedAlert.acknowledged_at">
+            {{ formatDateTime(selectedAlert.acknowledged_at) }}
+          </a-descriptions-item>
+        </a-descriptions>
+        
+        <div v-if="selectedAlert.labels && Object.keys(selectedAlert.labels).length > 0" class="labels-section">
+          <h4>标签</h4>
+          <div class="labels-list">
+            <a-tag v-for="(value, key) in selectedAlert.labels" :key="key">
+              {{ key }}: {{ value }}
+            </a-tag>
+          </div>
+        </div>
+        
+        <div v-if="selectedAlert.annotations && Object.keys(selectedAlert.annotations).length > 0" class="annotations-section">
+          <h4>注解</h4>
+          <div class="annotations-list">
+            <div v-for="(value, key) in selectedAlert.annotations" :key="key" class="annotation-item">
+              <strong>{{ key }}:</strong> {{ value }}
+            </div>
+          </div>
+        </div>
+        
+        <div class="alert-actions-section">
+          <a-space>
+            <a-button 
+              v-if="selectedAlert.status === 'active'" 
+              type="primary" 
+              @click="acknowledgeAlert(selectedAlert.id); alertDetailModalVisible = false"
+            >
+              确认告警
+            </a-button>
+            <a-button @click="alertDetailModalVisible = false">
+              关闭
+            </a-button>
+          </a-space>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -539,6 +619,10 @@ const logLevelFilter = ref('')
 const queueRecommendations = ref<any[]>([])
 const queueAlerts = ref<any[]>([])
 const optimizeResult = ref<any>(null)
+
+// 告警详情模态框
+const alertDetailModalVisible = ref(false)
+const selectedAlert = ref<any>(null)
 
 // 图表实例
 const throughputChart = ref<HTMLElement>()
@@ -1018,8 +1102,8 @@ const acknowledgeAlert = async (alertId: string) => {
 }
 
 const viewAlertDetails = (alert: any) => {
-  // 显示告警详情
-  console.log('Alert details:', alert)
+  selectedAlert.value = alert
+  alertDetailModalVisible.value = true
 }
 
 const applyRecommendation = async (recommendation: any) => {
@@ -1037,6 +1121,11 @@ const applyRecommendation = async (recommendation: any) => {
 
 // 辅助方法
 const getQueueDisplayName = (queueName: string): string => {
+  // 处理空队列名称的情况
+  if (!queueName || queueName.trim() === '') {
+    return '系统队列'
+  }
+  
   const nameMap: Record<string, string> = {
     'ai_analysis': 'AI分析',
     'notification': '通知发送',
@@ -1511,6 +1600,46 @@ const getAlertPriorityColor = (priority: string): string => {
 .alert-actions {
   display: flex;
   gap: 8px;
+}
+
+/* 告警详情模态框样式 */
+.alert-detail-content {
+  .labels-section,
+  .annotations-section {
+    margin-top: 24px;
+    
+    h4 {
+      margin-bottom: 12px;
+      color: #262626;
+      font-weight: 600;
+    }
+  }
+  
+  .labels-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .annotations-list {
+    .annotation-item {
+      margin-bottom: 8px;
+      padding: 8px 12px;
+      background: #fafafa;
+      border-radius: 4px;
+      
+      strong {
+        color: #262626;
+      }
+    }
+  }
+  
+  .alert-actions-section {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #f0f0f0;
+    text-align: right;
+  }
 }
 
 .alert-message {

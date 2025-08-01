@@ -198,7 +198,7 @@
           <template v-else-if="column.key === 'tags'">
             <div class="tags-container">
               <a-tag
-                v-for="tag in record.tags"
+                v-for="tag in parseTagsToArray(record.tags)"
                 :key="tag"
                 size="small"
                 :color="getTagColor(tag)"
@@ -552,6 +552,23 @@ const tagOptions = computed(() => {
 const getCategoryName = (categoryId: string) => {
   const category = categories.value.find(c => c.id === categoryId)
   return category?.name || '未分类'
+}
+
+// 解析标签字符串为数组
+const parseTagsToArray = (tags: string | string[]) => {
+  if (!tags) return []
+  
+  // 如果已经是数组，直接返回
+  if (Array.isArray(tags)) {
+    return tags
+  }
+  
+  // 如果是字符串，按逗号分割
+  try {
+    return typeof tags === 'string' ? tags.split(',').filter(Boolean).map(tag => tag.trim()) : []
+  } catch {
+    return []
+  }
 }
 
 // 获取标签颜色

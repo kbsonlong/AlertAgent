@@ -279,6 +279,19 @@ const rules = {
   category: [
     { required: true, message: '请选择分类', trigger: 'change' }
   ]
+} as any
+
+// 获取标签列表
+const getTagList = (tags: string | string[] | undefined) => {
+  if (!tags) return []
+  try {
+    if (Array.isArray(tags)) {
+      return tags
+    }
+    return typeof tags === 'string' ? tags.split(',').filter(Boolean) : []
+  } catch {
+    return []
+  }
 }
 
 // 计算属性
@@ -308,16 +321,6 @@ watch(
   },
   { immediate: true }
 )
-
-// 获取标签列表
-const getTagList = (tags: string | undefined) => {
-  if (!tags) return []
-  try {
-    return typeof tags === 'string' ? tags.split(',').filter(Boolean) : []
-  } catch {
-    return []
-  }
-}
 
 // 获取来源文本
 const getSourceText = (source: string) => {

@@ -8,7 +8,8 @@ import type {
   BatchTaskRequest,
   BatchTaskResponse,
   PerformanceStats,
-  QueueHealth
+  QueueHealth,
+  QueueOptimizeOptions
 } from '@/types/queue'
 
 export const queueService = {
@@ -137,7 +138,7 @@ export const queueService = {
   },
 
   // 队列优化
-  async optimizeQueue(queueName: string, options: Record<string, any>) {
+  async optimizeQueue(queueName: string, options: QueueOptimizeOptions) {
     return request({
       url: `/api/v1/queues/${queueName}/optimize`,
       method: 'POST',
@@ -232,36 +233,11 @@ export const queueService = {
     })
   },
 
-  // 获取任务执行日志
-  async getTaskLogs(taskId: string) {
-    return request({
-      url: `/api/v1/queues/tasks/${taskId}/logs`,
-      method: 'GET'
-    })
-  },
-
-  // 取消任务
-  async cancelTask(taskId: string) {
-    return request({
-      url: `/api/v1/queues/tasks/${taskId}/cancel`,
-      method: 'POST'
-    })
-  },
-
   // 获取队列拓扑
   async getQueueTopology() {
     return request({
       url: '/api/v1/queues/topology',
       method: 'GET'
-    })
-  },
-
-  // 队列优化
-  async optimizeQueue(queueName: string, options: QueueOptimizeOptions) {
-    return request({
-      url: `/api/v1/queues/${queueName}/optimize`,
-      method: 'POST',
-      data: options
     })
   },
 
