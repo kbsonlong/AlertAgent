@@ -27,7 +27,6 @@ import (
 
 	"alert_agent/internal/config"
 	"alert_agent/internal/gateway"
-	"alert_agent/internal/model"
 	"alert_agent/internal/pkg/database"
 	"alert_agent/internal/pkg/logger"
 	"alert_agent/internal/pkg/queue"
@@ -35,6 +34,7 @@ import (
 	"alert_agent/internal/router"
 	"alert_agent/internal/service"
 	"alert_agent/internal/worker"
+	"alert_agent/pkg/utils"
 
 	"go.uber.org/zap"
 
@@ -42,61 +42,20 @@ import (
 	_ "alert_agent/docs"
 )
 
-// processUnanalyzedAlerts 处理未分析的告警
-func processUnanalyzedAlerts(ctx context.Context, messageQueue queue.MessageQueue) error {
-	var alerts []model.Alert
-	logger.L.Debug("Processing unanalyzed alerts...")
-	// 获取未分析的告警
-	if err := database.DB.Where("analysis = ?", "").Find(&alerts).Error; err != nil {
-		return fmt.Errorf("failed to get unanalyzed alerts: %w", err)
-	}
 
-	if len(alerts) == 0 {
-		logger.L.Info("No unanalyzed alerts found")
-		return nil
-	}
 
-	logger.L.Info("Found unanalyzed alerts",
-		zap.Int("count", len(alerts)),
-	)
-
-	// 创建任务生产者
-	producer := queue.NewTaskProducer(messageQueue)
-
-	// 为每个告警创建AI分析任务
-	for _, alert := range alerts {
-		logger.L.Debug("Processing alert",
-			zap.Uint("id", alert.ID),
-		)
-		
-		alertData := map[string]interface{}{
-			"title":   alert.Title,
-			"level":   alert.Level,
-			"source":  alert.Source,
-			"content": alert.Content,
-		}
-		
-		if err := producer.PublishAIAnalysisTask(ctx, fmt.Sprintf("%d", alert.ID), alertData); err != nil {
-			logger.L.Error("Failed to publish AI analysis task",
-				zap.Uint("alert_id", alert.ID),
-				zap.Error(err),
-			)
-			continue
-		}
-	}
-
-	logger.L.Info("Successfully pushed tasks to queue",
-		zap.Int("count", len(alerts)),
-	)
-
-	return nil
-}
 
 func main() {
 	// 初始化日志
 	if err := logger.Init("info"); err != nil {
 		fmt.Printf("Failed to initialize logger: %v\n", err)
 		os.Exit(1)
+	}
+
+	// 重新生成Swagger文档
+	if err := utils.RegenerateSwaggerDocs(); err != nil {
+		logger.L.Error("Failed to regenerate Swagger docs", zap.Error(err))
+		// 不中断启动，继续执行
 	}
 
 	// 加载配置
@@ -130,7 +89,7 @@ func main() {
 
 	// 处理未分析的告警
 	ctx := context.Background()
-	if err := processUnanalyzedAlerts(ctx, redisQueue); err != nil {
+	if err := utils.ProcessUnanalyzedAlerts(ctx, redisQueue); err != nil {
 		logger.L.Error("Failed to process unanalyzed alerts", zap.Error(err))
 	}
 

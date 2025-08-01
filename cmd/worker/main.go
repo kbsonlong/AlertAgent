@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	workerName  = flag.String("name", "", "Worker名称")
+	workerName  = flag.String("name", "general", "Worker名称")
 	workerType  = flag.String("type", "general", "Worker类型 (ai-analysis, notification, config-sync, general)")
 	concurrency = flag.Int("concurrency", 2, "并发数")
 	queues      = flag.String("queues", "", "队列名称，多个用逗号分隔")

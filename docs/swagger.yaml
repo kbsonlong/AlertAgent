@@ -461,6 +461,11 @@ definitions:
     required:
     - refresh_token
     type: object
+  service.UpdateProfileRequest:
+    properties:
+      email:
+        type: string
+    type: object
   service.User:
     properties:
       email:
@@ -473,6 +478,32 @@ definitions:
         type: array
       username:
         type: string
+    type: object
+  v1.AlertStatsResponse:
+    properties:
+      acknowledged:
+        type: integer
+      by_level:
+        additionalProperties:
+          format: int64
+          type: integer
+        type: object
+      by_severity:
+        additionalProperties:
+          format: int64
+          type: integer
+        type: object
+      by_source:
+        additionalProperties:
+          format: int64
+          type: integer
+        type: object
+      firing:
+        type: integer
+      resolved:
+        type: integer
+      total:
+        type: integer
     type: object
   v1.BatchTaskRequest:
     properties:
@@ -1238,7 +1269,7 @@ paths:
             - $ref: '#/definitions/response.Response'
             - properties:
                 data:
-                  type: object
+                  $ref: '#/definitions/v1.AlertStatsResponse'
               type: object
         "401":
           description: Unauthorized
@@ -1333,6 +1364,46 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取用户信息
+      tags:
+      - 认证
+    put:
+      consumes:
+      - application/json
+      description: 更新当前登录用户的资料信息
+      parameters:
+      - description: 更新资料请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.UpdateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/service.User'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新用户资料
       tags:
       - 认证
   /api/v1/auth/refresh:
@@ -3360,8 +3431,12 @@ paths:
     get:
       consumes:
       - application/json
-      description: 获取用户数量统计信息
+      - application/json
+      description: |-
+        获取用户数量统计信息
+        获取系统中用户的统计信息，包括总数、活跃数、非活跃数和锁定数
       produces:
+      - application/json
       - application/json
       responses:
         "200":
@@ -3383,8 +3458,10 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 获取用户统计
+      - BearerAuth: []
+      summary: 获取用户统计信息
       tags:
+      - 用户管理
       - 用户管理
 securityDefinitions:
   BearerAuth:

@@ -8,7 +8,7 @@ set -e
 # 配置
 API_BASE_URL="http://localhost:8080"
 USERNAME="admin"
-PASSWORD="admin123"
+PASSWORD="password"
 
 # 颜色输出
 RED='\033[0;31m'

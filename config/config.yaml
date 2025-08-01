@@ -54,7 +54,7 @@ ollama:
     enabled: true
     api_endpoint: http://10.98.65.131:11434
     model: llama3:latest
-    timeout: 30
+    timeout: 300
     max_retries: 3
 redis:
     host: localhost

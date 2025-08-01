@@ -482,9 +482,18 @@ func (api *AlertAPI) HandleAlertWithService(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse
 // @Router /api/v1/alerts/{id}/analyze [post]
 func AnalyzeAlert(c *gin.Context) {
+	// 从URL路径获取告警ID
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid alert ID"})
+		return
+	}
+
+	// 从数据库查询告警
 	var alert model.Alert
-	if err := c.ShouldBindJSON(&alert); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := database.DB.First(&alert, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Alert not found"})
 		return
 	}
 
@@ -496,8 +505,18 @@ func AnalyzeAlert(c *gin.Context) {
 		return
 	}
 
+	// 更新告警的分析状态和结果
+	alert.AnalysisStatus = "completed"
+	alert.Analysis = analysis
+	if err := database.DB.Save(&alert).Error; err != nil {
+		log.Error("Failed to update alert analysis", zap.Error(err))
+		// 不返回错误，因为分析已经完成
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"analysis": analysis,
+		"alert_id": id,
+		"status": "completed",
 	})
 }
 
