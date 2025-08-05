@@ -8,6 +8,7 @@ export interface UpdateProfileRequest {
 export interface ChangePasswordRequest {
   currentPassword: string
   newPassword: string
+  userId?: string
 }
 
 export const userApi = {
@@ -22,8 +23,8 @@ export const userApi = {
   },
 
   // 修改密码
-  changePassword(data: ChangePasswordRequest): Promise<ApiResponse<void>> {
-    return put('/api/v1/auth/password', data)
+  changePassword(userId: string, data: ChangePasswordRequest): Promise<ApiResponse<void>> {
+    return put(`/api/v1/users/${userId}/password`, data)
   },
 
   // 发送邮箱验证邮件

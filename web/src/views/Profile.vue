@@ -290,7 +290,12 @@ const handleSavePassword = async () => {
     await passwordFormRef.value.validate()
     saving.value = true
     
-    await userApi.changePassword({
+    if (!userInfo.value?.id) {
+      message.error('用户信息获取失败，请刷新页面重试')
+      return
+    }
+    
+    await userApi.changePassword(userInfo.value.id.toString(), {
       currentPassword: passwordForm.currentPassword,
       newPassword: passwordForm.newPassword
     })
