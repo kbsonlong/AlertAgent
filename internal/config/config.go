@@ -85,6 +85,10 @@ type Config struct {
 		MaxBackups int    `yaml:"max_backups"`
 		Compress   bool   `yaml:"compress"`
 	} `yaml:"log"`
+	Worker struct {
+		Enabled     bool `yaml:"enabled"`
+		Concurrency int  `yaml:"concurrency"`
+	} `yaml:"worker"`
 }
 
 // DefaultConfig 返回默认配置
@@ -221,6 +225,13 @@ func DefaultConfig() Config {
 			MaxAge:     7,
 			MaxBackups: 10,
 			Compress:   true,
+		},
+		Worker: struct {
+			Enabled     bool `yaml:"enabled"`
+			Concurrency int  `yaml:"concurrency"`
+		}{
+			Enabled:     true,
+			Concurrency: 2,
 		},
 	}
 }
@@ -377,6 +388,18 @@ func applyEnvOverrides(config *Config) error {
 	}
 	if filename := os.Getenv("LOG_FILENAME"); filename != "" {
 		config.Log.Filename = filename
+	}
+
+	// Worker配置
+	if enabled := os.Getenv("WORKER_ENABLED"); enabled != "" {
+		if e, err := strconv.ParseBool(enabled); err == nil {
+			config.Worker.Enabled = e
+		}
+	}
+	if concurrency := os.Getenv("WORKER_CONCURRENCY"); concurrency != "" {
+		if c, err := strconv.Atoi(concurrency); err == nil {
+			config.Worker.Concurrency = c
+		}
 	}
 
 	return nil

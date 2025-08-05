@@ -83,6 +83,10 @@ log:
     max_backups: 50                  # 增加备份文件数
     compress: true
 
+worker:
+    enabled: true                    # 生产环境启用worker
+    concurrency: 4                   # 生产环境增加并发数
+
 # 监控配置
 monitoring:
     enabled: true

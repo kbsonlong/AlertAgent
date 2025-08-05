@@ -79,3 +79,6 @@ log:
     max_age: 7
     max_backups: 10
     compress: true
+worker:
+    enabled: false
+    concurrency: 2

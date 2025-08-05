@@ -48,6 +48,11 @@ log:
   max_backups: 10               # 最大备份文件数
   compress: true                # 是否压缩旧日志文件
 
+# Worker配置
+worker:
+  enabled: true                 # 是否启用worker，设为false可关闭后台任务处理
+  concurrency: 2                # worker并发数，控制同时处理的任务数量
+
 # 开发环境配置说明
 # =================
 # 

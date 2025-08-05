@@ -103,7 +103,7 @@ func main() {
 	monitor := queue.NewQueueMonitor(redisQueue, redis.Client, "alert:queue")
 
 	// 创建工作器
-	queueWorker := queue.NewWorker(redisQueue, monitor, 2)
+	queueWorker := queue.NewWorker(redisQueue, monitor, config.GetConfig().Worker.Concurrency)
 
 	// 注册任务处理器
 	aiHandler := worker.NewAIAnalysisHandler(ollamaService, difyService)
@@ -126,20 +126,29 @@ func main() {
 	// 设置路由
 	gateway.SetupRoutes(router.RegisterRoutes)
 
-	// 启动工作器
-	workerCtx, workerCancel := context.WithCancel(context.Background())
-	queueNames := []string{
-		string(queue.TaskTypeAIAnalysis),
-		string(queue.TaskTypeNotification),
-		string(queue.TaskTypeConfigSync),
-	}
+	// 根据配置决定是否启动工作器
+	var workerCtx context.Context
+	var workerCancel context.CancelFunc
 	
-	go func() {
-		logger.L.Info("Starting queue worker...")
-		if err := queueWorker.Start(workerCtx, queueNames); err != nil {
-			logger.L.Error("Worker failed", zap.Error(err))
+	if config.GetConfig().Worker.Enabled {
+		logger.L.Info("Worker is enabled, starting queue worker...", 
+			zap.Int("concurrency", config.GetConfig().Worker.Concurrency))
+		
+		workerCtx, workerCancel = context.WithCancel(context.Background())
+		queueNames := []string{
+			string(queue.TaskTypeAIAnalysis),
+			string(queue.TaskTypeNotification),
+			string(queue.TaskTypeConfigSync),
 		}
-	}()
+		
+		go func() {
+			if err := queueWorker.Start(workerCtx, queueNames); err != nil {
+				logger.L.Error("Worker failed", zap.Error(err))
+			}
+		}()
+	} else {
+		logger.L.Info("Worker is disabled, skipping queue worker startup")
+	}
 
 	// 启动API网关
 	if err := gateway.Start(); err != nil {
@@ -149,8 +158,11 @@ func main() {
 	// 等待关闭信号并优雅关闭
 	gateway.WaitForShutdown()
 
-	// 停止工作器
-	workerCancel()
+	// 停止工作器（如果已启动）
+	if workerCancel != nil {
+		logger.L.Info("Stopping queue worker...")
+		workerCancel()
+	}
 
 	// 停止配置文件监听
 	config.StopWatcher()
