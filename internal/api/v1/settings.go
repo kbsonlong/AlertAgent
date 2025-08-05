@@ -72,6 +72,10 @@ func GetCurrentConfig(c *gin.Context) {
 				"timeout":      cfg.Ollama.Timeout,
 				"max_retries":  cfg.Ollama.MaxRetries,
 			},
+			"worker": gin.H{
+				"enabled":     cfg.Worker.Enabled,
+				"concurrency": cfg.Worker.Concurrency,
+			},
 		},
 	})
 }
